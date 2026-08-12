@@ -1,0 +1,44 @@
+const DEFAULT_MAX_LENGTH = 52;
+
+function removeEditorContext(prompt: string): string {
+  return prompt
+    .replace(/```[^\n]*\n[\s\S]*?```/g, " ")
+    .replace(/^\s*From\s+`?[^`\n]+`?\s+lines?\s+\d+(?:-\d+)?:\s*/i, " ");
+}
+
+function removeRequestFiller(value: string): string {
+  return value.replace(
+    /^(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+|i\s+need\s+you\s+to\s+|help\s+me\s+)/i,
+    "",
+  );
+}
+
+function firstSentence(value: string): string {
+  const match = /^(.+?)(?:[.!?](?:\s|$)|$)/.exec(value);
+  return (match?.[1] ?? value).trim();
+}
+
+function truncateAtWord(value: string, maximum: number): string {
+  if (value.length <= maximum) return value;
+  if (maximum <= 1) return "…".slice(0, maximum);
+
+  const available = maximum - 1;
+  const prefix = value.slice(0, available + 1);
+  const boundary = prefix.lastIndexOf(" ");
+  const truncated = boundary > 0 ? prefix.slice(0, boundary) : value.slice(0, available);
+  return `${truncated.trimEnd()}…`;
+}
+
+export function generateSessionTitle(
+  prompt: string,
+  maximumLength = DEFAULT_MAX_LENGTH,
+): string | undefined {
+  if (!Number.isInteger(maximumLength) || maximumLength < 1) return undefined;
+
+  const normalized = removeRequestFiller(removeEditorContext(prompt).replace(/\s+/g, " ").trim());
+  const sentence = firstSentence(normalized).replace(/^[\s:;,\-–—]+|[\s:;,\-–—]+$/g, "");
+  if (!sentence) return undefined;
+
+  const title = `${sentence[0]?.toLocaleUpperCase() ?? ""}${sentence.slice(1)}`;
+  return truncateAtWord(title, maximumLength);
+}
