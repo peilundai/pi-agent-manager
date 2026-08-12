@@ -12,6 +12,22 @@
     "AI",
     "Other"
   ],
+  "keywords": [
+    "pi",
+    "coding agent",
+    "agent manager",
+    "terminal"
+  ],
+  "galleryBanner": {
+    "color": "#181818",
+    "theme": "dark"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Pi Agent Manager launches a local executable and reads workspace-scoped Pi session files."
+    }
+  },
   "extensionKind": [
     "workspace"
   ],
@@ -51,9 +67,11 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit && eslint .",
+    "postinstall": "npm run prepare:native",
+    "prepare:native": "node scripts/prepare-node-pty.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npm run check && npm test && npm run build && vsce package"
+    "package": "npm run prepare:native && npm run check && npm test && npm run build && vsce package"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.36",
