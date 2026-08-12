@@ -1,0 +1,61 @@
+{
+  "name": "pi-agent-manager",
+  "displayName": "Pi Agent Manager",
+  "description": "Run and manage Pi coding-agent sessions in VS Code's Secondary Side Bar.",
+  "version": "0.1.0",
+  "publisher": "peilun-dai",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onView:piAgent.view",
+    "onCommand:piAgent.open"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit && eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "npm run check && npm test && npm run build && vsce package"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.12.0-beta.292",
+    "@xterm/addon-search": "0.17.0-beta.292",
+    "@xterm/addon-unicode11": "0.10.0-beta.292",
+    "@xterm/addon-web-links": "0.13.0-beta.292",
+    "@xterm/addon-webgl": "0.20.0-beta.291",
+    "@xterm/xterm": "6.1.0-beta.292",
+    "node-pty": "1.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@testing-library/jest-dom": "^6.6.4",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.17.2",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@types/vscode": "^1.106.0",
+    "@typescript-eslint/eslint-plugin": "^8.39.1",
+    "@typescript-eslint/parser": "^8.39.1",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.9",
+    "eslint": "^9.33.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.3.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
