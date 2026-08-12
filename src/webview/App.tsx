@@ -42,6 +42,8 @@ export function App({ transport, initialState }: AppProps) {
     initialState ?? createInitialState(),
   );
   const activeTab = state.snapshot.tabs.find((tab) => tab.tabId === state.snapshot.activeTabId);
+  const narrowViewport = isNarrowViewport();
+  const paneVisible = narrowViewport ? state.narrowOverlayOpen : state.snapshot.paneVisible;
   const deleteSession = useMemo(
     () => state.snapshot.sessions.find((session) => session.id === state.confirmDeleteSessionId),
     [state.confirmDeleteSessionId, state.snapshot.sessions],
@@ -155,9 +157,10 @@ export function App({ transport, initialState }: AppProps) {
 
   return (
     <div className="app-shell">
+      <div className="app-content" inert={deleteSession ? true : undefined} aria-hidden={deleteSession ? true : undefined}>
       <ManagerHeader
-        title={activeTab?.title ?? "Pi"}
-        paneVisible={isNarrowViewport() ? state.narrowOverlayOpen : state.snapshot.paneVisible}
+        title={activeTab?.title ?? "New Agent"}
+        paneVisible={paneVisible}
         onNew={() => transport.post({ version: 1, type: "session.new" })}
         onRefresh={() => transport.post({ version: 1, type: "history.refresh" })}
         onTogglePane={togglePane}
@@ -171,7 +174,7 @@ export function App({ transport, initialState }: AppProps) {
       />
       <div
         className="manager-layout"
-        style={{ "--session-pane-width": `${state.snapshot.paneWidth}px` } as CSSProperties}
+        style={{ "--session-pane-width": `${paneVisible ? state.snapshot.paneWidth : 0}px` } as CSSProperties}
       >
         <main className="terminal-area" aria-label="Pi terminal">
           {state.snapshot.tabs.some((tab) => tab.attached) ? (
@@ -187,7 +190,7 @@ export function App({ transport, initialState }: AppProps) {
             </div>
           )}
         </main>
-        {state.snapshot.paneVisible ? (
+        {paneVisible ? (
           <div
             className="pane-divider"
             role="separator"
@@ -201,7 +204,7 @@ export function App({ transport, initialState }: AppProps) {
           tabs={state.snapshot.tabs}
           activeTabId={state.snapshot.activeTabId}
           query={state.searchQuery}
-          visible={state.snapshot.paneVisible}
+          visible={paneVisible}
           narrowOverlayOpen={state.narrowOverlayOpen}
           collapsedGroups={state.snapshot.collapsedGroups}
           openMenuSessionId={state.openMenuSessionId}
@@ -228,6 +231,7 @@ export function App({ transport, initialState }: AppProps) {
           </button>
         </div>
       ) : null}
+      </div>
 
       {deleteSession ? (
         <ConfirmDialog

@@ -69,6 +69,10 @@ input:focus-visible,
   background: var(--vscode-editor-background);
 }
 
+.app-content {
+  display: contents;
+}
+
 .manager-header,
 .session-tabs-bar {
   display: flex;

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 
 interface ConfirmDialogProps {
   title: string;
@@ -16,18 +16,38 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => cancelRef.current?.focus(), []);
+
+  const trapFocus = (event: KeyboardEvent<HTMLElement>): void => {
+    if (event.key !== "Tab") return;
+    const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+    ) ?? [])];
+    if (!focusable.length) return;
+    const first = focusable[0]!;
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div className="dialog-backdrop">
       <section
         className="confirm-dialog"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-description"
         onKeyDown={(event) => {
           if (event.key === "Escape") onCancel();
+          else trapFocus(event);
         }}
       >
         <div className="dialog-icon" aria-hidden="true">

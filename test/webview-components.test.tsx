@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionSummary, TerminalTab, ViewSnapshot } from "../src/shared/model";
 import { App } from "../src/webview/App";
 import { createInitialState } from "../src/webview/state";
@@ -41,12 +41,12 @@ function tab(id: string, sessionId: string, title: string): TerminalTab {
   };
 }
 
-function stateWith(sessions: SessionSummary[], tabs: TerminalTab[] = [], activeTabId?: string) {
+function stateWith(sessions: SessionSummary[], tabs: TerminalTab[] = [], activeTabId?: string, paneVisible = true) {
   const snapshot: ViewSnapshot = {
     sessions,
     tabs,
     ...(activeTabId ? { activeTabId } : {}),
-    paneVisible: true,
+    paneVisible,
     paneWidth: 248,
     collapsedGroups: [],
   };
@@ -54,6 +54,34 @@ function stateWith(sessions: SessionSummary[], tabs: TerminalTab[] = [], activeT
 }
 
 describe("agent manager shell", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uses New Agent as the manager title when no terminal tab is active", () => {
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([])} transport={transport} />);
+    expect(document.querySelector(".manager-title")).toHaveTextContent("New Agent");
+  });
+
+  it("reclaims the pane width when the persisted wide pane is hidden", () => {
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([], [], undefined, false)} transport={transport} />);
+    expect(document.querySelector(".manager-layout")).toHaveStyle({ "--session-pane-width": "0px" });
+    expect(screen.queryByRole("separator", { name: /resize agent list/i })).toBeNull();
+  });
+
+  it("opens the narrow overlay even when the persisted wide pane is hidden", async () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([], [], undefined, false)} transport={transport} />);
+
+    expect(document.querySelector(".manager-layout")).toHaveStyle({ "--session-pane-width": "0px" });
+    await user.click(screen.getByRole("button", { name: /show agent list/i }));
+    expect(document.querySelector(".manager-layout")).toHaveStyle({ "--session-pane-width": "248px" });
+    expect(screen.getByRole("complementary", { name: /agent sessions/i })).toHaveAttribute("data-visible", "true");
+    expect(transport.messages).not.toContainEqual(expect.objectContaining({ type: "view.update" }));
+  });
+
   it("filters sessions while keeping New Agent available", async () => {
     const user = userEvent.setup();
     const transport = new RecordingTransport();
@@ -145,6 +173,27 @@ describe("agent manager shell", () => {
     await user.click(screen.getByRole("menuitem", { name: /delete/i }));
     await user.click(screen.getByRole("button", { name: /cancel/i }));
     expect(trigger).toHaveFocus();
+  });
+
+  it("traps Tab focus in the delete confirmation and makes the manager inactive", async () => {
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([session("auth", "Auth cleanup")])} transport={transport} />);
+    const manager = document.querySelector(".app-content");
+
+    await user.click(screen.getByRole("button", { name: /more actions for auth cleanup/i }));
+    await user.click(screen.getByRole("menuitem", { name: /delete/i }));
+    const dialog = screen.getByRole("dialog", { name: /delete agent/i });
+    const cancel = within(dialog).getByRole("button", { name: /cancel/i });
+    const confirm = within(dialog).getByRole("button", { name: /^delete$/i });
+    expect(manager).toHaveAttribute("inert");
+    expect(cancel).toHaveFocus();
+    await user.tab();
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(cancel).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
   });
 
   it("collapses a date group and persists the new view state", async () => {
