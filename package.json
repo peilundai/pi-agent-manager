@@ -69,9 +69,10 @@
     "check": "tsc --noEmit && eslint .",
     "postinstall": "npm run prepare:native",
     "prepare:native": "node scripts/prepare-node-pty.mjs",
+    "verify:package": "node scripts/verify-vsix.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npm run prepare:native && npm run check && npm test && npm run build && vsce package"
+    "package": "npm run prepare:native && npm run check && npm test && npm run build && vsce package --target darwin-arm64 && npm run verify:package"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.36",

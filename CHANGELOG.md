@@ -13,3 +13,4 @@ All notable changes to Pi Agent Manager are documented here.
 - Workspace file links, web links, and selected-code insertion with `Cmd/Ctrl+L`.
 - Workspace-scoped persistence, theme integration, keyboard navigation, and reduced-motion support.
 - Production build and VSIX packaging with the current-platform `node-pty` runtime.
+- Darwin ARM64 target metadata, target-scoped artifact naming, and extracted-package native PTY verification.

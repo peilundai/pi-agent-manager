@@ -16,6 +16,7 @@ package-lock.json
 *.vsix
 
 node_modules/**
+# This package is built with `vsce package --target darwin-arm64`.
 !node_modules/node-pty/package.json
 !node_modules/node-pty/LICENSE
 !node_modules/node-pty/lib/index.js

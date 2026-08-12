@@ -17,6 +17,9 @@ Run real [Pi coding agent](https://github.com/badlogic/pi-mono) terminal session
 
 - VS Code 1.106 or newer.
 - Pi installed and available as `pi` on VS Code's process path.
+- The 0.1.0 VSIX produced by this repository targets Apple silicon macOS (`darwin-arm64`) because it contains a native `node-pty` runtime.
+
+Other platforms require separately built native VSIX packages containing the matching `node-pty` runtime. Do not install the Darwin ARM64 artifact on Intel macOS, Linux, Windows, or a remotely hosted extension workspace running on another platform.
 
 Verify Pi before starting VS Code:
 
@@ -81,7 +84,7 @@ npm run build
 npm run package
 ```
 
-Open this repository in VS Code and press `F5` to launch an Extension Development Host. The production bundles are written to `dist/`; packaging creates `pi-agent-manager-0.1.0.vsix`.
+Open this repository in VS Code and press `F5` to launch an Extension Development Host. The production bundles are written to `dist/`; packaging creates the target-scoped `pi-agent-manager-darwin-arm64-0.1.0.vsix`. Building for another platform requires its matching native `node-pty` files, `.vscodeignore` entries, and VSCE `--target` value.
 
 ## Known follow-up features
 
