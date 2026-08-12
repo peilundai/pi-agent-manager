@@ -79,7 +79,7 @@ export const browserTerminalFactory: TerminalWorkspaceFactory = {
       scrollback: 10_000,
       cursorBlink: true,
       macOptionIsMeta: true,
-      allowProposedApi: false,
+      allowProposedApi: true,
       fontFamily: cssColor(style, "--vscode-editor-font-family", "monospace"),
       fontSize,
       lineHeight,
@@ -106,8 +106,10 @@ export const browserTerminalFactory: TerminalWorkspaceFactory = {
     try {
       terminal.loadAddon(unicode11Addon);
       terminal.unicode.activeVersion = "11";
-    } catch {
+    } catch (error) {
       unicode11Addon.dispose();
+      terminal.dispose();
+      throw error;
     }
     terminal.loadAddon(new WebLinksAddon((event, target) => {
       if (hasLinkModifier(event)) onLink("url", target);

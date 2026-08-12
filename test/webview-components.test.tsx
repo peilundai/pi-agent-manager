@@ -1,9 +1,62 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const xtermHarness = vi.hoisted(() => {
+  class FakeAddon {
+    activate(): void {}
+    dispose(): void {}
+  }
+  class FakeUnicode11Addon extends FakeAddon {}
+  class FakeTerminal {
+    readonly cols = 80;
+    readonly rows = 24;
+    readonly addons: unknown[] = [];
+    readonly buffer = { active: { getLine: () => undefined } };
+    private unicode11Loaded = false;
+    private unicodeVersion = "6";
+    readonly unicode = {
+      get activeVersion(): string { return this.terminal.unicodeVersion; },
+      set activeVersion(version: string) {
+        if (!this.terminal.unicode11Loaded) throw new Error("Unicode 11 addon is required");
+        this.terminal.unicodeVersion = version;
+      },
+      terminal: this,
+    };
+    constructor(readonly options: Record<string, unknown>) {
+      xtermHarness.terminals.push(this);
+    }
+    loadAddon(addon: { activate?(terminal: FakeTerminal): void }): void {
+      this.addons.push(addon);
+      if (addon instanceof FakeUnicode11Addon) this.unicode11Loaded = true;
+      addon.activate?.(this);
+    }
+    registerLinkProvider(): { dispose(): void } { return { dispose: () => undefined }; }
+    onData(): { dispose(): void } { return { dispose: () => undefined }; }
+    open(): void {}
+    write(_data: string, onComplete: () => void): void { onComplete(); }
+    focus(): void {}
+    scrollToBottom(): void {}
+    dispose(): void {}
+  }
+  class FakeWebglAddon extends FakeAddon {
+    readonly onContextLoss = (): { dispose(): void } => ({ dispose: () => undefined });
+  }
+  const terminals: FakeTerminal[] = [];
+  return { FakeTerminal, FakeAddon, FakeUnicode11Addon, FakeWebglAddon, terminals };
+});
+
+vi.mock("@xterm/xterm", () => ({ Terminal: xtermHarness.FakeTerminal }));
+vi.mock("@xterm/addon-fit", () => ({ FitAddon: xtermHarness.FakeAddon }));
+vi.mock("@xterm/addon-search", () => ({ SearchAddon: xtermHarness.FakeAddon }));
+vi.mock("@xterm/addon-unicode11", () => ({ Unicode11Addon: xtermHarness.FakeUnicode11Addon }));
+vi.mock("@xterm/addon-web-links", () => ({ WebLinksAddon: xtermHarness.FakeAddon }));
+vi.mock("@xterm/addon-webgl", () => ({ WebglAddon: xtermHarness.FakeWebglAddon }));
+
 import type { SessionSummary, TerminalTab, ViewSnapshot } from "../src/shared/model";
 import { App } from "../src/webview/App";
 import {
+  browserTerminalFactory,
   TerminalWorkspace,
   type TerminalWorkspaceBinding,
   type TerminalWorkspaceFactory,
@@ -359,6 +412,20 @@ describe("terminal workspace", () => {
 
   afterEach(() => {
     FakeResizeObserver.instances.splice(0);
+    xtermHarness.terminals.splice(0);
+  });
+
+  it("enables proposed API access and activates Unicode 11 in browser terminals", () => {
+    browserTerminalFactory.create({
+      tabId: "a",
+      container: document.createElement("div"),
+      onData: () => undefined,
+      onLink: () => undefined,
+    });
+
+    const terminal = xtermHarness.terminals[0];
+    expect(terminal?.options).toMatchObject({ allowProposedApi: true });
+    expect(terminal?.unicode.activeVersion).toBe("11");
   });
 
   it("preserves terminal instances while switching tabs", () => {
