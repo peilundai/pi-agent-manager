@@ -118,6 +118,7 @@ export class PiViewProvider {
   private preparingGeneration: number | undefined;
   private queuedOutput: Array<{ tabId: string; data: string }> = [];
   private readonly statusWaiters = new Map<string, StatusWaiter>();
+  private persistenceTail: Promise<void> = Promise.resolve();
   private stopped = false;
 
   constructor(private readonly options: PiViewProviderOptions) {
@@ -216,12 +217,12 @@ export class PiViewProvider {
         waiter.resolve(event.tab.status === "waiting");
       }
       if (event.tab.status === "waiting") this.scheduleRefresh();
-      void this.persistAndPost();
+      this.schedulePersistence();
       return;
     }
     this.chooseActiveTab();
     this.scheduleRefresh();
-    void this.persistAndPost();
+    this.schedulePersistence();
   }
 
   handleStatusReport(report: StatusReport): void {
@@ -242,6 +243,7 @@ export class PiViewProvider {
       waiter.resolve(false);
     }
     this.statusWaiters.clear();
+    await this.persistenceTail;
     this.options.controller.dispose();
     await this.options.bridge.dispose();
     this.view = undefined;
@@ -302,10 +304,18 @@ export class PiViewProvider {
         await this.resume(message.sessionId);
         return;
       case "session.archive":
-        this.requiredSession(message.sessionId);
-        await this.options.repository.setArchived(message.sessionId, message.archived);
-        await this.refreshHistory();
-        return;
+        {
+          const session = this.requiredSession(message.sessionId);
+          const live = message.archived ? this.liveTab(session) : undefined;
+          await this.options.repository.setArchived(message.sessionId, message.archived);
+          if (live) {
+            this.options.controller.detach(live.tabId);
+            this.chooseActiveTab(live.tabId);
+            await this.persistAndPost();
+          }
+          await this.refreshHistory();
+          return;
+        }
       case "session.delete":
         await this.deleteSession(message.sessionId);
         return;
@@ -331,8 +341,7 @@ export class PiViewProvider {
           collapsedGroups: [...message.collapsedGroups],
           openSessions: attachedOpenSessions(this.options.controller.snapshot()),
         };
-        await this.options.state.update(this.persisted);
-        await this.postSnapshot();
+        await this.persistAndPost();
         return;
     }
   }
@@ -452,13 +461,30 @@ export class PiViewProvider {
   }
 
   private async persistAndPost(): Promise<void> {
-    this.persisted = {
-      ...this.persisted,
-      collapsedGroups: [...this.persisted.collapsedGroups],
-      openSessions: attachedOpenSessions(this.options.controller.snapshot()),
-    };
-    await this.options.state.update(this.persisted);
-    await this.postSnapshot();
+    const run = this.persistenceTail.then(async () => {
+      this.persisted = {
+        ...this.persisted,
+        collapsedGroups: [...this.persisted.collapsedGroups],
+        openSessions: attachedOpenSessions(this.options.controller.snapshot()),
+      };
+      const persisted = {
+        ...this.persisted,
+        collapsedGroups: [...this.persisted.collapsedGroups],
+        openSessions: this.persisted.openSessions.map((session) => ({ ...session })),
+      };
+      await this.options.state.update(persisted);
+      if (!this.stopped) await this.postSnapshot();
+    });
+    this.persistenceTail = run.catch(() => undefined);
+    await run;
+  }
+
+  private schedulePersistence(): void {
+    if (this.stopped) return;
+    void this.persistAndPost().catch((error) => {
+      if (this.stopped) return;
+      void this.notice("error", errorMessage(error)).catch(() => undefined);
+    });
   }
 
   private snapshot(): ViewSnapshot {
@@ -498,13 +524,16 @@ export class PiViewProvider {
     await this.postSnapshot();
     for (const item of replay) {
       if (generation !== this.viewGeneration) return;
+      if (!this.currentTab(item.tabId)?.attached) continue;
       await this.postReplay(item.tabId, item.data);
     }
     let index = 0;
     while (index < this.queuedOutput.length) {
       if (generation !== this.viewGeneration) return;
       const output = this.queuedOutput[index++];
-      if (output) await this.post({ version: 1, type: "terminal.output", ...output });
+      if (output && this.currentTab(output.tabId)?.attached) {
+        await this.post({ version: 1, type: "terminal.output", ...output });
+      }
     }
     if (generation !== this.viewGeneration) return;
     const active = this.activeTabId
@@ -521,6 +550,7 @@ export class PiViewProvider {
 
   private async postReplay(tabId: string, replay: string): Promise<void> {
     for (let index = 0; index < replay.length; index += MAX_TERMINAL_OUTPUT) {
+      if (!this.currentTab(tabId)?.attached) return;
       await this.post({
         version: 1,
         type: "terminal.output",

@@ -27,6 +27,9 @@ interface ExtensionApi {
 export interface ActivationOverrides {
   api?: ExtensionApi;
   provider?: ExtensionProvider;
+  workspace?: Pick<typeof vscode.workspace, "workspaceFolders" | "getWorkspaceFolder">;
+  activeEditor?: Pick<vscode.TextEditor, "document"> | null;
+  providerFactory?(workspaceFolder: vscode.WorkspaceFolder): ExtensionProvider;
 }
 
 let activeProvider: ExtensionProvider | undefined;
@@ -44,9 +47,9 @@ class MementoArchiveStore implements ArchiveStore {
   }
 }
 
-interface EditorSelectionSource {
+interface EditorSelectionSource<TUri extends { scheme: string } = { scheme: string }> {
   document: {
-    uri: { scheme: string };
+    uri: TUri;
     fileName: string;
     languageId: string;
     lineAt(line: number): { text: string };
@@ -89,13 +92,52 @@ export function selectionFromEditor(
   };
 }
 
-function captureSelection(): ReturnType<PiViewHost["captureEditorSelection"]> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) return undefined;
+interface WorkspaceBoundary<TFolder, TUri> {
+  workspaceFolders: readonly TFolder[] | undefined;
+  getWorkspaceFolder(uri: TUri): TFolder | undefined;
+}
+
+export function resolveWorkspaceFolder<TFolder, TUri>(
+  workspace: WorkspaceBoundary<TFolder, TUri>,
+  activeEditor?: { document: { uri: TUri } },
+): TFolder | undefined {
+  const activeFolder = activeEditor ? workspace.getWorkspaceFolder(activeEditor.document.uri) : undefined;
+  if (activeFolder) return activeFolder;
+  return workspace.workspaceFolders?.length === 1 ? workspace.workspaceFolders[0] : undefined;
+}
+
+export function selectionFromWorkspaceEditor<
+  TUri extends { scheme: string },
+  TFolder extends { name: string },
+>(
+  editor: EditorSelectionSource<TUri>,
+  workspaceFolder: TFolder,
+  workspace: WorkspaceBoundary<TFolder, TUri> & {
+    asRelativePath(uri: TUri, includeWorkspaceFolder?: boolean): string;
+  },
+): ReturnType<PiViewHost["captureEditorSelection"]> {
+  const documentFolder = editor.document.uri.scheme === "untitled"
+    ? workspaceFolder
+    : workspace.getWorkspaceFolder(editor.document.uri);
+  if (documentFolder !== workspaceFolder) {
+    throw new Error(`The active editor is in a different workspace. Pi Agent Manager is scoped to “${workspaceFolder.name}”.`);
+  }
   const relativePath = editor.document.uri.scheme === "untitled"
     ? editor.document.fileName
-    : vscode.workspace.asRelativePath(editor.document.uri, false);
+    : workspace.asRelativePath(editor.document.uri, false);
   return selectionFromEditor(editor, relativePath);
+}
+
+function captureSelection(
+  workspaceFolder: vscode.WorkspaceFolder,
+): ReturnType<PiViewHost["captureEditorSelection"]> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return undefined;
+  return selectionFromWorkspaceEditor<vscode.Uri, vscode.WorkspaceFolder>(
+    editor,
+    workspaceFolder,
+    vscode.workspace,
+  );
 }
 
 export function boundFilePosition(
@@ -107,9 +149,9 @@ export function boundFilePosition(
   return { line, column };
 }
 
-function createHost(): PiViewHost {
+function createHost(workspaceFolder: vscode.WorkspaceFolder): PiViewHost {
   return {
-    captureEditorSelection: captureSelection,
+    captureEditorSelection: () => captureSelection(workspaceFolder),
     async revealManager() {
       await vscode.commands.executeCommand("workbench.view.extension.piAgent");
     },
@@ -157,8 +199,11 @@ function createHost(): PiViewHost {
   };
 }
 
-function createProvider(context: vscode.ExtensionContext): PiViewProvider {
-  const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+function createProvider(
+  context: vscode.ExtensionContext,
+  workspaceFolder: vscode.WorkspaceFolder,
+): PiViewProvider {
+  const cwd = workspaceFolder.uri.fsPath;
   const distUri = vscode.Uri.joinPath(context.extensionUri, "dist");
   const statusExtensionPath = vscode.Uri.joinPath(distUri, "resources", "pi-status.mjs").fsPath;
   const repository = new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) });
@@ -185,7 +230,7 @@ function createProvider(context: vscode.ExtensionContext): PiViewProvider {
     repository,
     controller,
     bridge,
-    host: createHost(),
+    host: createHost(workspaceFolder),
   });
   return provider;
 }
@@ -195,7 +240,17 @@ export async function activate(
   overrides: ActivationOverrides = {},
 ): Promise<void> {
   const api = overrides.api ?? vscode;
-  const provider = overrides.provider ?? createProvider(context);
+  const provider = overrides.provider ?? (() => {
+    const workspace = overrides.workspace ?? vscode.workspace;
+    const activeEditor = overrides.activeEditor === undefined
+      ? vscode.window.activeTextEditor
+      : overrides.activeEditor ?? undefined;
+    const workspaceFolder = resolveWorkspaceFolder(workspace, activeEditor);
+    if (!workspaceFolder) {
+      throw new Error("Open a workspace folder for Pi Agent Manager. In a multi-root workspace, focus a file in the folder to manage and try again.");
+    }
+    return overrides.providerFactory?.(workspaceFolder) ?? createProvider(context, workspaceFolder);
+  })();
   activeProvider = provider;
   await provider.start();
 

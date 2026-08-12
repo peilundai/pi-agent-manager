@@ -3,7 +3,14 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionSummary, TerminalTab } from "../src/shared/model";
 import { PiViewProvider } from "../src/view/pi-view-provider";
-import { activate, boundFilePosition, deactivate, selectionFromEditor } from "../src/extension";
+import {
+  activate,
+  boundFilePosition,
+  deactivate,
+  resolveWorkspaceFolder,
+  selectionFromEditor,
+  selectionFromWorkspaceEditor,
+} from "../src/extension";
 
 const selectionFixture = {
   scheme: "file",
@@ -144,8 +151,17 @@ function providerHarness(options: {
   const state = {
     value: options.persisted,
     updates: [] as unknown[],
+    delayAttached: false,
+    releaseAttached: undefined as (() => void) | undefined,
     get() { return this.value; },
-    async update(value: unknown) { this.value = value; this.updates.push(value); },
+    async update(value: unknown) {
+      this.updates.push(value);
+      const openSessions = (value as { openSessions?: unknown[] }).openSessions ?? [];
+      if (this.delayAttached && openSessions.length > 0) {
+        await new Promise<void>((resolve) => { this.releaseAttached = resolve; });
+      }
+      this.value = value;
+    },
   };
   let receive: ((message: unknown) => unknown) | undefined;
   let onPost: ((message: unknown) => void) | undefined;
@@ -226,6 +242,98 @@ describe("PiViewProvider startup", () => {
 });
 
 describe("PiViewProvider messages", () => {
+  it("archives by detaching the matching tab without stopping its Pi process", async () => {
+    const harness = providerHarness({ sessions: [sessionFixture] });
+    await harness.provider.start();
+    const tab: TerminalTab = {
+      tabId: "tab-live", sessionId: sessionFixture.id, sessionPath: sessionFixture.path,
+      title: sessionFixture.title, status: "waiting", attached: true,
+    };
+    harness.controller.records = [tab];
+    harness.provider.handleControllerEvent({ type: "changed", tab });
+    await vi.waitFor(() => expect((harness.state.value as { openSessions: unknown[] }).openSessions).toHaveLength(1));
+
+    await harness.webview.send({ version: 1, type: "session.archive", sessionId: sessionFixture.id, archived: true });
+
+    expect(harness.controller.detached).toEqual(["tab-live"]);
+    expect(harness.controller.stopped).toEqual([]);
+    expect(harness.controller.records[0]).toMatchObject({ tabId: "tab-live", attached: false, status: "waiting" });
+    expect((harness.state.value as { openSessions: unknown[] }).openSessions).toEqual([]);
+    const replacement = [...harness.webview.messages].reverse().find((message) =>
+      (message as { type?: string }).type === "state.replace") as { snapshot: { tabs: TerminalTab[] } };
+    expect(replacement.snapshot.tabs).toContainEqual(expect.objectContaining({ tabId: "tab-live", attached: false }));
+  });
+
+  it("does not replay or focus a tab detached while the ready snapshot is being delivered", async () => {
+    const harness = providerHarness();
+    await harness.provider.start();
+    const tab: TerminalTab = { tabId: "tab-1", title: "Agent", status: "waiting", attached: true };
+    harness.controller.records = [tab];
+    harness.controller.replayText = "stale replay";
+    await harness.webview.send({ version: 1, type: "session.focus", tabId: tab.tabId });
+    const beforeReady = harness.webview.messages.length;
+    let detachDuringSnapshot = true;
+    harness.webview.onPost((message) => {
+      if (!detachDuringSnapshot || (message as { type?: string }).type !== "state.replace") return;
+      detachDuringSnapshot = false;
+      harness.controller.detach(tab.tabId);
+      harness.provider.handleControllerEvent({ type: "changed", tab: { ...tab, attached: false } });
+    });
+
+    await harness.webview.send({ version: 1, type: "ready" });
+
+    expect(harness.webview.messages.slice(beforeReady)).not.toContainEqual(expect.objectContaining({ type: "terminal.output" }));
+    expect(harness.webview.messages.slice(beforeReady)).not.toContainEqual(expect.objectContaining({ type: "terminal.focus" }));
+  });
+
+  it("serializes lifecycle persistence so a late attached write cannot restore a detached session", async () => {
+    const harness = providerHarness({ sessions: [sessionFixture] });
+    await harness.provider.start();
+    harness.state.updates = [];
+    harness.state.delayAttached = true;
+    const attached: TerminalTab = {
+      tabId: "tab-1", sessionId: sessionFixture.id, sessionPath: sessionFixture.path,
+      title: sessionFixture.title, status: "working", attached: true,
+    };
+    harness.controller.records = [attached];
+    harness.provider.handleControllerEvent({ type: "changed", tab: attached });
+    await vi.waitFor(() => expect(harness.state.releaseAttached).toBeTypeOf("function"));
+
+    const detached = { ...attached, attached: false };
+    harness.controller.records = [detached];
+    harness.provider.handleControllerEvent({ type: "changed", tab: detached });
+    harness.state.releaseAttached?.();
+
+    await vi.waitFor(() => expect(harness.state.updates).toHaveLength(2));
+    await vi.waitFor(() => expect((harness.state.value as { openSessions: unknown[] }).openSessions).toEqual([]));
+    await expect(harness.provider.shutdown()).resolves.toBeUndefined();
+  });
+
+  it("does not schedule lifecycle persistence after shutdown begins", async () => {
+    const harness = providerHarness({ sessions: [sessionFixture] });
+    await harness.provider.start();
+    harness.state.updates = [];
+    harness.state.delayAttached = true;
+    const attached: TerminalTab = {
+      tabId: "tab-1", sessionId: sessionFixture.id, sessionPath: sessionFixture.path,
+      title: sessionFixture.title, status: "working", attached: true,
+    };
+    harness.controller.records = [attached];
+    harness.provider.handleControllerEvent({ type: "changed", tab: attached });
+    await vi.waitFor(() => expect(harness.state.releaseAttached).toBeTypeOf("function"));
+
+    const shutdown = harness.provider.shutdown();
+    const detached = { ...attached, attached: false };
+    harness.controller.records = [detached];
+    harness.provider.handleControllerEvent({ type: "changed", tab: detached });
+    harness.state.releaseAttached?.();
+    await shutdown;
+    await Promise.resolve();
+
+    expect(harness.state.updates).toHaveLength(1);
+    expect(harness.controller.disposed).toBe(true);
+  });
+
   it("forwards controller output and replaces session status after controller lifecycle changes", async () => {
     const harness = providerHarness({ sessions: [sessionFixture] });
     await harness.provider.start();
@@ -369,7 +477,7 @@ describe("PiViewProvider messages", () => {
 
     expect(harness.controller.inputs).toContainEqual({ tabId: "tab-live", data: "hello" });
     expect(harness.controller.resizes).toContainEqual({ tabId: "tab-live", cols: 100, rows: 30 });
-    expect(harness.controller.detached).toEqual(["tab-live"]);
+    expect(harness.controller.detached).toEqual(["tab-live", "tab-live"]);
     expect(harness.controller.started).toContainEqual({ cwd: "/repo" });
     expect(harness.controller.started).toContainEqual({ cwd: "/repo", sessionId: sessionFixture.id, sessionPath: sessionFixture.path });
     expect(harness.repository.archived).toEqual([{ sessionId: sessionFixture.id, archived: true }]);
@@ -474,6 +582,142 @@ describe("PiViewProvider persistence and selection", () => {
 });
 
 describe("extension activation", () => {
+  const workspaceFolder = (name: string, fsPath: string, index: number) => ({
+    name,
+    index,
+    uri: {
+      scheme: "file",
+      authority: "",
+      path: fsPath,
+      query: "",
+      fragment: "",
+      fsPath,
+      toString: () => `file://${fsPath}`,
+    },
+  });
+
+  const workspaceBoundary = (folders: ReturnType<typeof workspaceFolder>[]) => ({
+    workspaceFolders: folders,
+    getWorkspaceFolder(uri: { fsPath: string }) {
+      return folders.find((folder) => uri.fsPath === folder.uri.fsPath || uri.fsPath.startsWith(`${folder.uri.fsPath}/`));
+    },
+    asRelativePath(uri: { fsPath: string }) {
+      const folder = this.getWorkspaceFolder(uri);
+      return folder ? uri.fsPath.slice(folder.uri.fsPath.length + 1) : uri.fsPath;
+    },
+  });
+
+  it("selects the active resource workspace and never guesses across multiple roots", () => {
+    const first = workspaceFolder("first", "/repo-a", 0);
+    const second = workspaceFolder("second", "/repo-b", 1);
+    const workspace = workspaceBoundary([first, second]);
+    const activeEditor = { document: { uri: { ...second.uri, fsPath: "/repo-b/src/auth.ts" } } };
+
+    expect(resolveWorkspaceFolder(workspace, activeEditor)).toBe(second);
+    expect(resolveWorkspaceFolder(workspace)).toBeUndefined();
+    expect(resolveWorkspaceFolder(workspaceBoundary([first]))).toBe(first);
+    expect(resolveWorkspaceFolder(workspaceBoundary([]))).toBeUndefined();
+  });
+
+  it("refuses to capture a selection from a different workspace root", () => {
+    const first = workspaceFolder("first", "/repo-a", 0);
+    const second = workspaceFolder("second", "/repo-b", 1);
+    const workspace = workspaceBoundary([first, second]);
+    const editor = {
+      document: {
+        uri: { ...second.uri, fsPath: "/repo-b/src/auth.ts" },
+        fileName: "/repo-b/src/auth.ts",
+        languageId: "typescript",
+        lineAt: () => ({ text: "await refreshToken();" }),
+        getText: () => "await refreshToken();",
+      },
+      selection: {
+        isEmpty: true,
+        active: { line: 4 },
+        start: { line: 4 },
+        end: { line: 4, character: 0 },
+      },
+    };
+
+    expect(() => selectionFromWorkspaceEditor<typeof editor.document.uri, typeof first>(
+      editor,
+      first,
+      workspace,
+    )).toThrow(/different workspace.*first/i);
+    expect(selectionFromWorkspaceEditor<typeof editor.document.uri, typeof second>(
+      editor,
+      second,
+      workspace,
+    )).toMatchObject({
+      relativePath: "src/auth.ts",
+      text: "await refreshToken();",
+    });
+  });
+
+  it("prevents activation from starting a provider without an open workspace folder", async () => {
+    const api = {
+      window: { registerWebviewViewProvider: () => ({ dispose() {} }) },
+      commands: { registerCommand: () => ({ dispose() {} }) },
+    };
+    let providerCreated = false;
+    await expect(activate(
+      { subscriptions: [] } as never,
+      {
+        api: api as never,
+        workspace: workspaceBoundary([]) as never,
+        activeEditor: null,
+        providerFactory: () => {
+          providerCreated = true;
+          throw new Error("provider must not be created");
+        },
+      },
+    )).rejects.toThrow(/open a workspace folder/i);
+    expect(providerCreated).toBe(false);
+  });
+
+  it("activates one provider scoped to the active folder in a multi-root workspace", async () => {
+    const first = workspaceFolder("first", "/repo-a", 0);
+    const second = workspaceFolder("second", "/repo-b", 1);
+    const workspace = workspaceBoundary([first, second]);
+    const activeEditor = { document: { uri: { ...second.uri, fsPath: "/repo-b/src/auth.ts" } } };
+    const registered = new Map<string, () => unknown>();
+    const api = {
+      window: { registerWebviewViewProvider: () => ({ dispose() {} }) },
+      commands: {
+        registerCommand: (id: string, handler: () => unknown) => {
+          registered.set(id, handler);
+          return { dispose() {} };
+        },
+      },
+    };
+    const provider = {
+      starts: 0,
+      async start() { this.starts += 1; },
+      async open() {},
+      async newSession() {},
+      async sendSelection() {},
+      async shutdown() {},
+    };
+    let selected: typeof second | undefined;
+
+    await activate(
+      { subscriptions: [] } as never,
+      {
+        api: api as never,
+        workspace: workspace as never,
+        activeEditor: activeEditor as never,
+        providerFactory: (folder) => {
+          selected = folder as typeof second;
+          return provider;
+        },
+      },
+    );
+
+    expect(selected).toBe(second);
+    expect(provider.starts).toBe(1);
+    expect([...registered.keys()]).toEqual(["piAgent.open", "piAgent.newSession", "piAgent.sendSelection"]);
+  });
+
   it("bounds file-link positions to the opened document", () => {
     expect(boundFilePosition(
       { path: "/repo/src/auth.ts", line: 99, column: 99 },
