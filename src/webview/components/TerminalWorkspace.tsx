@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal, type ILink, type ILinkProvider } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -11,7 +11,7 @@ import type { WebviewTransport } from "../vscode";
 export interface TerminalWorkspaceBinding {
   readonly cols: number;
   readonly rows: number;
-  write(data: string): void;
+  write(data: string, onComplete: () => void): void;
   focus(): void;
   fit(): void;
   dispose(): void;
@@ -136,7 +136,7 @@ export const browserTerminalFactory: TerminalWorkspaceFactory = {
     return {
       get cols() { return terminal.cols; },
       get rows() { return terminal.rows; },
-      write: (data) => terminal.write(data),
+      write: (data, onComplete) => terminal.write(data, onComplete),
       focus: () => {
         terminal.focus();
         terminal.scrollToBottom();
@@ -188,8 +188,15 @@ export function TerminalWorkspace({
   const workspace = useRef<HTMLDivElement>(null);
   const mounts = useRef(new Map<string, HTMLDivElement>());
   const terminals = useRef(new Map<string, TerminalWorkspaceBinding>());
+  const terminalGenerations = useRef(new Map<string, number>());
   const handledMessages = useRef(new Set<number>());
+  const inFlightWrites = useRef(new Map<string, { id: number; generation: number }>());
   const sentDimensions = useRef(new Map<string, string>());
+  const transportRef = useRef(transport);
+  const messagesHandledRef = useRef(onMessagesHandled);
+  const [outputQueueVersion, advanceOutputQueue] = useState(0);
+  transportRef.current = transport;
+  messagesHandledRef.current = onMessagesHandled;
 
   useEffect(() => {
     const attachedTabs = tabs.filter((tab) => tab.attached);
@@ -199,6 +206,7 @@ export function TerminalWorkspace({
       if (!attachedIds.has(tabId)) {
         terminal.dispose();
         terminals.current.delete(tabId);
+        inFlightWrites.current.delete(tabId);
         sentDimensions.current.delete(tabId);
       }
     }
@@ -206,15 +214,16 @@ export function TerminalWorkspace({
     for (const tab of attachedTabs) {
       const container = mounts.current.get(tab.tabId);
       if (container && !terminals.current.has(tab.tabId)) {
+        terminalGenerations.current.set(tab.tabId, (terminalGenerations.current.get(tab.tabId) ?? 0) + 1);
         terminals.current.set(tab.tabId, factory.create({
           tabId: tab.tabId,
           container,
-          onData: (data) => transport.post({ version: 1, type: "terminal.input", tabId: tab.tabId, data }),
-          onLink: (kind, target) => transport.post({ version: 1, type: "link.open", kind, target }),
+          onData: (data) => transportRef.current.post({ version: 1, type: "terminal.input", tabId: tab.tabId, data }),
+          onLink: (kind, target) => transportRef.current.post({ version: 1, type: "link.open", kind, target }),
         }));
       }
     }
-  }, [factory, tabs, transport]);
+  }, [factory, tabs]);
 
   useEffect(() => {
     const handled: number[] = [];
@@ -222,13 +231,26 @@ export function TerminalWorkspace({
       if (handledMessages.current.has(message.id)) continue;
       const terminal = terminals.current.get(message.tabId);
       if (!terminal) continue;
-      if (message.type === "terminal.output") terminal.write(message.data);
-      else terminal.focus();
-      handledMessages.current.add(message.id);
-      handled.push(message.id);
+      if (message.type === "terminal.output") {
+        if (inFlightWrites.current.has(message.tabId)) continue;
+        const generation = terminalGenerations.current.get(message.tabId) ?? 0;
+        inFlightWrites.current.set(message.tabId, { id: message.id, generation });
+        terminal.write(message.data, () => {
+          const inFlight = inFlightWrites.current.get(message.tabId);
+          if (!inFlight || inFlight.id !== message.id || inFlight.generation !== generation) return;
+          inFlightWrites.current.delete(message.tabId);
+          handledMessages.current.add(message.id);
+          messagesHandledRef.current?.([message.id]);
+          advanceOutputQueue((version) => version + 1);
+        });
+      } else {
+        terminal.focus();
+        handledMessages.current.add(message.id);
+        handled.push(message.id);
+      }
     }
-    if (handled.length) onMessagesHandled?.(handled);
-  }, [messages, onMessagesHandled, tabs]);
+    if (handled.length) messagesHandledRef.current?.(handled);
+  }, [messages, outputQueueVersion, tabs]);
 
   useEffect(() => {
     let frame: number | undefined;
@@ -243,7 +265,7 @@ export function TerminalWorkspace({
       const dimensions = `${terminal.cols}x${terminal.rows}`;
       if (sentDimensions.current.get(activeTabId) === dimensions) return;
       sentDimensions.current.set(activeTabId, dimensions);
-      transport.post({
+      transportRef.current.post({
         version: 1,
         type: "terminal.resize",
         tabId: activeTabId,
@@ -266,9 +288,10 @@ export function TerminalWorkspace({
       observer?.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
     };
-  }, [activeTabId, tabs, transport]);
+  }, [activeTabId, tabs]);
 
   useEffect(() => () => {
+    inFlightWrites.current.clear();
     for (const terminal of terminals.current.values()) terminal.dispose();
     terminals.current.clear();
   }, []);

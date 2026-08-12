@@ -37,10 +37,11 @@ class FakeTerminalFactory implements TerminalWorkspaceFactory {
     return {
       get cols() { return dimensions().cols; },
       get rows() { return dimensions().rows; },
-      write: (data) => {
+      write: (data, complete) => {
         const writes = this.writesById.get(options.tabId) ?? [];
         writes.push(data);
         this.writesById.set(options.tabId, writes);
+        complete();
       },
       focus: () => this.focusedIds.push(options.tabId),
       fit: () => undefined,
@@ -64,6 +65,40 @@ class FakeTerminalFactory implements TerminalWorkspaceFactory {
 
   setDimensions(tabId: string, cols: number, rows: number): void {
     this.dimensionsById.set(tabId, { cols, rows });
+  }
+}
+
+class DeferredWriteTerminalFactory implements TerminalWorkspaceFactory {
+  readonly createdIds: string[] = [];
+  readonly disposedIds: string[] = [];
+  readonly writesById = new Map<string, string[]>();
+  private readonly completionsById = new Map<string, (() => void)[]>();
+
+  create(options: Parameters<TerminalWorkspaceFactory["create"]>[0]): TerminalWorkspaceBinding {
+    this.createdIds.push(options.tabId);
+    return {
+      cols: 80,
+      rows: 24,
+      write: (data: string, complete?: () => void) => {
+        const writes = this.writesById.get(options.tabId) ?? [];
+        writes.push(data);
+        this.writesById.set(options.tabId, writes);
+        if (complete) {
+          const completions = this.completionsById.get(options.tabId) ?? [];
+          completions.push(complete);
+          this.completionsById.set(options.tabId, completions);
+        }
+      },
+      focus: () => undefined,
+      fit: () => undefined,
+      dispose: () => this.disposedIds.push(options.tabId),
+    };
+  }
+
+  completeNextWrite(tabId: string): void {
+    const completion = this.completionsById.get(tabId)?.shift();
+    if (!completion) throw new Error(`No pending write for ${tabId}`);
+    completion();
   }
 }
 
@@ -380,6 +415,84 @@ describe("terminal workspace", () => {
     render(<TerminalWorkspace {...(props as unknown as React.ComponentProps<typeof TerminalWorkspace>)} />);
 
     expect(terminals.writesById.get("a")).toEqual(["one", "two"]);
+  });
+
+  it("waits for each output write completion before acknowledging or delivering the next chunk", () => {
+    const terminals = new DeferredWriteTerminalFactory();
+    const transport = new RecordingTransport();
+    const handled: number[][] = [];
+    const messages = [
+      { id: 1, type: "terminal.output" as const, tabId: "a", data: "one" },
+      { id: 2, type: "terminal.output" as const, tabId: "a", data: "two" },
+    ];
+    render(
+      <TerminalWorkspace
+        tabs={[tab("a", "alpha", "Alpha")]}
+        activeTabId="a"
+        transport={transport}
+        factory={terminals}
+        messages={messages}
+        onMessagesHandled={(ids) => handled.push([...ids])}
+      />,
+    );
+
+    expect(terminals.writesById.get("a")).toEqual(["one"]);
+    expect(handled).toEqual([]);
+
+    act(() => terminals.completeNextWrite("a"));
+
+    expect(handled).toEqual([[1]]);
+    expect(terminals.writesById.get("a")).toEqual(["one", "two"]);
+  });
+
+  it("does not acknowledge an output write that completes after its terminal is disposed", () => {
+    const terminals = new DeferredWriteTerminalFactory();
+    const transport = new RecordingTransport();
+    const handled: number[][] = [];
+    const { rerender } = render(
+      <TerminalWorkspace
+        tabs={[tab("a", "alpha", "Alpha")]}
+        activeTabId="a"
+        transport={transport}
+        factory={terminals}
+        messages={[{ id: 1, type: "terminal.output", tabId: "a", data: "one" }]}
+        onMessagesHandled={(ids) => handled.push([...ids])}
+      />,
+    );
+
+    rerender(
+      <TerminalWorkspace
+        tabs={[]}
+        transport={transport}
+        factory={terminals}
+        messages={[{ id: 1, type: "terminal.output", tabId: "a", data: "one" }]}
+        onMessagesHandled={(ids) => handled.push([...ids])}
+      />,
+    );
+    act(() => terminals.completeNextWrite("a"));
+
+    expect(terminals.disposedIds).toEqual(["a"]);
+    expect(handled).toEqual([]);
+  });
+
+  it("uses the replacement transport for callbacks retained by a preserved terminal", () => {
+    const terminals = new FakeTerminalFactory();
+    const firstTransport = new RecordingTransport();
+    const replacementTransport = new RecordingTransport();
+    const tabs = [tab("a", "alpha", "Alpha")];
+    const { rerender } = render(
+      <TerminalWorkspace tabs={tabs} activeTabId="a" transport={firstTransport} factory={terminals} />,
+    );
+
+    rerender(<TerminalWorkspace tabs={tabs} activeTabId="a" transport={replacementTransport} factory={terminals} />);
+    terminals.emitData("a", "npm test\r");
+    terminals.emitLink("a", "file", "src/App.tsx:42:7");
+
+    expect(terminals.createdIds).toEqual(["a"]);
+    expect(terminals.disposedIds).toEqual([]);
+    expect(firstTransport.messages).toEqual([]);
+    expect(replacementTransport.messages).toContainEqual({ version: 1, type: "terminal.input", tabId: "a", data: "npm test\r" });
+    expect(replacementTransport.messages).toContainEqual({ version: 1, type: "link.open", kind: "file", target: "src/App.tsx:42:7" });
   });
 
   it("sends terminal dimensions only when an active terminal size changes", () => {
