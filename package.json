@@ -17,9 +17,37 @@
   ],
   "activationEvents": [
     "onView:piAgent.view",
-    "onCommand:piAgent.open"
+    "onCommand:piAgent.open",
+    "onCommand:piAgent.newSession",
+    "onCommand:piAgent.sendSelection"
   ],
   "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "piAgent.open", "title": "Pi: Open Agent Manager", "icon": "media/pi.svg" },
+      { "command": "piAgent.newSession", "title": "Pi: New Agent", "icon": "$(add)" },
+      { "command": "piAgent.sendSelection", "title": "Pi: Send Selection", "icon": "$(send)" }
+    ],
+    "keybindings": [
+      { "command": "piAgent.sendSelection", "key": "ctrl+l", "mac": "cmd+l", "when": "editorTextFocus && resourceScheme =~ /^(file|untitled|vscode-remote)$/" }
+    ],
+    "viewsContainers": {
+      "secondarySidebar": [{ "id": "piAgent", "title": "Pi", "icon": "media/pi.svg" }]
+    },
+    "views": {
+      "piAgent": [{ "type": "webview", "id": "piAgent.view", "name": "Agents", "icon": "media/pi.svg" }]
+    },
+    "menus": {
+      "editor/title": [{ "command": "piAgent.open", "group": "navigation@1" }]
+    },
+    "configuration": {
+      "title": "Pi Agent Manager",
+      "properties": {
+        "piAgent.command": { "type": "string", "default": "pi", "description": "Executable name or absolute path used to start Pi." },
+        "piAgent.closeBehavior": { "type": "string", "enum": ["detach", "stop"], "default": "detach", "description": "Whether closing a session tab detaches its UI or stops Pi." }
+      }
+    }
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit && eslint .",

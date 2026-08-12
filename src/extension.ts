@@ -1,7 +1,218 @@
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
+import { buildPiArgs, buildPiInvocation, resolvePiCommand } from "./pi/command-resolver";
+import { NodePtyAdapter } from "./pi/pty-adapter";
+import { SessionController, type SessionControllerEvent } from "./pi/session-controller";
+import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
+import { PiStatusBridge } from "./pi/status-bridge";
+import type { StatusReport } from "./pi/status-report";
+import { PiViewProvider, type PiViewHost } from "./view/pi-view-provider";
+import type { PersistedViewState } from "./view/view-state";
 
-export function activate(context: vscode.ExtensionContext): void {
-  void context;
+const VIEW_STATE_KEY = "piAgent.viewState";
+const ARCHIVED_SESSIONS_KEY = "piAgent.archivedSessions";
+
+interface ExtensionProvider {
+  start(): Promise<void>;
+  open(): Promise<void>;
+  newSession(): Promise<unknown>;
+  sendSelection(): Promise<void>;
+  shutdown(): Promise<void>;
 }
 
-export function deactivate(): void {}
+interface ExtensionApi {
+  window: Pick<typeof vscode.window, "registerWebviewViewProvider">;
+  commands: Pick<typeof vscode.commands, "registerCommand">;
+}
+
+export interface ActivationOverrides {
+  api?: ExtensionApi;
+  provider?: ExtensionProvider;
+}
+
+let activeProvider: ExtensionProvider | undefined;
+
+class MementoArchiveStore implements ArchiveStore {
+  constructor(private readonly memento: vscode.Memento) {}
+
+  read(): readonly string[] {
+    const value = this.memento.get<unknown>(ARCHIVED_SESSIONS_KEY);
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  }
+
+  async write(ids: readonly string[]): Promise<void> {
+    await this.memento.update(ARCHIVED_SESSIONS_KEY, [...ids]);
+  }
+}
+
+interface EditorSelectionSource {
+  document: {
+    uri: { scheme: string };
+    fileName: string;
+    languageId: string;
+    lineAt(line: number): { text: string };
+    getText(selection: unknown): string;
+  };
+  selection: {
+    isEmpty: boolean;
+    active: { line: number };
+    start: { line: number };
+    end: { line: number; character: number };
+  };
+}
+
+export function selectionFromEditor(
+  editor: EditorSelectionSource,
+  relativePath: string,
+): ReturnType<PiViewHost["captureEditorSelection"]> {
+  const { document, selection } = editor;
+  if (selection.isEmpty) {
+    const line = selection.active.line;
+    return {
+      scheme: document.uri.scheme,
+      relativePath,
+      languageId: document.languageId,
+      startLine: line,
+      endLine: line,
+      text: document.lineAt(line).text,
+    };
+  }
+  const endLine = selection.end.character === 0 && selection.end.line > selection.start.line
+    ? selection.end.line - 1
+    : selection.end.line;
+  return {
+    scheme: document.uri.scheme,
+    relativePath,
+    languageId: document.languageId,
+    startLine: selection.start.line,
+    endLine,
+    text: document.getText(selection),
+  };
+}
+
+function captureSelection(): ReturnType<PiViewHost["captureEditorSelection"]> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return undefined;
+  const relativePath = editor.document.uri.scheme === "untitled"
+    ? editor.document.fileName
+    : vscode.workspace.asRelativePath(editor.document.uri, false);
+  return selectionFromEditor(editor, relativePath);
+}
+
+export function boundFilePosition(
+  target: { path?: string; line?: number; column?: number },
+  document: { lineCount: number; lineAt(line: number): { text: string } },
+): { line: number; column: number } {
+  const line = Math.min(Math.max(target.line ?? 0, 0), Math.max(document.lineCount - 1, 0));
+  const column = Math.min(Math.max(target.column ?? 0, 0), document.lineAt(line).text.length);
+  return { line, column };
+}
+
+function createHost(): PiViewHost {
+  return {
+    captureEditorSelection: captureSelection,
+    async revealManager() {
+      await vscode.commands.executeCommand("workbench.view.extension.piAgent");
+    },
+    async confirmDelete(session) {
+      const answer = await vscode.window.showWarningMessage(
+        `Delete “${session.title}”?`,
+        { modal: true, detail: "This permanently deletes the Pi transcript and its sidecar data." },
+        "Delete",
+      );
+      return answer === "Delete";
+    },
+    async requestName(session) {
+      return vscode.window.showInputBox({
+        title: "Rename Pi Agent",
+        prompt: "Enter a new session name",
+        value: session.title,
+        validateInput(value) {
+          const length = value.replace(/\s+/g, " ").trim().length;
+          return length >= 1 && length <= 80 ? undefined : "Session names must contain 1 to 80 characters.";
+        },
+      });
+    },
+    async openUrl(target) {
+      await vscode.env.openExternal(vscode.Uri.parse(target, true));
+    },
+    async openFile(target) {
+      const uri = vscode.Uri.file(target.path);
+      try {
+        await vscode.workspace.fs.stat(uri);
+      } catch {
+        return false;
+      }
+      const document = await vscode.workspace.openTextDocument(uri);
+      const { line, column } = boundFilePosition(target, document);
+      const position = new vscode.Position(line, column);
+      await vscode.window.showTextDocument(document, {
+        preview: true,
+        selection: new vscode.Range(position, position),
+      });
+      return true;
+    },
+    closeBehavior() {
+      return vscode.workspace.getConfiguration("piAgent").get<"detach" | "stop">("closeBehavior", "detach");
+    },
+  };
+}
+
+function createProvider(context: vscode.ExtensionContext): PiViewProvider {
+  const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+  const distUri = vscode.Uri.joinPath(context.extensionUri, "dist");
+  const statusExtensionPath = vscode.Uri.joinPath(distUri, "resources", "pi-status.mjs").fsPath;
+  const repository = new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) });
+  let provider: PiViewProvider | undefined;
+  const bridge = new PiStatusBridge((report: StatusReport) => provider?.handleStatusReport(report));
+  const controller = new SessionController({
+    pty: new NodePtyAdapter(),
+    invocationFor: async (sessionPath) => {
+      const configured = vscode.workspace.getConfiguration("piAgent").get<string>("command", "pi");
+      const command = await resolvePiCommand({ configured });
+      return buildPiInvocation(command.path, buildPiArgs(statusExtensionPath, sessionPath));
+    },
+    environmentFor: (tabId) => bridge.environmentFor(tabId),
+    onEvent: (event: SessionControllerEvent) => provider?.handleControllerEvent(event),
+  });
+  provider = new PiViewProvider({
+    cwd,
+    distUri,
+    resourceUri: (path) => vscode.Uri.joinPath(distUri, path),
+    state: {
+      get: () => context.workspaceState.get<unknown>(VIEW_STATE_KEY),
+      update: (value: PersistedViewState) => context.workspaceState.update(VIEW_STATE_KEY, value),
+    },
+    repository,
+    controller,
+    bridge,
+    host: createHost(),
+  });
+  return provider;
+}
+
+export async function activate(
+  context: vscode.ExtensionContext,
+  overrides: ActivationOverrides = {},
+): Promise<void> {
+  const api = overrides.api ?? vscode;
+  const provider = overrides.provider ?? createProvider(context);
+  activeProvider = provider;
+  await provider.start();
+
+  context.subscriptions.push(
+    api.window.registerWebviewViewProvider(
+      "piAgent.view",
+      provider as unknown as vscode.WebviewViewProvider,
+      { webviewOptions: { retainContextWhenHidden: true } },
+    ),
+    api.commands.registerCommand("piAgent.open", () => provider.open()),
+    api.commands.registerCommand("piAgent.newSession", () => provider.newSession()),
+    api.commands.registerCommand("piAgent.sendSelection", () => provider.sendSelection()),
+  );
+}
+
+export async function deactivate(): Promise<void> {
+  const provider = activeProvider;
+  activeProvider = undefined;
+  await provider?.shutdown();
+}
