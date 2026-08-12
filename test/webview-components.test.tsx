@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionSummary, TerminalTab, ViewSnapshot } from "../src/shared/model";
@@ -80,6 +80,26 @@ describe("agent manager shell", () => {
     expect(document.querySelector(".manager-layout")).toHaveStyle({ "--session-pane-width": "248px" });
     expect(screen.getByRole("complementary", { name: /agent sessions/i })).toHaveAttribute("data-visible", "true");
     expect(transport.messages).not.toContainEqual(expect.objectContaining({ type: "view.update" }));
+  });
+
+  it("hides a narrow overlay after crossing to a wide viewport without another action", async () => {
+    let narrow = true;
+    const listeners = new Set<(event: MediaQueryListEvent) => void>();
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
+      get matches() { return narrow; },
+      addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+      removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+    }));
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([], [], undefined, false)} transport={transport} />);
+
+    await user.click(screen.getByRole("button", { name: /show agent list/i }));
+    expect(document.querySelector(".manager-layout")).toHaveStyle({ "--session-pane-width": "248px" });
+    narrow = false;
+    act(() => listeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent)));
+    expect(document.querySelector(".manager-layout")).toHaveStyle({ "--session-pane-width": "0px" });
+    expect(screen.getByRole("complementary", { name: /agent sessions/i })).toHaveAttribute("data-visible", "false");
   });
 
   it("filters sessions while keeping New Agent available", async () => {

@@ -3,6 +3,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -32,8 +33,40 @@ function liveTabFor(session: SessionSummary, tabs: readonly TerminalTab[]): Term
   );
 }
 
+const NARROW_VIEWPORT_QUERY = "(max-width: 680px)";
+
 function isNarrowViewport(): boolean {
-  return window.matchMedia?.("(max-width: 680px)").matches ?? window.innerWidth <= 680;
+  return window.matchMedia?.(NARROW_VIEWPORT_QUERY).matches ?? window.innerWidth <= 680;
+}
+
+function useNarrowViewport(): boolean {
+  const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.(NARROW_VIEWPORT_QUERY);
+    if (!mediaQuery) {
+      window.addEventListener("resize", syncViewport);
+      return () => window.removeEventListener("resize", syncViewport);
+    }
+
+    const onChange = (event: MediaQueryListEvent): void => setNarrowViewport(event.matches);
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", onChange);
+      return () => mediaQuery.removeEventListener("change", onChange);
+    }
+    if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(onChange);
+      return () => mediaQuery.removeListener(onChange);
+    }
+    window.addEventListener("resize", syncViewport);
+    return () => window.removeEventListener("resize", syncViewport);
+
+    function syncViewport(): void {
+      setNarrowViewport(isNarrowViewport());
+    }
+  }, []);
+
+  return narrowViewport;
 }
 
 export function App({ transport, initialState }: AppProps) {
@@ -42,7 +75,7 @@ export function App({ transport, initialState }: AppProps) {
     initialState ?? createInitialState(),
   );
   const activeTab = state.snapshot.tabs.find((tab) => tab.tabId === state.snapshot.activeTabId);
-  const narrowViewport = isNarrowViewport();
+  const narrowViewport = useNarrowViewport();
   const paneVisible = narrowViewport ? state.narrowOverlayOpen : state.snapshot.paneVisible;
   const deleteSession = useMemo(
     () => state.snapshot.sessions.find((session) => session.id === state.confirmDeleteSessionId),
