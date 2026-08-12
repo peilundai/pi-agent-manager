@@ -6,6 +6,10 @@ export interface WebviewNotice {
   message: string;
 }
 
+export type TerminalMessage =
+  | { id: number; type: "terminal.output"; tabId: string; data: string }
+  | { id: number; type: "terminal.focus"; tabId: string };
+
 export interface WebviewState {
   snapshot: ViewSnapshot;
   searchQuery: string;
@@ -13,6 +17,8 @@ export interface WebviewState {
   confirmDeleteSessionId: string | undefined;
   narrowOverlayOpen: boolean;
   notice: WebviewNotice | undefined;
+  terminalMessages: TerminalMessage[];
+  nextTerminalMessageId: number;
 }
 
 export type WebviewAction =
@@ -25,6 +31,7 @@ export type WebviewAction =
   | { type: "pane.visibility"; visible: boolean }
   | { type: "narrow-overlay.visibility"; visible: boolean }
   | { type: "pane.width"; width: number }
+  | { type: "terminal.messages.handled"; ids: readonly number[] }
   | { type: "notice.closed" };
 
 export const EMPTY_SNAPSHOT: ViewSnapshot = {
@@ -43,6 +50,8 @@ export function createInitialState(snapshot: ViewSnapshot = EMPTY_SNAPSHOT): Web
     confirmDeleteSessionId: undefined,
     narrowOverlayOpen: false,
     notice: undefined,
+    terminalMessages: [],
+    nextTerminalMessageId: 1,
   };
 }
 
@@ -56,6 +65,19 @@ export function webviewReducer(state: WebviewState, action: WebviewAction): Webv
         return {
           ...state,
           notice: { level: action.message.level, message: action.message.message },
+        };
+      }
+      if (action.message.type === "terminal.output" || action.message.type === "terminal.focus") {
+        return {
+          ...state,
+          snapshot: action.message.type === "terminal.focus"
+            ? { ...state.snapshot, activeTabId: action.message.tabId }
+            : state.snapshot,
+          terminalMessages: [
+            ...state.terminalMessages,
+            { ...action.message, id: state.nextTerminalMessageId },
+          ],
+          nextTerminalMessageId: state.nextTerminalMessageId + 1,
         };
       }
       return state;
@@ -85,6 +107,13 @@ export function webviewReducer(state: WebviewState, action: WebviewAction): Webv
         ...state,
         snapshot: { ...state.snapshot, paneWidth: Math.min(480, Math.max(180, Math.round(action.width))) },
       };
+    case "terminal.messages.handled": {
+      const handled = new Set(action.ids);
+      return {
+        ...state,
+        terminalMessages: state.terminalMessages.filter((message) => !handled.has(message.id)),
+      };
+    }
     case "notice.closed":
       return { ...state, notice: undefined };
   }

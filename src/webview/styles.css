@@ -278,6 +278,15 @@ input:focus-visible,
   height: 100%;
 }
 
+.terminal-workspace {
+  position: absolute;
+  inset: 0;
+}
+
+.terminal-mount .xterm {
+  height: 100%;
+}
+
 .terminal-empty {
   position: absolute;
   inset: 0;

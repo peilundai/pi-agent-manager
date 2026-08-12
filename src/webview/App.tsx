@@ -14,6 +14,11 @@ import { ManagerHeader } from "./components/ManagerHeader";
 import { SessionPane } from "./components/SessionPane";
 import { SessionTabs } from "./components/SessionTabs";
 import {
+  browserTerminalFactory,
+  TerminalWorkspace,
+  type TerminalWorkspaceFactory,
+} from "./components/TerminalWorkspace";
+import {
   createInitialState,
   webviewReducer,
   type WebviewState,
@@ -23,6 +28,7 @@ import type { WebviewTransport } from "./vscode";
 export interface AppProps {
   transport: WebviewTransport;
   initialState?: WebviewState;
+  terminalFactory?: TerminalWorkspaceFactory;
 }
 
 function liveTabFor(session: SessionSummary, tabs: readonly TerminalTab[]): TerminalTab | undefined {
@@ -69,7 +75,7 @@ function useNarrowViewport(): boolean {
   return narrowViewport;
 }
 
-export function App({ transport, initialState }: AppProps) {
+export function App({ transport, initialState, terminalFactory = browserTerminalFactory }: AppProps) {
   const [state, dispatch] = useReducer(
     webviewReducer,
     initialState ?? createInitialState(),
@@ -211,7 +217,14 @@ export function App({ transport, initialState }: AppProps) {
       >
         <main className="terminal-area" aria-label="Pi terminal">
           {state.snapshot.tabs.some((tab) => tab.attached) ? (
-            <div className="terminal-mount" data-testid="terminal-mount" />
+            <TerminalWorkspace
+              tabs={state.snapshot.tabs}
+              {...(state.snapshot.activeTabId ? { activeTabId: state.snapshot.activeTabId } : {})}
+              transport={transport}
+              factory={terminalFactory}
+              messages={state.terminalMessages}
+              onMessagesHandled={(ids) => dispatch({ type: "terminal.messages.handled", ids })}
+            />
           ) : (
             <div className="terminal-empty">
               <span className="empty-mark" aria-hidden="true">π</span>
