@@ -36,12 +36,14 @@ await Promise.all([
   }),
 ]);
 
-const [xtermCss, managerCss] = await Promise.all([
+const [xtermCss, codiconCss, managerCss] = await Promise.all([
   readFile("node_modules/@xterm/xterm/css/xterm.css", "utf8"),
+  readFile("node_modules/@vscode/codicons/dist/codicon.css", "utf8"),
   readFile("src/webview/styles.css", "utf8"),
 ]);
 
 await Promise.all([
-  writeFile("dist/webview.css", `${xtermCss}\n${managerCss}`, "utf8"),
+  writeFile("dist/webview.css", `${xtermCss}\n${codiconCss}\n${managerCss}`, "utf8"),
+  copyFile("node_modules/@vscode/codicons/dist/codicon.ttf", "dist/codicon.ttf"),
   copyFile("src/webview/index.html", "dist/index.html"),
 ]);

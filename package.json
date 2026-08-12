@@ -28,6 +28,7 @@
     "package": "npm run check && npm test && npm run build && vsce package"
   },
   "dependencies": {
+    "@vscode/codicons": "^0.0.36",
     "@xterm/addon-fit": "0.12.0-beta.292",
     "@xterm/addon-search": "0.17.0-beta.292",
     "@xterm/addon-unicode11": "0.10.0-beta.292",
