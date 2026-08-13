@@ -31,12 +31,6 @@
   "extensionKind": [
     "workspace"
   ],
-  "activationEvents": [
-    "onView:piAgent.view",
-    "onCommand:piAgent.open",
-    "onCommand:piAgent.newSession",
-    "onCommand:piAgent.sendSelection"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
