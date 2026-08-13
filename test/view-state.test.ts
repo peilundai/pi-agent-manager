@@ -8,6 +8,7 @@ describe("normalizeViewState", () => {
       paneWidth: 9999,
       collapsedGroups: ["Today", 3],
       openSessions: [{ id: "s", path: 7 }],
+      activeSession: { id: "s", path: 7 },
     })).toEqual({
       paneVisible: true,
       paneWidth: 248,
@@ -19,9 +20,11 @@ describe("normalizeViewState", () => {
   it("preserves bounded valid persisted values without sharing their arrays", () => {
     const collapsedGroups = ["today"];
     const openSessions = [{ id: "session-1", path: "/sessions/one.jsonl" }];
-    const normalized = normalizeViewState({ paneVisible: false, paneWidth: 320, collapsedGroups, openSessions });
-    expect(normalized).toEqual({ paneVisible: false, paneWidth: 320, collapsedGroups, openSessions });
+    const activeSession = { id: "session-1", path: "/sessions/one.jsonl" };
+    const normalized = normalizeViewState({ paneVisible: false, paneWidth: 320, collapsedGroups, openSessions, activeSession });
+    expect(normalized).toEqual({ paneVisible: false, paneWidth: 320, collapsedGroups, openSessions, activeSession });
     expect(normalized.collapsedGroups).not.toBe(collapsedGroups);
     expect(normalized.openSessions).not.toBe(openSessions);
+    expect(normalized.activeSession).not.toBe(activeSession);
   });
 });

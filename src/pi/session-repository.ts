@@ -99,7 +99,20 @@ export class PiSessionRepository {
       throw new Error(`Refusing to delete a non-JSONL session: ${session.path}`);
     }
     const transcript = resolve(session.path);
-    const sidecar = join(dirname(transcript), basename(transcript, ".jsonl"));
+    const transcriptDirectory = dirname(transcript);
+    const transcriptName = basename(transcript);
+    const sidecarName = transcriptName.slice(0, -".jsonl".length);
+    if (!sidecarName || sidecarName === "." || sidecarName === "..") {
+      throw new Error(`Refusing to derive a sidecar from a dot-segment transcript: ${session.path}`);
+    }
+    const sidecar = resolve(transcriptDirectory, sidecarName);
+    if (
+      sidecar === transcript ||
+      dirname(sidecar) !== transcriptDirectory ||
+      basename(sidecar) !== sidecarName
+    ) {
+      throw new Error(`Refusing to delete an unsafe session sidecar: ${sidecar}`);
+    }
     await rm(transcript, { force: true });
     await rm(sidecar, { recursive: true, force: true });
     this.cache.delete(transcript);

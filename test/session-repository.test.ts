@@ -106,6 +106,35 @@ describe("PiSessionRepository", () => {
     })).rejects.toThrow(/jsonl/i);
   });
 
+  it.each([".jsonl", "..jsonl", "...jsonl"])(
+    "rejects the dot-segment transcript name %s before deleting anything",
+    async (filename) => {
+      const root = await temporaryRoot();
+      const protectedDirectory = join(root, "sandbox");
+      const sessionDirectory = join(protectedDirectory, "sessions");
+      const transcript = join(sessionDirectory, filename);
+      const sentinel = join(protectedDirectory, "unrelated-session.jsonl");
+      await mkdir(sessionDirectory, { recursive: true });
+      await writeFile(transcript, "dangerous transcript");
+      await writeFile(sentinel, "must survive");
+      const repository = new PiSessionRepository({ agentDir: root, archiveStore: new MemoryArchiveStore() });
+
+      await expect(repository.delete({
+        id: filename,
+        path: transcript,
+        cwd: root,
+        title: "Dangerous",
+        createdAt: 1,
+        updatedAt: 1,
+        archived: false,
+        status: "stopped",
+      })).rejects.toThrow(/sidecar|dot.segment/i);
+
+      expect(await readFile(transcript, "utf8")).toBe("dangerous transcript");
+      expect(await readFile(sentinel, "utf8")).toBe("must survive");
+    },
+  );
+
   it("leaves a readable transcript unchanged while archiving", async () => {
     const root = await temporaryRoot();
     const transcript = join(root, "session.jsonl");

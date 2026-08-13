@@ -1,5 +1,5 @@
 import type { SessionSummary, SessionStatus, TerminalTab } from "../shared/model";
-import type { PiInvocation } from "./command-resolver";
+import { PiCommandNotFoundError, type PiInvocation } from "./command-resolver";
 import type { PtyAdapter, PtyProcess } from "./pty-adapter";
 import type { StatusReport } from "./status-report";
 
@@ -8,12 +8,14 @@ const MAX_OUTPUT_CHUNK = 262_144;
 const DEFAULT_REPLAY_BYTES = 2 * 1_024 * 1_024;
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
+const DEFAULT_STOP_TIMEOUT_MS = 2_000;
+const DEFAULT_KILL_TIMEOUT_MS = 2_000;
 
 export type SessionControllerEvent =
   | { type: "changed"; tab: TerminalTab }
   | { type: "output"; tabId: string; data: string }
   | { type: "exit"; tabId: string; exitCode: number; status: "stopped" | "failed" }
-  | { type: "error"; tabId: string; message: string };
+  | { type: "error"; tabId: string; message: string; setupError?: "executable" };
 
 export interface SessionControllerOptions {
   pty: PtyAdapter;
@@ -23,6 +25,8 @@ export interface SessionControllerOptions {
   uuid?: () => string;
   onEvent?: (event: SessionControllerEvent) => void;
   maxReplayBytes?: number;
+  stopTimeoutMs?: number;
+  killTimeoutMs?: number;
 }
 
 export interface StartSessionOptions {
@@ -39,6 +43,8 @@ interface SessionRecord {
   exited: boolean;
   intentionalStop: boolean;
   subscriptions: Array<{ dispose(): void }>;
+  exitPromise: Promise<void>;
+  resolveExit(): void;
 }
 
 function cloneTab(tab: TerminalTab): TerminalTab {
@@ -78,6 +84,8 @@ export class SessionController {
   private readonly uuid: () => string;
   private readonly onEvent: (event: SessionControllerEvent) => void;
   private readonly maxReplayBytes: number;
+  private readonly stopTimeoutMs: number;
+  private readonly killTimeoutMs: number;
 
   constructor(options: SessionControllerOptions) {
     this.pty = options.pty;
@@ -87,16 +95,23 @@ export class SessionController {
     this.uuid = options.uuid ?? (() => crypto.randomUUID());
     this.onEvent = options.onEvent ?? (() => undefined);
     this.maxReplayBytes = options.maxReplayBytes ?? DEFAULT_REPLAY_BYTES;
+    this.stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS;
+    this.killTimeoutMs = options.killTimeoutMs ?? DEFAULT_KILL_TIMEOUT_MS;
     if (!Number.isInteger(this.maxReplayBytes) || this.maxReplayBytes < 1) {
       throw new Error("Replay size must be a positive integer.");
+    }
+    if (!Number.isInteger(this.stopTimeoutMs) || this.stopTimeoutMs < 1 || !Number.isInteger(this.killTimeoutMs) || this.killTimeoutMs < 1) {
+      throw new Error("Stop timeouts must be positive integers.");
     }
   }
 
   async start(options: StartSessionOptions): Promise<TerminalTab> {
     const existing = this.findLive(options.sessionId, options.sessionPath);
     if (existing) {
-      existing.tab.attached = true;
-      this.emitChanged(existing);
+      if (!existing.tab.attached) {
+        existing.tab.attached = true;
+        this.emitChanged(existing);
+      }
       return cloneTab(existing.tab);
     }
 
@@ -109,6 +124,8 @@ export class SessionController {
       status: "starting",
       attached: true,
     };
+    let resolveExit = (): void => undefined;
+    const exitPromise = new Promise<void>((resolve) => { resolveExit = resolve; });
     const record: SessionRecord = {
       tab,
       cwd: options.cwd,
@@ -116,15 +133,24 @@ export class SessionController {
       exited: false,
       intentionalStop: false,
       subscriptions: [],
+      exitPromise,
+      resolveExit,
     };
     this.records.set(tabId, record);
     this.emitChanged(record);
 
     try {
       const invocation = await this.invocationFor(options.sessionPath);
+      let bridgeEnvironment: Record<string, string> = {};
+      try {
+        bridgeEnvironment = this.environmentFor(tabId);
+      } catch {
+        // Pi remains usable when the optional live-status bridge is unavailable.
+      }
       const env = {
         ...processEnvironment(this.baseEnvironment),
-        ...this.environmentFor(tabId),
+        ...(invocation.env ?? {}),
+        ...bridgeEnvironment,
         TERM_PROGRAM: "vscode",
         PI_VSCODE_MANAGER: "1",
       };
@@ -144,7 +170,15 @@ export class SessionController {
       record.tab.attached = false;
       record.exited = true;
       this.emitChanged(record);
-      this.onEvent({ type: "error", tabId, message: errorMessage(error) });
+      this.onEvent({
+        type: "error",
+        tabId,
+        message: errorMessage(error),
+        ...(error instanceof PiCommandNotFoundError ? { setupError: "executable" as const } : {}),
+      });
+      this.records.delete(tabId);
+      record.replay = "";
+      record.resolveExit();
     }
 
     return cloneTab(record.tab);
@@ -152,6 +186,7 @@ export class SessionController {
 
   detach(tabId: string): void {
     const record = this.required(tabId);
+    if (!record.tab.attached) return;
     record.tab.attached = false;
     this.emitChanged(record);
   }
@@ -159,10 +194,22 @@ export class SessionController {
   async stop(tabId: string): Promise<void> {
     const record = this.required(tabId);
     record.intentionalStop = true;
-    record.tab.status = "stopped";
-    record.tab.attached = false;
-    record.process?.kill();
-    this.emitChanged(record);
+    if (record.tab.attached) {
+      record.tab.attached = false;
+      this.emitChanged(record);
+    }
+    const process = record.process;
+    if (!process) {
+      this.handleExit(record, 0);
+      return;
+    }
+    process.kill();
+    if (await this.waitForExit(record, this.stopTimeoutMs)) return;
+    if (record.exited) return;
+    process.kill("SIGKILL");
+    if (await this.waitForExit(record, this.killTimeoutMs)) return;
+    if (record.exited) return;
+    throw new Error(`Pi did not exit after forced termination: ${tabId}`);
   }
 
   input(tabId: string, data: string): void {
@@ -199,17 +246,32 @@ export class SessionController {
   applyStatusReport(report: StatusReport): void {
     const record = this.records.get(report.tabId);
     if (!record || record.exited) return;
+    const nextSessionId = report.sessionId || record.tab.sessionId;
+    const nextSessionPath = report.sessionPath || record.tab.sessionPath;
+    const nextTitle = typeof report.name === "string" && report.name.trim()
+      ? report.name.trim()
+      : report.name === null ? "New Agent" : record.tab.title;
+    if (
+      record.tab.status === report.status &&
+      record.tab.sessionId === nextSessionId &&
+      record.tab.sessionPath === nextSessionPath &&
+      record.tab.title === nextTitle
+    ) return;
     record.tab.status = report.status;
-    if (report.sessionId) record.tab.sessionId = report.sessionId;
-    if (report.sessionPath) record.tab.sessionPath = report.sessionPath;
-    if (typeof report.name === "string" && report.name.trim()) record.tab.title = report.name.trim();
-    else if (report.name === null) record.tab.title = "New Agent";
+    if (nextSessionId) record.tab.sessionId = nextSessionId;
+    if (nextSessionPath) record.tab.sessionPath = nextSessionPath;
+    record.tab.title = nextTitle;
     this.emitChanged(record);
   }
 
   updateMetadata(session: SessionSummary): void {
     for (const record of this.records.values()) {
       if (record.tab.sessionId !== session.id && record.tab.sessionPath !== session.path) continue;
+      if (
+        record.tab.sessionId === session.id &&
+        record.tab.sessionPath === session.path &&
+        record.tab.title === session.title
+      ) continue;
       record.tab.sessionId = session.id;
       record.tab.sessionPath = session.path;
       record.tab.title = session.title;
@@ -229,6 +291,7 @@ export class SessionController {
     for (const record of this.records.values()) {
       for (const subscription of record.subscriptions) subscription.dispose();
       if (!record.exited && record.process) record.process.kill();
+      record.resolveExit();
     }
     this.records.clear();
   }
@@ -262,6 +325,18 @@ export class SessionController {
     this.onEvent({ type: "changed", tab: cloneTab(record.tab) });
   }
 
+  private async waitForExit(record: SessionRecord, timeoutMs: number): Promise<boolean> {
+    if (record.exited) return true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    const exited = record.exitPromise.then(() => true as const);
+    const result = await Promise.race([exited, timedOut]);
+    if (timer) clearTimeout(timer);
+    return result;
+  }
+
   private handleData(record: SessionRecord, data: string): void {
     record.replay = boundedReplay(record.replay, data, this.maxReplayBytes);
     for (let index = 0; index < data.length; index += MAX_OUTPUT_CHUNK) {
@@ -278,5 +353,9 @@ export class SessionController {
     record.subscriptions = [];
     this.emitChanged(record);
     this.onEvent({ type: "exit", tabId: record.tab.tabId, exitCode, status: record.tab.status });
+    this.records.delete(record.tab.tabId);
+    delete record.process;
+    record.replay = "";
+    record.resolveExit();
   }
 }

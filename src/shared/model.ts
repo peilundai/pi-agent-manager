@@ -1,5 +1,9 @@
 export type SessionStatus = "starting" | "working" | "waiting" | "stopped" | "failed";
 
+export type SetupErrorState =
+  | { kind: "workspace" }
+  | { kind: "executable"; message: string };
+
 export interface SessionSummary {
   id: string;
   path: string;
@@ -27,4 +31,5 @@ export interface ViewSnapshot {
   paneVisible: boolean;
   paneWidth: number;
   collapsedGroups: string[];
+  setupError?: SetupErrorState;
 }

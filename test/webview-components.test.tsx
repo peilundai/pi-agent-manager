@@ -202,6 +202,45 @@ describe("agent manager shell", () => {
     expect(document.querySelector(".manager-title")).toHaveTextContent("New Agent");
   });
 
+  it("renders an actionable Open Folder state when no workspace is available", async () => {
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    const setupState = createInitialState({
+      sessions: [],
+      tabs: [],
+      paneVisible: true,
+      paneWidth: 248,
+      collapsedGroups: [],
+      setupError: { kind: "workspace" },
+    });
+    render(<App initialState={setupState} transport={transport} />);
+
+    expect(screen.getByRole("heading", { name: /open a workspace folder/i })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /open folder/i }));
+    expect(transport.messages).toContainEqual({ version: 1, type: "setup.action", action: "openFolder" });
+  });
+
+  it("renders Choose Executable and Open Settings recovery for missing Pi", async () => {
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    const setupState = createInitialState({
+      sessions: [],
+      tabs: [],
+      paneVisible: true,
+      paneWidth: 248,
+      collapsedGroups: [],
+      setupError: { kind: "executable", message: "Pi executable was not found." },
+    });
+    render(<App initialState={setupState} transport={transport} />);
+
+    expect(screen.getByRole("heading", { name: /set up pi executable/i })).toBeVisible();
+    expect(screen.getByText("Pi executable was not found.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /choose executable/i }));
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    expect(transport.messages).toContainEqual({ version: 1, type: "setup.action", action: "chooseExecutable" });
+    expect(transport.messages).toContainEqual({ version: 1, type: "setup.action", action: "openSettings" });
+  });
+
   it("reclaims the pane width when the persisted wide pane is hidden", () => {
     const transport = new RecordingTransport();
     render(<App initialState={stateWith([], [], undefined, false)} transport={transport} />);

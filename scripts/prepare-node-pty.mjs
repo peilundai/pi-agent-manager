@@ -1,16 +1,8 @@
-import { chmod, stat } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  deriveCurrentPackageTarget,
+  prepareNativeRuntime,
+} from "./package-target.mjs";
 
-if (process.platform === "darwin") {
-  const helper = join(
-    "node_modules",
-    "node-pty",
-    "prebuilds",
-    `darwin-${process.arch}`,
-    "spawn-helper",
-  );
-  const file = await stat(helper);
-
-  await chmod(helper, file.mode | 0o111);
-  console.log(`Prepared executable node-pty helper: ${helper}`);
-}
+const target = deriveCurrentPackageTarget();
+await prepareNativeRuntime(target);
+console.log(`Prepared node-pty runtime for ${target.target}.`);

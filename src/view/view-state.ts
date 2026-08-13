@@ -17,6 +17,7 @@ export interface PersistedViewState {
   paneWidth: number;
   collapsedGroups: string[];
   openSessions: PersistedOpenSession[];
+  activeSession?: PersistedOpenSession;
 }
 
 export const DEFAULT_VIEW_STATE: PersistedViewState = {
@@ -28,6 +29,12 @@ export const DEFAULT_VIEW_STATE: PersistedViewState = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOpenSession(value: unknown): value is PersistedOpenSession {
+  return isRecord(value) &&
+    typeof value.id === "string" && value.id.length > 0 && value.id.length <= MAX_ID_LENGTH &&
+    typeof value.path === "string" && value.path.length > 0 && value.path.length <= MAX_PATH_LENGTH;
 }
 
 export function normalizeViewState(value: unknown): PersistedViewState {
@@ -42,16 +49,15 @@ export function normalizeViewState(value: unknown): PersistedViewState {
     : [];
   const openSessions = Array.isArray(value.openSessions)
     ? value.openSessions
-        .filter((item): item is PersistedOpenSession =>
-          isRecord(item) &&
-          typeof item.id === "string" && item.id.length > 0 && item.id.length <= MAX_ID_LENGTH &&
-          typeof item.path === "string" && item.path.length > 0 && item.path.length <= MAX_PATH_LENGTH)
+        .filter(isOpenSession)
         .slice(0, MAX_OPEN_SESSIONS)
     : [];
+  const activeSession = isOpenSession(value.activeSession) ? { ...value.activeSession } : undefined;
   return {
     paneVisible: typeof value.paneVisible === "boolean" ? value.paneVisible : true,
     paneWidth,
     collapsedGroups,
     openSessions,
+    ...(activeSession ? { activeSession } : {}),
   };
 }

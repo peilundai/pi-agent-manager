@@ -1,4 +1,4 @@
-import type { SessionStatus, SessionSummary, TerminalTab, ViewSnapshot } from "./model";
+import type { SessionStatus, SessionSummary, SetupErrorState, TerminalTab, ViewSnapshot } from "./model";
 
 const MAX_ID_LENGTH = 200;
 const MAX_INPUT_LENGTH = 1_048_576;
@@ -23,6 +23,7 @@ export type WebviewToHostMessage =
   | { version: 1; type: "session.delete"; sessionId: string }
   | { version: 1; type: "session.rename"; sessionId: string }
   | { version: 1; type: "history.refresh" }
+  | { version: 1; type: "setup.action"; action: "openFolder" | "chooseExecutable" | "openSettings" }
   | { version: 1; type: "link.open"; kind: "file" | "url"; target: string }
   | { version: 1; type: "terminal.input"; tabId: string; data: string }
   | { version: 1; type: "terminal.resize"; tabId: string; cols: number; rows: number }
@@ -116,6 +117,15 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
+function isSetupError(value: unknown): value is SetupErrorState | undefined {
+  return value === undefined || (
+    isRecord(value) && (
+      value.kind === "workspace" ||
+      (value.kind === "executable" && isBoundedString(value.message, MAX_NOTICE_LENGTH))
+    )
+  );
+}
+
 function isViewSnapshot(value: unknown): value is ViewSnapshot {
   return (
     isRecord(value) &&
@@ -128,7 +138,8 @@ function isViewSnapshot(value: unknown): value is ViewSnapshot {
     isOptionalId(value.activeTabId) &&
     typeof value.paneVisible === "boolean" &&
     isIntegerBetween(value.paneWidth, MIN_PANE_WIDTH, MAX_PANE_WIDTH) &&
-    isStringArray(value.collapsedGroups)
+    isStringArray(value.collapsedGroups) &&
+    isSetupError(value.setupError)
   );
 }
 
@@ -140,6 +151,8 @@ export function isWebviewMessage(value: unknown): value is WebviewToHostMessage 
     case "session.new":
     case "history.refresh":
       return true;
+    case "setup.action":
+      return value.action === "openFolder" || value.action === "chooseExecutable" || value.action === "openSettings";
     case "session.focus":
     case "session.detach":
     case "session.stop":

@@ -17,9 +17,11 @@ Run real [Pi coding agent](https://github.com/badlogic/pi-mono) terminal session
 
 - VS Code 1.106 or newer.
 - Pi installed and available as `pi` on VS Code's process path.
-- The 0.1.0 VSIX produced by this repository targets Apple silicon macOS (`darwin-arm64`) because it contains a native `node-pty` runtime.
+- A VSIX whose target matches the machine running the VS Code extension host.
 
-Other platforms require separately built native VSIX packages containing the matching `node-pty` runtime. Do not install the Darwin ARM64 artifact on Intel macOS, Linux, Windows, or a remotely hosted extension workspace running on another platform.
+Pi Agent Manager is a workspace extension and contains a native `node-pty` runtime. The relevant platform is therefore the extension host, not necessarily the machine displaying the VS Code UI. A local window uses the local machine; Remote SSH, containers, and similar workspaces need a package built for the remote extension host.
+
+Platform-specific packages are supported for macOS x64/arm64, Windows x64/arm64, and glibc Linux x64/arm64. Each package must be built and smoke-tested on its matching host; the project does not claim native cross-compilation. Alpine/musl packages are not yet verified.
 
 Verify Pi before starting VS Code:
 
@@ -84,7 +86,11 @@ npm run build
 npm run package
 ```
 
-Open this repository in VS Code and press `F5` to launch an Extension Development Host. The production bundles are written to `dist/`; packaging creates the target-scoped `pi-agent-manager-darwin-arm64-0.1.0.vsix`. Building for another platform requires its matching native `node-pty` files, `.vscodeignore` entries, and VSCE `--target` value.
+Open this repository in VS Code and press `F5` to launch an Extension Development Host. The production bundles are written to `dist/`.
+
+`npm run package` derives the current build host's VSCE target, includes only its matching native `node-pty` files, writes target metadata into `pi-agent-manager-0.1.0.vsix`, extracts the result, and runs a native PTY smoke test. Run it separately on every supported host needed for distribution. Marketplace publishing should upload each resulting VSIX as its platform-specific variant; preserve target-scoped copies outside the repository if collecting artifacts from multiple build hosts.
+
+This workflow deliberately refuses unsupported architectures and Alpine/musl instead of producing a misleading package. It is not a cross-compiler: native packages are valid only when built and verified on their matching extension host platform.
 
 ## Known follow-up features
 

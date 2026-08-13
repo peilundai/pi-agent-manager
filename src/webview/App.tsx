@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { SessionSummary, TerminalTab } from "../shared/model";
+import type { SessionSummary, SetupErrorState, TerminalTab } from "../shared/model";
 import { isHostMessage } from "../shared/protocol";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ManagerHeader } from "./components/ManagerHeader";
@@ -36,6 +36,36 @@ function liveTabFor(session: SessionSummary, tabs: readonly TerminalTab[]): Term
     (tab) =>
       tab.attached &&
       (tab.sessionId === session.id || tab.sessionPath === session.path),
+  );
+}
+
+function SetupErrorView({ error, transport }: { error: SetupErrorState; transport: WebviewTransport }) {
+  if (error.kind === "workspace") {
+    return (
+      <div className="terminal-empty setup-error">
+        <span className="empty-mark codicon codicon-folder-opened" aria-hidden="true" />
+        <h1>Open a workspace folder</h1>
+        <p>Pi Agent Manager needs a workspace folder for sessions, history, and process working directories.</p>
+        <button className="button primary" type="button" onClick={() => transport.post({ version: 1, type: "setup.action", action: "openFolder" })}>
+          <span className="codicon codicon-folder-opened" aria-hidden="true" /> Open Folder
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="terminal-empty setup-error">
+      <span className="empty-mark codicon codicon-warning" aria-hidden="true" />
+      <h1>Set up Pi executable</h1>
+      <p>{error.message}</p>
+      <div className="setup-error-actions">
+        <button className="button primary" type="button" onClick={() => transport.post({ version: 1, type: "setup.action", action: "chooseExecutable" })}>
+          Choose Executable
+        </button>
+        <button className="button secondary" type="button" onClick={() => transport.post({ version: 1, type: "setup.action", action: "openSettings" })}>
+          Open Settings
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -198,7 +228,7 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
     <div className="app-shell">
       <div className="app-content" inert={deleteSession ? true : undefined} aria-hidden={deleteSession ? true : undefined}>
       <ManagerHeader
-        title={activeTab?.title ?? "New Agent"}
+        title={state.snapshot.setupError ? "Setup required" : activeTab?.title ?? "New Agent"}
         paneVisible={paneVisible}
         onNew={() => transport.post({ version: 1, type: "session.new" })}
         onRefresh={() => transport.post({ version: 1, type: "history.refresh" })}
@@ -216,7 +246,9 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
         style={{ "--session-pane-width": `${paneVisible ? state.snapshot.paneWidth : 0}px` } as CSSProperties}
       >
         <main className="terminal-area" aria-label="Pi terminal">
-          {state.snapshot.tabs.some((tab) => tab.attached) ? (
+          {state.snapshot.setupError ? (
+            <SetupErrorView error={state.snapshot.setupError} transport={transport} />
+          ) : state.snapshot.tabs.some((tab) => tab.attached) ? (
             <TerminalWorkspace
               tabs={state.snapshot.tabs}
               {...(state.snapshot.activeTabId ? { activeTabId: state.snapshot.activeTabId } : {})}

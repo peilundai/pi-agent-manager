@@ -48,6 +48,9 @@ class FakeController {
   disposed = false;
   failInput = false;
   bridgeStarted = () => true;
+  onChanged: ((tab: TerminalTab) => void) | undefined;
+  delayStop = false;
+  releaseStop: (() => void) | undefined;
 
   async start(start: { cwd: string; sessionId?: string; sessionPath?: string }): Promise<TerminalTab> {
     if (!this.bridgeStarted()) throw new Error("bridge must start first");
@@ -68,6 +71,7 @@ class FakeController {
       attached: this.startAttached,
     };
     this.records.push(tab);
+    this.onChanged?.({ ...tab });
     return { ...tab };
   }
 
@@ -84,6 +88,7 @@ class FakeController {
   }
   async stop(tabId: string): Promise<void> {
     this.stopped.push(tabId);
+    if (this.delayStop) await new Promise<void>((resolve) => { this.releaseStop = resolve; });
     const tab = this.records.find((item) => item.tabId === tabId);
     if (tab) { tab.attached = false; tab.status = "stopped"; }
   }
@@ -101,13 +106,19 @@ function providerHarness(options: {
   closeBehavior?: "detach" | "stop";
   confirmDelete?: boolean;
   requestedName?: string;
+  bridgeError?: Error;
+  emitSynchronousStartChanges?: boolean;
 } = {}) {
   const order: string[] = [];
   const messages: unknown[] = [];
   const bridge = {
     started: false,
     disposed: false,
-    async start() { order.push("bridge.start"); this.started = true; },
+    async start() {
+      order.push("bridge.start");
+      if (options.bridgeError) throw options.bridgeError;
+      this.started = true;
+    },
     async dispose() { this.disposed = true; },
   };
   const controller = new FakeController();
@@ -138,6 +149,8 @@ function providerHarness(options: {
     reveals: 0,
     confirmed: options.confirmDelete ?? false,
     requestedName: options.requestedName,
+    warnings: [] as string[],
+    setupActions: [] as string[],
     urls: [] as string[],
     files: [] as Array<{ path: string; line?: number; column?: number }>,
     captureEditorSelection() { order.push("selection.capture"); return this.selection; },
@@ -146,6 +159,10 @@ function providerHarness(options: {
     async requestName() { return this.requestedName; },
     async openUrl(target: string) { this.urls.push(target); },
     async openFile(target: { path: string; line?: number; column?: number }) { this.files.push(target); return true; },
+    warn(message: string) { this.warnings.push(message); },
+    async openFolder() { this.setupActions.push("openFolder"); },
+    async chooseExecutable() { this.setupActions.push("chooseExecutable"); return true; },
+    async openSettings() { this.setupActions.push("openSettings"); },
     closeBehavior: () => options.closeBehavior ?? "detach" as const,
   };
   const state = {
@@ -189,6 +206,9 @@ function providerHarness(options: {
     host,
     startupTimeoutMs: 50,
   });
+  if (options.emitSynchronousStartChanges) {
+    controller.onChanged = (tab) => provider.handleControllerEvent({ type: "changed", tab });
+  }
   provider.resolveWebviewView(view);
   const send = async (message: unknown): Promise<void> => {
     await receive?.(message);
@@ -237,6 +257,39 @@ describe("PiViewProvider startup", () => {
     await vi.advanceTimersByTimeAsync(149);
     expect(harness.repository.listCalls).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
+    expect(harness.repository.listCalls).toBe(2);
+  });
+
+  it("continues without the status bridge and warns exactly once", async () => {
+    const harness = providerHarness({ bridgeError: new Error("address already in use") });
+
+    await expect(harness.provider.start()).resolves.toBeUndefined();
+    await expect(harness.provider.start()).resolves.toBeUndefined();
+
+    expect(harness.repository.listCalls).toBe(1);
+    expect(harness.host.warnings).toEqual([
+      expect.stringMatching(/live status.*unavailable|status bridge.*unavailable/i),
+    ]);
+  });
+
+  it("refreshes history only when a session genuinely transitions to waiting", async () => {
+    vi.useFakeTimers();
+    const harness = providerHarness();
+    await harness.provider.start();
+    const starting: TerminalTab = { tabId: "tab-1", title: "Agent", status: "starting", attached: true };
+    harness.controller.records = [starting];
+    harness.provider.handleControllerEvent({ type: "changed", tab: { ...starting } });
+    const waiting = { ...starting, status: "waiting" as const };
+    harness.controller.records = [waiting];
+    harness.provider.handleControllerEvent({ type: "changed", tab: { ...waiting } });
+
+    await vi.advanceTimersByTimeAsync(150);
+    expect(harness.repository.listCalls).toBe(2);
+
+    const metadataOnly = { ...waiting, title: "Renamed while waiting" };
+    harness.controller.records = [metadataOnly];
+    harness.provider.handleControllerEvent({ type: "changed", tab: metadataOnly });
+    await vi.advanceTimersByTimeAsync(150);
     expect(harness.repository.listCalls).toBe(2);
   });
 });
@@ -514,6 +567,50 @@ describe("PiViewProvider messages", () => {
     expect(accepted.repository.deleted).toEqual([sessionFixture]);
   });
 
+  it("stops a detached live Pi and waits for exit confirmation before deleting files", async () => {
+    const harness = providerHarness({ sessions: [sessionFixture], confirmDelete: true });
+    await harness.provider.start();
+    harness.controller.records = [{
+      tabId: "tab-detached",
+      sessionId: sessionFixture.id,
+      sessionPath: sessionFixture.path,
+      title: sessionFixture.title,
+      status: "working",
+      attached: false,
+    }];
+    harness.controller.delayStop = true;
+
+    const deleting = harness.webview.send({ version: 1, type: "session.delete", sessionId: sessionFixture.id });
+    await vi.waitFor(() => expect(harness.controller.stopped).toEqual(["tab-detached"]));
+    expect(harness.repository.deleted).toEqual([]);
+
+    harness.controller.releaseStop?.();
+    await deleting;
+    expect(harness.repository.deleted).toEqual([sessionFixture]);
+  });
+
+  it("models an executable setup error and routes its recovery actions", async () => {
+    const harness = providerHarness();
+    await harness.provider.start();
+
+    harness.provider.handleControllerEvent({
+      type: "error",
+      tabId: "tab-missing",
+      message: "Pi executable was not found.",
+      setupError: "executable",
+    });
+    await vi.waitFor(() => expect(harness.webview.messages).toContainEqual(expect.objectContaining({
+      type: "state.replace",
+      snapshot: expect.objectContaining({
+        setupError: { kind: "executable", message: "Pi executable was not found." },
+      }),
+    })));
+
+    await harness.webview.send({ version: 1, type: "setup.action", action: "chooseExecutable" });
+    await harness.webview.send({ version: 1, type: "setup.action", action: "openSettings" });
+    expect(harness.host.setupActions).toEqual(["chooseExecutable", "openSettings"]);
+  });
+
   it("validates links and reports controller errors without rejecting message handling", async () => {
     const harness = providerHarness();
     await harness.provider.start();
@@ -532,18 +629,36 @@ describe("PiViewProvider messages", () => {
 });
 
 describe("PiViewProvider persistence and selection", () => {
-  it("restores valid open sessions and persists view updates and attached transcripts", async () => {
+  it("restores valid open sessions, their active session, and persisted view updates", async () => {
+    const secondSession: SessionSummary = {
+      ...sessionFixture,
+      id: "session-2",
+      path: "/repo/.pi/session-2.jsonl",
+      title: "Second agent",
+      updatedAt: 300,
+    };
     const harness = providerHarness({
-      sessions: [sessionFixture],
+      sessions: [sessionFixture, secondSession],
+      emitSynchronousStartChanges: true,
       persisted: {
         paneVisible: false,
         paneWidth: 320,
         collapsedGroups: ["archived"],
-        openSessions: [{ id: sessionFixture.id, path: sessionFixture.path }],
+        openSessions: [
+          { id: sessionFixture.id, path: sessionFixture.path },
+          { id: secondSession.id, path: secondSession.path },
+        ],
+        activeSession: { id: secondSession.id, path: secondSession.path },
       },
     });
     await harness.provider.start();
-    expect(harness.controller.started).toEqual([{ cwd: "/repo", sessionId: sessionFixture.id, sessionPath: sessionFixture.path }]);
+    expect(harness.controller.started).toEqual([
+      { cwd: "/repo", sessionId: sessionFixture.id, sessionPath: sessionFixture.path },
+      { cwd: "/repo", sessionId: secondSession.id, sessionPath: secondSession.path },
+    ]);
+    const restored = [...harness.webview.messages].reverse().find((message) =>
+      (message as { type?: string }).type === "state.replace") as { snapshot: { activeTabId?: string } };
+    expect(restored.snapshot.activeTabId).toBe("tab-2");
     await harness.webview.send({
       version: 1, type: "view.update", paneVisible: true, paneWidth: 280, collapsedGroups: ["today"],
     });
@@ -551,7 +666,11 @@ describe("PiViewProvider persistence and selection", () => {
       paneVisible: true,
       paneWidth: 280,
       collapsedGroups: ["today"],
-      openSessions: [{ id: sessionFixture.id, path: sessionFixture.path }],
+      openSessions: [
+        { id: sessionFixture.id, path: sessionFixture.path },
+        { id: secondSession.id, path: secondSession.path },
+      ],
+      activeSession: { id: secondSession.id, path: secondSession.path },
     });
   });
 
@@ -564,6 +683,27 @@ describe("PiViewProvider persistence and selection", () => {
     expect(harness.controller.inputs[0]?.data.endsWith("\u001b[201~")).toBe(true);
     expect(harness.controller.inputs[0]?.data).not.toContain("\r");
     expect(harness.webview.messages).toContainEqual(expect.objectContaining({ type: "terminal.focus" }));
+  });
+
+  it("pastes selection into the active attached live tab without starting another Pi", async () => {
+    const harness = providerHarness({ activeSelection: selectionFixture });
+    await harness.provider.start();
+    const active: TerminalTab = {
+      tabId: "tab-active",
+      sessionId: "active-session",
+      sessionPath: "/repo/.pi/active-session.jsonl",
+      title: "Active agent",
+      status: "waiting",
+      attached: true,
+    };
+    harness.controller.records = [active];
+    harness.provider.handleControllerEvent({ type: "changed", tab: active });
+
+    await harness.provider.sendSelection();
+
+    expect(harness.controller.started).toEqual([]);
+    expect(harness.controller.inputs).toEqual([expect.objectContaining({ tabId: "tab-active" })]);
+    expect(harness.webview.messages).toContainEqual({ version: 1, type: "terminal.focus", tabId: "tab-active" });
   });
 
   it("waits for waiting status and leaves the manager open with a timeout notice", async () => {
@@ -654,12 +794,27 @@ describe("extension activation", () => {
     });
   });
 
-  it("prevents activation from starting a provider without an open workspace folder", async () => {
+  it("activates an actionable setup provider without an open workspace folder", async () => {
+    const registered = new Map<string, () => unknown>();
     const api = {
       window: { registerWebviewViewProvider: () => ({ dispose() {} }) },
-      commands: { registerCommand: () => ({ dispose() {} }) },
+      commands: {
+        registerCommand: (id: string, handler: () => unknown) => {
+          registered.set(id, handler);
+          return { dispose() {} };
+        },
+      },
     };
     let providerCreated = false;
+    let setupError: unknown;
+    const setupProvider = {
+      starts: 0,
+      async start() { this.starts += 1; },
+      async open() {},
+      async newSession() {},
+      async sendSelection() {},
+      async shutdown() {},
+    };
     await expect(activate(
       { subscriptions: [] } as never,
       {
@@ -670,9 +825,16 @@ describe("extension activation", () => {
           providerCreated = true;
           throw new Error("provider must not be created");
         },
+        setupProviderFactory: (error) => {
+          setupError = error;
+          return setupProvider;
+        },
       },
-    )).rejects.toThrow(/open a workspace folder/i);
+    )).resolves.toBeUndefined();
     expect(providerCreated).toBe(false);
+    expect(setupError).toEqual({ kind: "workspace" });
+    expect(setupProvider.starts).toBe(1);
+    expect([...registered.keys()]).toEqual(["piAgent.open", "piAgent.newSession", "piAgent.sendSelection"]);
   });
 
   it("activates one provider scoped to the active folder in a multi-root workspace", async () => {

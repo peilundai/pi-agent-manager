@@ -14,7 +14,7 @@ describe("buildPiInvocation", () => {
     });
   });
 
-  it("wraps a Windows npm cmd shim without shell interpolation", () => {
+  it("wraps a Windows npm cmd shim through quoted environment indirection", () => {
     expect(
       buildPiInvocation(
         "C:\\Users\\me\\AppData\\Roaming\\npm\\pi.cmd",
@@ -26,15 +26,36 @@ describe("buildPiInvocation", () => {
       args: [
         "/d",
         "/s",
+        "/v:off",
         "/c",
-        "\"\"C:\\Users\\me\\AppData\\Roaming\\npm\\pi.cmd\" --session \"C:\\work\\a b.jsonl\"\"",
+        "\"\"%PI_AGENT_MANAGER_SHIM_COMMAND%\" \"%PI_AGENT_MANAGER_SHIM_ARG_0%\" \"%PI_AGENT_MANAGER_SHIM_ARG_1%\"\"",
       ],
+      env: {
+        PI_AGENT_MANAGER_SHIM_COMMAND: "C:\\Users\\me\\AppData\\Roaming\\npm\\pi.cmd",
+        PI_AGENT_MANAGER_SHIM_ARG_0: "--session",
+        PI_AGENT_MANAGER_SHIM_ARG_1: "C:\\work\\a b.jsonl",
+      },
     });
   });
 
-  it("rejects cmd metacharacters before constructing a shim command", () => {
-    expect(() => buildPiInvocation("C:\\npm\\pi.cmd", ["--session", "C:\\work\\x&whoami.jsonl"], "win32"))
-      .toThrow(/unsafe/i);
+  it.each([
+    ["ampersand", "C:\\Pi & tools\\pi.cmd", "C:\\work\\agent & notes.jsonl"],
+    ["caret", "C:\\Pi^tools\\pi.cmd", "C:\\work\\agent^notes.jsonl"],
+    ["percent", "C:\\Pi%tools%\\pi.cmd", "C:\\work\\agent%PATH%.jsonl"],
+    ["spaces", "C:\\Program Files\\Pi\\pi.cmd", "C:\\work files\\agent notes.jsonl"],
+    ["Unicode", "C:\\工具\\π\\pi.cmd", "C:\\工作\\代理.jsonl"],
+  ])("preserves %s in legal Windows paths without embedding values in cmd source", (_label, command, sessionPath) => {
+    const invocation = buildPiInvocation(command, ["--session", sessionPath], "win32");
+
+    expect(invocation.env).toEqual({
+      PI_AGENT_MANAGER_SHIM_COMMAND: command,
+      PI_AGENT_MANAGER_SHIM_ARG_0: "--session",
+      PI_AGENT_MANAGER_SHIM_ARG_1: sessionPath,
+    });
+    const commandSource = invocation.args.at(-1) ?? "";
+    expect(commandSource).not.toContain(command);
+    expect(commandSource).not.toContain(sessionPath);
+    expect(commandSource).toContain("%PI_AGENT_MANAGER_SHIM_COMMAND%");
   });
 });
 

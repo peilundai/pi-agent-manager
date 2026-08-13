@@ -27,6 +27,13 @@ describe("isWebviewMessage", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts only the bounded setup recovery actions", () => {
+    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "openFolder" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "chooseExecutable" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "openSettings" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "runShell" })).toBe(false);
+  });
 });
 
 describe("isHostMessage", () => {
@@ -57,5 +64,30 @@ describe("isHostMessage", () => {
         snapshot: { sessions: "not-an-array" },
       }),
     ).toBe(false);
+  });
+
+  it("accepts actionable workspace and executable setup errors in snapshots", () => {
+    const base = {
+      sessions: [],
+      tabs: [],
+      paneVisible: true,
+      paneWidth: 248,
+      collapsedGroups: [],
+    };
+    expect(isHostMessage({
+      version: 1,
+      type: "state.replace",
+      snapshot: { ...base, setupError: { kind: "workspace" } },
+    })).toBe(true);
+    expect(isHostMessage({
+      version: 1,
+      type: "state.replace",
+      snapshot: { ...base, setupError: { kind: "executable", message: "Pi was not found." } },
+    })).toBe(true);
+    expect(isHostMessage({
+      version: 1,
+      type: "state.replace",
+      snapshot: { ...base, setupError: { kind: "executable", message: "x".repeat(8_193) } },
+    })).toBe(false);
   });
 });

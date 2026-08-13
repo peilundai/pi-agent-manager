@@ -5,7 +5,8 @@ import { SessionController, type SessionControllerEvent } from "./pi/session-con
 import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
 import { PiStatusBridge } from "./pi/status-bridge";
 import type { StatusReport } from "./pi/status-report";
-import { PiViewProvider, type PiViewHost } from "./view/pi-view-provider";
+import type { SetupErrorState } from "./shared/model";
+import { PiSetupViewProvider, PiViewProvider, type PiViewHost } from "./view/pi-view-provider";
 import type { PersistedViewState } from "./view/view-state";
 
 const VIEW_STATE_KEY = "piAgent.viewState";
@@ -30,6 +31,7 @@ export interface ActivationOverrides {
   workspace?: Pick<typeof vscode.workspace, "workspaceFolders" | "getWorkspaceFolder">;
   activeEditor?: Pick<vscode.TextEditor, "document"> | null;
   providerFactory?(workspaceFolder: vscode.WorkspaceFolder): ExtensionProvider;
+  setupProviderFactory?(error: SetupErrorState): ExtensionProvider;
 }
 
 let activeProvider: ExtensionProvider | undefined;
@@ -196,7 +198,71 @@ function createHost(workspaceFolder: vscode.WorkspaceFolder): PiViewHost {
     closeBehavior() {
       return vscode.workspace.getConfiguration("piAgent").get<"detach" | "stop">("closeBehavior", "detach");
     },
+    warn(message) {
+      void vscode.window.showWarningMessage(message);
+    },
+    async openFolder() {
+      await vscode.commands.executeCommand("workbench.action.files.openFolder");
+    },
+    async chooseExecutable() {
+      const selected = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        openLabel: "Choose Pi Executable",
+      });
+      const executable = selected?.[0];
+      if (!executable) return false;
+      await vscode.workspace.getConfiguration("piAgent").update(
+        "command",
+        executable.fsPath,
+        vscode.ConfigurationTarget.Workspace,
+      );
+      return true;
+    },
+    async openSettings() {
+      await vscode.commands.executeCommand("workbench.action.openSettings", "piAgent.command");
+    },
   };
+}
+
+function createSetupProvider(
+  context: vscode.ExtensionContext,
+  setupError: SetupErrorState,
+): PiSetupViewProvider {
+  const distUri = vscode.Uri.joinPath(context.extensionUri, "dist");
+  return new PiSetupViewProvider({
+    distUri,
+    resourceUri: (path) => vscode.Uri.joinPath(distUri, path),
+    setupError,
+    host: {
+      async revealManager() {
+        await vscode.commands.executeCommand("workbench.view.extension.piAgent");
+      },
+      async openFolder() {
+        await vscode.commands.executeCommand("workbench.action.files.openFolder");
+      },
+      async chooseExecutable() {
+        const selected = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          openLabel: "Choose Pi Executable",
+        });
+        const executable = selected?.[0];
+        if (!executable) return false;
+        await vscode.workspace.getConfiguration("piAgent").update(
+          "command",
+          executable.fsPath,
+          vscode.ConfigurationTarget.Global,
+        );
+        return true;
+      },
+      async openSettings() {
+        await vscode.commands.executeCommand("workbench.action.openSettings", "piAgent.command");
+      },
+    },
+  });
 }
 
 function createProvider(
@@ -247,13 +313,12 @@ export async function activate(
       : overrides.activeEditor ?? undefined;
     const workspaceFolder = resolveWorkspaceFolder(workspace, activeEditor);
     if (!workspaceFolder) {
-      throw new Error("Open a workspace folder for Pi Agent Manager. In a multi-root workspace, focus a file in the folder to manage and try again.");
+      const setupError = { kind: "workspace" } as const;
+      return overrides.setupProviderFactory?.(setupError) ?? createSetupProvider(context, setupError);
     }
     return overrides.providerFactory?.(workspaceFolder) ?? createProvider(context, workspaceFolder);
   })();
   activeProvider = provider;
-  await provider.start();
-
   context.subscriptions.push(
     api.window.registerWebviewViewProvider(
       "piAgent.view",
@@ -264,6 +329,7 @@ export async function activate(
     api.commands.registerCommand("piAgent.newSession", () => provider.newSession()),
     api.commands.registerCommand("piAgent.sendSelection", () => provider.sendSelection()),
   );
+  await provider.start();
 }
 
 export async function deactivate(): Promise<void> {

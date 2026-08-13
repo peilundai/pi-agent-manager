@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { SessionSummary, TerminalTab, ViewSnapshot } from "../shared/model";
+import type { SessionSummary, SetupErrorState, TerminalTab, ViewSnapshot } from "../shared/model";
 import type { SessionControllerEvent } from "../pi/session-controller";
 import type { StatusReport } from "../pi/status-report";
 import { isWebviewMessage, type HostToWebviewMessage, type WebviewToHostMessage } from "../shared/protocol";
@@ -58,6 +58,10 @@ export interface PiViewHost {
   openUrl(target: string): Promise<void>;
   openFile(target: { path: string; line?: number; column?: number }): Promise<boolean>;
   closeBehavior(): "detach" | "stop";
+  warn(message: string): void;
+  openFolder(): Promise<void>;
+  chooseExecutable(): Promise<boolean>;
+  openSettings(): Promise<void>;
 }
 
 interface WebviewLike {
@@ -104,6 +108,39 @@ function attachedOpenSessions(tabs: readonly TerminalTab[]): PersistedViewState[
   });
 }
 
+function activeOpenSession(
+  tabs: readonly TerminalTab[],
+  activeTabId: string | undefined,
+): PersistedViewState["activeSession"] {
+  const active = tabs.find((tab) => tab.tabId === activeTabId && tab.attached);
+  return active?.sessionId && active.sessionPath
+    ? { id: active.sessionId, path: active.sessionPath }
+    : undefined;
+}
+
+function managerWebviewHtml(
+  webview: WebviewLike,
+  resourceUri: (path: string) => UriLike,
+): string {
+  const nonce = randomBytes(18).toString("base64url");
+  const script = webview.asWebviewUri(resourceUri("webview.js")).toString();
+  const style = webview.asWebviewUri(resourceUri("webview.css")).toString();
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; font-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="${style}" />
+    <title>Pi Agent Manager</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script nonce="${nonce}" src="${script}"></script>
+  </body>
+</html>`;
+}
+
 export class PiViewProvider {
   private persisted: PersistedViewState;
   private view: WebviewViewLike | undefined;
@@ -119,6 +156,9 @@ export class PiViewProvider {
   private queuedOutput: Array<{ tabId: string; data: string }> = [];
   private readonly statusWaiters = new Map<string, StatusWaiter>();
   private persistenceTail: Promise<void> = Promise.resolve();
+  private readonly lastStatuses = new Map<string, TerminalTab["status"]>();
+  private setupError: SetupErrorState | undefined;
+  private bridgeWarningShown = false;
   private stopped = false;
 
   constructor(private readonly options: PiViewProviderOptions) {
@@ -156,6 +196,7 @@ export class PiViewProvider {
     this.view?.show?.(true);
     await this.start();
     const tab = await this.options.controller.start({ cwd: this.options.cwd });
+    if (tab.status !== "failed") this.setupError = undefined;
     if (this.isFocusable(tab)) this.activeTabId = tab.tabId;
     await this.persistAndPost();
     const current = this.currentTab(tab.tabId);
@@ -173,7 +214,11 @@ export class PiViewProvider {
     await this.options.host.revealManager();
     this.view?.show?.(true);
     await this.start();
-    const tab = await this.options.controller.start({ cwd: this.options.cwd });
+    const tabs = this.options.controller.snapshot();
+    const active = tabs.find((candidate) => candidate.tabId === this.activeTabId && this.isFocusable(candidate))
+      ?? tabs.find((candidate) => this.isFocusable(candidate));
+    const tab = active ?? await this.options.controller.start({ cwd: this.options.cwd });
+    if (tab.status !== "failed") this.setupError = undefined;
     if (this.isFocusable(tab)) this.activeTabId = tab.tabId;
     await this.persistAndPost();
     const waiting = tab.status === "waiting" || await this.waitForWaiting(tab.tabId);
@@ -202,11 +247,18 @@ export class PiViewProvider {
       return;
     }
     if (event.type === "error") {
+      if (event.setupError === "executable") {
+        this.setupError = { kind: "executable", message: event.message };
+        void this.postSnapshot();
+        return;
+      }
       void this.notice("error", event.message);
       void this.postSnapshot();
       return;
     }
     if (event.type === "changed") {
+      const previousStatus = this.lastStatuses.get(event.tab.tabId);
+      this.lastStatuses.set(event.tab.tabId, event.tab.status);
       if (event.tab.attached && (!this.activeTabId || event.tab.tabId === this.activeTabId)) {
         this.activeTabId = event.tab.tabId;
       }
@@ -216,10 +268,11 @@ export class PiViewProvider {
         this.statusWaiters.delete(event.tab.tabId);
         waiter.resolve(event.tab.status === "waiting");
       }
-      if (event.tab.status === "waiting") this.scheduleRefresh();
+      if (previousStatus !== "waiting" && event.tab.status === "waiting") this.scheduleRefresh();
       this.schedulePersistence();
       return;
     }
+    this.lastStatuses.delete(event.tabId);
     this.chooseActiveTab();
     this.scheduleRefresh();
     this.schedulePersistence();
@@ -250,7 +303,17 @@ export class PiViewProvider {
   }
 
   private async initialize(): Promise<void> {
-    await this.options.bridge.start();
+    const desiredActiveSession = this.persisted.activeSession
+      ? { ...this.persisted.activeSession }
+      : undefined;
+    try {
+      await this.options.bridge.start();
+    } catch (error) {
+      if (!this.bridgeWarningShown) {
+        this.bridgeWarningShown = true;
+        this.options.host.warn(`Pi live status is unavailable. Sessions will still run without it: ${errorMessage(error)}`);
+      }
+    }
     await this.refreshHistory(false);
     this.watcher = this.options.repository.watch(this.options.cwd, () => this.scheduleRefresh());
     for (const open of this.persisted.openSessions) {
@@ -261,7 +324,12 @@ export class PiViewProvider {
         sessionId: session.id,
         sessionPath: session.path,
       });
-      if (this.isFocusable(tab)) this.activeTabId ??= tab.tabId;
+      if (!this.isFocusable(tab)) continue;
+      if (
+        desiredActiveSession?.id === session.id &&
+        desiredActiveSession.path === session.path
+      ) this.activeTabId = tab.tabId;
+      else this.activeTabId ??= tab.tabId;
     }
     await this.persistAndPost();
   }
@@ -325,6 +393,14 @@ export class PiViewProvider {
       case "history.refresh":
         await this.refreshHistory();
         return;
+      case "setup.action":
+        if (message.action === "openFolder") await this.options.host.openFolder();
+        else if (message.action === "openSettings") await this.options.host.openSettings();
+        else if (await this.options.host.chooseExecutable()) {
+          this.setupError = undefined;
+          await this.postSnapshot();
+        }
+        return;
       case "link.open":
         await this.openLink(message.kind, message.target);
         return;
@@ -335,12 +411,17 @@ export class PiViewProvider {
         this.options.controller.resize(message.tabId, message.cols, message.rows);
         return;
       case "view.update":
-        this.persisted = {
-          paneVisible: message.paneVisible,
-          paneWidth: message.paneWidth,
-          collapsedGroups: [...message.collapsedGroups],
-          openSessions: attachedOpenSessions(this.options.controller.snapshot()),
-        };
+        {
+          const tabs = this.options.controller.snapshot();
+          const activeSession = activeOpenSession(tabs, this.activeTabId);
+          this.persisted = {
+            paneVisible: message.paneVisible,
+            paneWidth: message.paneWidth,
+            collapsedGroups: [...message.collapsedGroups],
+            openSessions: attachedOpenSessions(tabs),
+            ...(activeSession ? { activeSession } : {}),
+          };
+        }
         await this.persistAndPost();
         return;
     }
@@ -353,6 +434,7 @@ export class PiViewProvider {
       sessionId: session.id,
       sessionPath: session.path,
     });
+    if (tab.status !== "failed") this.setupError = undefined;
     if (this.isFocusable(tab)) this.activeTabId = tab.tabId;
     await this.persistAndPost();
     const current = this.currentTab(tab.tabId);
@@ -371,7 +453,7 @@ export class PiViewProvider {
   private async deleteSession(sessionId: string): Promise<void> {
     const session = this.requiredSession(sessionId);
     if (!(await this.options.host.confirmDelete(session))) return;
-    const live = this.liveTab(session);
+    const live = this.liveTab(session, false);
     if (live) await this.options.controller.stop(live.tabId);
     await this.options.repository.delete(session);
     this.chooseActiveTab(live?.tabId);
@@ -430,9 +512,9 @@ export class PiViewProvider {
     });
   }
 
-  private liveTab(session: SessionSummary): TerminalTab | undefined {
+  private liveTab(session: SessionSummary, attachedOnly = true): TerminalTab | undefined {
     return this.options.controller.snapshot().find((tab) =>
-      tab.attached && (tab.sessionId === session.id || tab.sessionPath === session.path));
+      (!attachedOnly || tab.attached) && (tab.sessionId === session.id || tab.sessionPath === session.path));
   }
 
   private currentTab(tabId: string): TerminalTab | undefined {
@@ -463,10 +545,13 @@ export class PiViewProvider {
   private async persistAndPost(): Promise<void> {
     const run = this.persistenceTail.then(async () => {
       this.persisted = {
-        ...this.persisted,
+        paneVisible: this.persisted.paneVisible,
+        paneWidth: this.persisted.paneWidth,
         collapsedGroups: [...this.persisted.collapsedGroups],
         openSessions: attachedOpenSessions(this.options.controller.snapshot()),
       };
+      const activeSession = activeOpenSession(this.options.controller.snapshot(), this.activeTabId);
+      if (activeSession) this.persisted.activeSession = activeSession;
       const persisted = {
         ...this.persisted,
         collapsedGroups: [...this.persisted.collapsedGroups],
@@ -503,6 +588,7 @@ export class PiViewProvider {
       paneVisible: this.persisted.paneVisible,
       paneWidth: this.persisted.paneWidth,
       collapsedGroups: [...this.persisted.collapsedGroups],
+      ...(this.setupError ? { setupError: this.setupError } : {}),
     };
   }
 
@@ -569,22 +655,82 @@ export class PiViewProvider {
   }
 
   private webviewHtml(webview: WebviewLike): string {
-    const nonce = randomBytes(18).toString("base64url");
-    const script = webview.asWebviewUri(this.options.resourceUri("webview.js")).toString();
-    const style = webview.asWebviewUri(this.options.resourceUri("webview.css")).toString();
-    return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; font-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="${style}" />
-    <title>Pi Agent Manager</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script nonce="${nonce}" src="${script}"></script>
-  </body>
-</html>`;
+    return managerWebviewHtml(webview, this.options.resourceUri);
+  }
+}
+
+export interface PiSetupViewProviderOptions {
+  distUri: UriLike;
+  resourceUri(path: string): UriLike;
+  setupError: SetupErrorState;
+  host: Pick<PiViewHost, "revealManager" | "openFolder" | "chooseExecutable" | "openSettings">;
+}
+
+export class PiSetupViewProvider {
+  private view: WebviewViewLike | undefined;
+  private receiver: Disposable | undefined;
+
+  constructor(private readonly options: PiSetupViewProviderOptions) {}
+
+  resolveWebviewView(view: WebviewViewLike): void {
+    this.receiver?.dispose();
+    this.view = view;
+    view.webview.options = { enableScripts: true, localResourceRoots: [this.options.distUri] };
+    view.webview.html = managerWebviewHtml(view.webview, this.options.resourceUri);
+    this.receiver = view.webview.onDidReceiveMessage((message) => this.receiveMessage(message));
+  }
+
+  start(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async open(): Promise<void> {
+    await this.options.host.revealManager();
+    this.view?.show?.(true);
+    await this.postSnapshot();
+  }
+
+  async newSession(): Promise<void> {
+    await this.recover();
+  }
+
+  async sendSelection(): Promise<void> {
+    await this.recover();
+  }
+
+  async shutdown(): Promise<void> {
+    this.receiver?.dispose();
+    this.receiver = undefined;
+    this.view = undefined;
+  }
+
+  private async recover(): Promise<void> {
+    if (this.options.setupError.kind === "workspace") await this.options.host.openFolder();
+    else await this.options.host.chooseExecutable();
+  }
+
+  private async receiveMessage(value: unknown): Promise<void> {
+    if (!isWebviewMessage(value)) return;
+    if (value.type === "ready") await this.postSnapshot();
+    else if (value.type === "setup.action") {
+      if (value.action === "openFolder") await this.options.host.openFolder();
+      else if (value.action === "chooseExecutable") await this.options.host.chooseExecutable();
+      else await this.options.host.openSettings();
+    }
+  }
+
+  private async postSnapshot(): Promise<void> {
+    await this.view?.webview.postMessage({
+      version: 1,
+      type: "state.replace",
+      snapshot: {
+        sessions: [],
+        tabs: [],
+        paneVisible: true,
+        paneWidth: 248,
+        collapsedGroups: [],
+        setupError: this.options.setupError,
+      },
+    } satisfies HostToWebviewMessage);
   }
 }

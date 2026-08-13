@@ -5,7 +5,9 @@ import { promisify } from "node:util";
 import { posix, win32 } from "node:path";
 
 const execFileAsync = promisify(execFile);
-const UNSAFE_CMD_CHARACTERS = /[&|<>^\r\n\0"]/;
+const INVALID_SHIM_ENV_VALUE = /[\r\n\0"]/;
+const SHIM_COMMAND_ENV = "PI_AGENT_MANAGER_SHIM_COMMAND";
+const SHIM_ARGUMENT_ENV_PREFIX = "PI_AGENT_MANAGER_SHIM_ARG_";
 
 export interface ResolvedPiCommand {
   path: string;
@@ -16,6 +18,7 @@ export interface ResolvedPiCommand {
 export interface PiInvocation {
   file: string;
   args: string[];
+  env?: Record<string, string>;
 }
 
 export interface ResolvePiCommandOptions {
@@ -147,13 +150,6 @@ export async function resolvePiCommand(
   throw new PiCommandNotFoundError(attempts);
 }
 
-function quoteCmdArgument(value: string): string {
-  if (UNSAFE_CMD_CHARACTERS.test(value)) {
-    throw new Error("Unsafe character in Windows command argument.");
-  }
-  return /[\s()]/.test(value) ? `"${value}"` : value;
-}
-
 export function buildPiInvocation(
   command: string,
   piArgs: readonly string[],
@@ -163,13 +159,23 @@ export function buildPiInvocation(
     return { file: command, args: [...piArgs] };
   }
 
-  if (UNSAFE_CMD_CHARACTERS.test(command)) {
-    throw new Error("Unsafe character in Windows command path.");
+  const values = [command, ...piArgs];
+  if (values.some((value) => INVALID_SHIM_ENV_VALUE.test(value))) {
+    throw new Error("Invalid character in Windows command path or argument.");
   }
-  const commandLine = [`"${command}"`, ...piArgs.map(quoteCmdArgument)].join(" ");
+  const variableNames = [
+    SHIM_COMMAND_ENV,
+    ...piArgs.map((_value, index) => `${SHIM_ARGUMENT_ENV_PREFIX}${index}`),
+  ];
+  // Keep legal path characters out of cmd.exe's source text. Quoted one-pass
+  // environment expansion with delayed expansion disabled treats &, ^, %, and
+  // Unicode as argument data instead of shell syntax.
+  const env = Object.fromEntries(variableNames.map((name, index) => [name, values[index] ?? ""]));
+  const commandLine = variableNames.map((name) => `"%${name}%"`).join(" ");
   return {
     file: process.env.ComSpec ?? "cmd.exe",
-    args: ["/d", "/s", "/c", `"${commandLine}"`],
+    args: ["/d", "/s", "/v:off", "/c", `"${commandLine}"`],
+    env,
   };
 }
 
