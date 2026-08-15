@@ -16,7 +16,7 @@ import {
   validateArchiveInventory,
   validateVsixManifest,
 } from "../scripts/package-target.mjs";
-import { verifyVsix } from "../scripts/verify-vsix.mjs";
+import { verifyRequiredFiles, verifyVsix } from "../scripts/verify-vsix.mjs";
 import { extractZipArchive, readZipArchive } from "../scripts/vsix-archive.mjs";
 
 const require = createRequire(import.meta.url);
@@ -246,6 +246,25 @@ describe("host-targeted packaging", () => {
     ).toThrow("does not target win32-arm64");
   });
 
+  it("requires the packaged Codicon font explicitly", () => {
+    const required = [
+      "extension/dist/extension.js",
+      "extension/dist/webview.js",
+      "extension/dist/webview.css",
+      "extension/dist/codicon.ttf",
+      "extension/dist/index.html",
+      "extension/dist/resources/pi-status.mjs",
+      "extension/media/pi.svg",
+      "extension/package.json",
+      "extension/readme.md",
+      "extension/changelog.md",
+      "extension/LICENSE.txt",
+    ];
+    expect(() => verifyRequiredFiles(required)).not.toThrow();
+    expect(() => verifyRequiredFiles(required.filter((path) => path !== "extension/dist/codicon.ttf")))
+      .toThrow("extension/dist/codicon.ttf");
+  });
+
   it("rejects matching target text outside the Identity TargetPlatform attribute", () => {
     const target = derivePackageTarget({ platform: "win32", arch: "arm64" });
     const decoy = `<?xml version="1.0"?>
@@ -287,6 +306,7 @@ describe("host-targeted packaging", () => {
         "extension/dist/extension.js",
         "extension/dist/webview.js",
         "extension/dist/webview.css",
+        "extension/dist/codicon.ttf",
         "extension/dist/index.html",
         "extension/dist/resources/pi-status.mjs",
         "extension/media/pi.svg",

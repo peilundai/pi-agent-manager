@@ -15,6 +15,7 @@ const requiredExtensionFiles = [
   "extension/dist/extension.js",
   "extension/dist/webview.js",
   "extension/dist/webview.css",
+  "extension/dist/codicon.ttf",
   "extension/dist/index.html",
   "extension/dist/resources/pi-status.mjs",
   "extension/media/pi.svg",
@@ -24,7 +25,7 @@ const requiredExtensionFiles = [
   "extension/LICENSE.txt",
 ];
 
-function verifyRequiredFiles(inventory) {
+export function verifyRequiredFiles(inventory) {
   const files = new Set(inventory);
   for (const path of requiredExtensionFiles) {
     if (!files.has(path)) throw new Error(`VSIX is missing required extension file: ${path}`);
