@@ -6,6 +6,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalTab } from "../../shared/model";
+import { fileLinksForBuffer } from "../file-links";
 import type { WebviewTransport } from "../vscode";
 
 export interface TerminalWorkspaceBinding {
@@ -39,32 +40,16 @@ function hasLinkModifier(event: MouseEvent): boolean {
   return event.metaKey || event.ctrlKey;
 }
 
-const FILE_LINK_PATTERN = /(?:^|\s)((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|[\\/])?[^\s"'`<>]+:\d+(?::\d+)?)/g;
-
 function fileLinkProvider(terminal: Terminal, onLink: (target: string) => void): ILinkProvider {
   return {
     provideLinks(bufferLineNumber, callback): void {
-      const line = terminal.buffer.active.getLine(bufferLineNumber - 1)?.translateToString();
-      if (!line) {
-        callback(undefined);
-        return;
-      }
-      const links: ILink[] = [];
-      for (const match of line.matchAll(FILE_LINK_PATTERN)) {
-        const target = match[1];
-        if (!target || match.index === undefined) continue;
-        const start = match.index + match[0].length - target.length + 1;
-        links.push({
-          text: target,
-          range: {
-            start: { x: start, y: bufferLineNumber },
-            end: { x: start + target.length, y: bufferLineNumber },
-          },
+      const links: ILink[] = fileLinksForBuffer(terminal.buffer.active, bufferLineNumber)
+        .map((link) => ({
+          ...link,
           activate: (event) => {
-            if (hasLinkModifier(event)) onLink(target);
+            if (hasLinkModifier(event)) onLink(link.text);
           },
-        });
-      }
+        }));
       callback(links.length ? links : undefined);
     },
   };
