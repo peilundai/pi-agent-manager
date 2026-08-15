@@ -1,9 +1,24 @@
 const DEFAULT_MAX_LENGTH = 52;
 
 function removeEditorContext(prompt: string): string {
-  return prompt
-    .replace(/```[^\n]*\n[\s\S]*?```/g, " ")
+  return stripFencedBlocks(prompt)
     .replace(/^\s*From\s+`?[^`\n]+`?\s+lines?\s+\d+(?:-\d+)?:\s*/i, " ");
+}
+
+function stripFencedBlocks(prompt: string): string {
+  const output: string[] = [];
+  let fenceLength: number | undefined;
+  for (const line of prompt.split(/\r?\n/)) {
+    if (fenceLength === undefined) {
+      const opening = /^\s*(`{3,})[^`]*$/.exec(line);
+      if (opening) fenceLength = opening[1]?.length;
+      else output.push(line);
+      continue;
+    }
+    const closing = new RegExp("^\\s*`{" + fenceLength + ",}\\s*$");
+    if (closing.test(line)) fenceLength = undefined;
+  }
+  return output.join("\n");
 }
 
 function removeRequestFiller(value: string): string {

@@ -20,4 +20,17 @@ describe("generateSessionTitle", () => {
     expect(generateSessionTitle("```ts\nconst onlyCode = true;\n```"))
       .toBeUndefined();
   });
+
+  it("strips longer fences while preserving shorter fences inside the selection", () => {
+    expect(
+      generateSessionTitle(
+        "From `docs/example.md` lines 2-6:\n\n````markdown\n```ts\nconst nested = true;\n```\n````\n\nPlease explain the nested example.",
+      ),
+    ).toBe("Explain the nested example");
+  });
+
+  it("accepts a closing fence longer than its opening fence", () => {
+    expect(generateSessionTitle("```ts\nconst code = true;\n`````\n\nPlease review the code."))
+      .toBe("Review the code");
+  });
 });
