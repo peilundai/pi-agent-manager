@@ -16,7 +16,7 @@ interface SessionPaneProps {
   onNew(): void;
   onOpen(session: SessionSummary, liveTab?: TerminalTab): void;
   onToggleGroup(groupId: string): void;
-  onToggleMenu(sessionId?: string): void;
+  onToggleMenu(sessionId: string, returnFocus: HTMLElement): void;
   onRename(session: SessionSummary, liveTab?: TerminalTab): void;
   onStop(session: SessionSummary, liveTab?: TerminalTab): void;
   onArchive(session: SessionSummary, archived: boolean): void;
@@ -42,6 +42,7 @@ export function SessionPane({
   onArchive,
   onDelete,
 }: SessionPaneProps) {
+  const shortcut = newAgentShortcut();
   const filtered = filterSessions(sessions, query);
   const groups = groupSessions(filtered);
   const collapsed = new Set(collapsedGroups);
@@ -91,10 +92,15 @@ export function SessionPane({
             </button>
           ) : null}
         </label>
-        <button className="new-agent-row" type="button" onClick={onNew}>
+        <button
+          className="new-agent-row"
+          type="button"
+          aria-keyshortcuts={shortcut.aria}
+          onClick={onNew}
+        >
           <span className="codicon codicon-send" aria-hidden="true" />
           <span>New Agent</span>
-          <kbd>⌘N</kbd>
+          <kbd>{shortcut.label}</kbd>
         </button>
       </div>
 
@@ -126,7 +132,7 @@ export function SessionPane({
                           active={Boolean(liveTab && activeTabId && liveTab.tabId === activeTabId)}
                           menuOpen={openMenuSessionId === session.id}
                           onOpen={() => onOpen(session, liveTab)}
-                          onToggleMenu={() => onToggleMenu(openMenuSessionId === session.id ? undefined : session.id)}
+                          onToggleMenu={(returnFocus) => onToggleMenu(session.id, returnFocus)}
                           onRename={() => onRename(session, liveTab)}
                           onStop={() => onStop(session, liveTab)}
                           onArchive={(archived) => onArchive(session, archived)}
@@ -149,4 +155,13 @@ export function SessionPane({
       </div>
     </aside>
   );
+}
+
+export function newAgentShortcut(platform = globalThis.navigator?.platform ?? ""): {
+  label: "⌘N" | "Ctrl+N";
+  aria: "Meta+N" | "Control+N";
+} {
+  return /^(Mac|iPhone|iPad|iPod)/i.test(platform)
+    ? { label: "⌘N", aria: "Meta+N" }
+    : { label: "Ctrl+N", aria: "Control+N" };
 }

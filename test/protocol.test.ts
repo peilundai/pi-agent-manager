@@ -34,6 +34,12 @@ describe("isWebviewMessage", () => {
     expect(isWebviewMessage({ version: 1, type: "setup.action", action: "openSettings" })).toBe(true);
     expect(isWebviewMessage({ version: 1, type: "setup.action", action: "runShell" })).toBe(false);
   });
+
+  it("accepts only boolean webview focus state", () => {
+    expect(isWebviewMessage({ version: 1, type: "view.focus", focused: true })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "view.focus", focused: false })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "view.focus", focused: "yes" })).toBe(false);
+  });
 });
 
 describe("isHostMessage", () => {

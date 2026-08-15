@@ -223,6 +223,9 @@ function createHost(workspaceFolder: vscode.WorkspaceFolder): PiViewHost {
     async openSettings() {
       await vscode.commands.executeCommand("workbench.action.openSettings", "piAgent.command");
     },
+    async setWebviewFocused(focused) {
+      await vscode.commands.executeCommand("setContext", "piAgent.webviewFocused", focused);
+    },
   };
 }
 
@@ -260,6 +263,9 @@ function createSetupProvider(
       },
       async openSettings() {
         await vscode.commands.executeCommand("workbench.action.openSettings", "piAgent.command");
+      },
+      async setWebviewFocused(focused) {
+        await vscode.commands.executeCommand("setContext", "piAgent.webviewFocused", focused);
       },
     },
   });

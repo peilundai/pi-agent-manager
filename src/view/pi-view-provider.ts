@@ -62,6 +62,7 @@ export interface PiViewHost {
   openFolder(): Promise<void>;
   chooseExecutable(): Promise<boolean>;
   openSettings(): Promise<void>;
+  setWebviewFocused(focused: boolean): Promise<void>;
 }
 
 interface WebviewLike {
@@ -296,6 +297,7 @@ export class PiViewProvider {
       waiter.resolve(false);
     }
     this.statusWaiters.clear();
+    await this.options.host.setWebviewFocused(false);
     await this.persistenceTail;
     this.options.controller.dispose();
     await this.options.bridge.dispose();
@@ -392,6 +394,9 @@ export class PiViewProvider {
         return;
       case "history.refresh":
         await this.refreshHistory();
+        return;
+      case "view.focus":
+        await this.options.host.setWebviewFocused(message.focused);
         return;
       case "setup.action":
         if (message.action === "openFolder") await this.options.host.openFolder();
@@ -663,7 +668,7 @@ export interface PiSetupViewProviderOptions {
   distUri: UriLike;
   resourceUri(path: string): UriLike;
   setupError: SetupErrorState;
-  host: Pick<PiViewHost, "revealManager" | "openFolder" | "chooseExecutable" | "openSettings">;
+  host: Pick<PiViewHost, "revealManager" | "openFolder" | "chooseExecutable" | "openSettings" | "setWebviewFocused">;
 }
 
 export class PiSetupViewProvider {
@@ -701,6 +706,7 @@ export class PiSetupViewProvider {
   async shutdown(): Promise<void> {
     this.receiver?.dispose();
     this.receiver = undefined;
+    await this.options.host.setWebviewFocused(false);
     this.view = undefined;
   }
 
@@ -712,6 +718,7 @@ export class PiSetupViewProvider {
   private async receiveMessage(value: unknown): Promise<void> {
     if (!isWebviewMessage(value)) return;
     if (value.type === "ready") await this.postSnapshot();
+    else if (value.type === "view.focus") await this.options.host.setWebviewFocused(value.focused);
     else if (value.type === "setup.action") {
       if (value.action === "openFolder") await this.options.host.openFolder();
       else if (value.action === "chooseExecutable") await this.options.host.chooseExecutable();

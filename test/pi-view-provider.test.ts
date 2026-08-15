@@ -151,6 +151,7 @@ function providerHarness(options: {
     requestedName: options.requestedName,
     warnings: [] as string[],
     setupActions: [] as string[],
+    focusStates: [] as boolean[],
     urls: [] as string[],
     files: [] as Array<{ path: string; line?: number; column?: number }>,
     captureEditorSelection() { order.push("selection.capture"); return this.selection; },
@@ -163,6 +164,7 @@ function providerHarness(options: {
     async openFolder() { this.setupActions.push("openFolder"); },
     async chooseExecutable() { this.setupActions.push("chooseExecutable"); return true; },
     async openSettings() { this.setupActions.push("openSettings"); },
+    async setWebviewFocused(focused: boolean) { this.focusStates.push(focused); },
     closeBehavior: () => options.closeBehavior ?? "detach" as const,
   };
   const state = {
@@ -527,6 +529,7 @@ describe("PiViewProvider messages", () => {
     await harness.webview.send({ version: 1, type: "session.resume", sessionId: sessionFixture.id });
     await harness.webview.send({ version: 1, type: "session.archive", sessionId: sessionFixture.id, archived: true });
     await harness.webview.send({ version: 1, type: "history.refresh" });
+    await harness.webview.send({ version: 1, type: "view.focus", focused: true });
 
     expect(harness.controller.inputs).toContainEqual({ tabId: "tab-live", data: "hello" });
     expect(harness.controller.resizes).toContainEqual({ tabId: "tab-live", cols: 100, rows: 30 });
@@ -534,6 +537,7 @@ describe("PiViewProvider messages", () => {
     expect(harness.controller.started).toContainEqual({ cwd: "/repo" });
     expect(harness.controller.started).toContainEqual({ cwd: "/repo", sessionId: sessionFixture.id, sessionPath: sessionFixture.path });
     expect(harness.repository.archived).toEqual([{ sessionId: sessionFixture.id, archived: true }]);
+    expect(harness.host.focusStates).toEqual([true]);
     expect(harness.webview.messages).toContainEqual({ version: 1, type: "terminal.focus", tabId: "tab-live" });
     expect(harness.webview.messages.at(-1)).toMatchObject({ type: "state.replace" });
     expect(harness.controller.stopped).toEqual([]);
@@ -958,10 +962,16 @@ describe("extension activation", () => {
           { command: "piAgent.newSession", title: "Pi: New Agent", icon: "$(add)" },
           { command: "piAgent.sendSelection", title: "Pi: Send Selection", icon: "$(send)" },
         ],
-        keybindings: [{
-          command: "piAgent.sendSelection", key: "ctrl+l", mac: "cmd+l",
-          when: "editorTextFocus && resourceScheme =~ /^(file|untitled|vscode-remote)$/",
-        }],
+        keybindings: [
+          {
+            command: "piAgent.newSession", key: "ctrl+n", mac: "cmd+n",
+            when: "piAgent.webviewFocused",
+          },
+          {
+            command: "piAgent.sendSelection", key: "ctrl+l", mac: "cmd+l",
+            when: "editorTextFocus && resourceScheme =~ /^(file|untitled|vscode-remote)$/",
+          },
+        ],
         viewsContainers: { secondarySidebar: [{ id: "piAgent", title: "Pi", icon: "media/pi.svg" }] },
         views: { piAgent: [{ type: "webview", id: "piAgent.view", name: "Agents", icon: "media/pi.svg" }] },
         menus: { "editor/title": [{ command: "piAgent.open", group: "navigation@1" }] },

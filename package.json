@@ -39,6 +39,7 @@
       { "command": "piAgent.sendSelection", "title": "Pi: Send Selection", "icon": "$(send)" }
     ],
     "keybindings": [
+      { "command": "piAgent.newSession", "key": "ctrl+n", "mac": "cmd+n", "when": "piAgent.webviewFocused" },
       { "command": "piAgent.sendSelection", "key": "ctrl+l", "mac": "cmd+l", "when": "editorTextFocus && resourceScheme =~ /^(file|untitled|vscode-remote)$/" }
     ],
     "viewsContainers": {

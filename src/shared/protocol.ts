@@ -23,6 +23,7 @@ export type WebviewToHostMessage =
   | { version: 1; type: "session.delete"; sessionId: string }
   | { version: 1; type: "session.rename"; sessionId: string }
   | { version: 1; type: "history.refresh" }
+  | { version: 1; type: "view.focus"; focused: boolean }
   | { version: 1; type: "setup.action"; action: "openFolder" | "chooseExecutable" | "openSettings" }
   | { version: 1; type: "link.open"; kind: "file" | "url"; target: string }
   | { version: 1; type: "terminal.input"; tabId: string; data: string }
@@ -151,6 +152,8 @@ export function isWebviewMessage(value: unknown): value is WebviewToHostMessage 
     case "session.new":
     case "history.refresh":
       return true;
+    case "view.focus":
+      return typeof value.focused === "boolean";
     case "setup.action":
       return value.action === "openFolder" || value.action === "chooseExecutable" || value.action === "openSettings";
     case "session.focus":

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { SessionSummary, SetupErrorState, TerminalTab } from "../shared/model";
@@ -70,6 +71,13 @@ function SetupErrorView({ error, transport }: { error: SetupErrorState; transpor
 }
 
 const NARROW_VIEWPORT_QUERY = "(max-width: 680px)";
+const MINIMUM_PANE_WIDTH = 180;
+const MAXIMUM_PANE_WIDTH = 480;
+const PANE_KEYBOARD_STEP = 10;
+
+function clampPaneWidth(width: number): number {
+  return Math.min(MAXIMUM_PANE_WIDTH, Math.max(MINIMUM_PANE_WIDTH, Math.round(width)));
+}
 
 function isNarrowViewport(): boolean {
   return window.matchMedia?.(NARROW_VIEWPORT_QUERY).matches ?? window.innerWidth <= 680;
@@ -118,6 +126,11 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
     [state.confirmDeleteSessionId, state.snapshot.sessions],
   );
   const deleteReturnFocusRef = useRef<HTMLElement | null>(null);
+  const menuReturnFocusRef = useRef<{
+    sessionId: string;
+    element: HTMLElement | null;
+    archived?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const receive = (event: MessageEvent<unknown>): void => {
@@ -144,11 +157,39 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
   }, [state.narrowOverlayOpen, state.openMenuSessionId]);
 
   useEffect(() => {
+    const reportFocused = (): void => transport.post({ version: 1, type: "view.focus", focused: true });
+    const reportBlurred = (): void => transport.post({ version: 1, type: "view.focus", focused: false });
+    if (document.hasFocus()) reportFocused();
+    window.addEventListener("focus", reportFocused);
+    window.addEventListener("blur", reportBlurred);
+    return () => {
+      window.removeEventListener("focus", reportFocused);
+      window.removeEventListener("blur", reportBlurred);
+      reportBlurred();
+    };
+  }, [transport]);
+
+  useEffect(() => {
     if (!state.confirmDeleteSessionId && deleteReturnFocusRef.current) {
       deleteReturnFocusRef.current.focus();
       deleteReturnFocusRef.current = null;
     }
   }, [state.confirmDeleteSessionId]);
+
+  useEffect(() => {
+    const pending = menuReturnFocusRef.current;
+    if (!pending || state.openMenuSessionId || state.confirmDeleteSessionId) return;
+    if (pending.archived !== undefined) {
+      const session = state.snapshot.sessions.find((candidate) => candidate.id === pending.sessionId);
+      if (session?.archived !== pending.archived) return;
+    }
+
+    const original = pending.element?.isConnected ? pending.element : undefined;
+    const relocated = [...document.querySelectorAll<HTMLButtonElement>("[data-session-menu-trigger]")]
+      .find((button) => button.dataset.sessionId === pending.sessionId);
+    (original ?? relocated)?.focus();
+    menuReturnFocusRef.current = null;
+  }, [state.confirmDeleteSessionId, state.openMenuSessionId, state.snapshot.sessions]);
 
   const postViewState = (
     paneVisible: boolean,
@@ -188,17 +229,41 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
     const startX = event.clientX;
     const startWidth = state.snapshot.paneWidth;
     const move = (moveEvent: PointerEvent): void => {
-      const width = Math.min(480, Math.max(180, startWidth + startX - moveEvent.clientX));
+      const width = clampPaneWidth(startWidth + startX - moveEvent.clientX);
       dispatch({ type: "pane.width", width });
     };
     const finish = (upEvent: PointerEvent): void => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);
-      const width = Math.min(480, Math.max(180, startWidth + startX - upEvent.clientX));
-      postViewState(state.snapshot.paneVisible, Math.round(width), state.snapshot.collapsedGroups);
+      const width = clampPaneWidth(startWidth + startX - upEvent.clientX);
+      postViewState(state.snapshot.paneVisible, width, state.snapshot.collapsedGroups);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", finish);
+  };
+
+  const resizePaneWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    let width: number | undefined;
+    switch (event.key) {
+      case "ArrowLeft":
+        width = state.snapshot.paneWidth + PANE_KEYBOARD_STEP;
+        break;
+      case "ArrowRight":
+        width = state.snapshot.paneWidth - PANE_KEYBOARD_STEP;
+        break;
+      case "Home":
+        width = MINIMUM_PANE_WIDTH;
+        break;
+      case "End":
+        width = MAXIMUM_PANE_WIDTH;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const nextWidth = clampPaneWidth(width);
+    dispatch({ type: "pane.width", width: nextWidth });
+    postViewState(state.snapshot.paneVisible, nextWidth, state.snapshot.collapsedGroups);
   };
 
   const openSession = (session: SessionSummary, liveTab?: TerminalTab): void => {
@@ -207,7 +272,20 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
     else transport.post({ version: 1, type: "session.resume", sessionId: session.id });
   };
 
-  const closeMenu = (): void => dispatch({ type: "menu.toggled", sessionId: undefined });
+  const closeMenu = (archived?: boolean): void => {
+    if (menuReturnFocusRef.current && archived !== undefined) {
+      menuReturnFocusRef.current.archived = archived;
+    }
+    dispatch({ type: "menu.toggled", sessionId: undefined });
+  };
+
+  const toggleMenu = (sessionId: string, returnFocus: HTMLElement): void => {
+    menuReturnFocusRef.current = { sessionId, element: returnFocus };
+    dispatch({
+      type: "menu.toggled",
+      sessionId: state.openMenuSessionId === sessionId ? undefined : sessionId,
+    });
+  };
 
   const openDelete = (session: SessionSummary, returnFocus?: HTMLElement): void => {
     deleteReturnFocusRef.current = returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -272,9 +350,14 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
           <div
             className="pane-divider"
             role="separator"
+            tabIndex={0}
             aria-orientation="vertical"
             aria-label="Resize agent list"
+            aria-valuemin={MINIMUM_PANE_WIDTH}
+            aria-valuemax={MAXIMUM_PANE_WIDTH}
+            aria-valuenow={state.snapshot.paneWidth}
             onPointerDown={beginResize}
+            onKeyDown={resizePaneWithKeyboard}
           />
         ) : null}
         <SessionPane
@@ -290,11 +373,11 @@ export function App({ transport, initialState, terminalFactory = browserTerminal
           onNew={() => transport.post({ version: 1, type: "session.new" })}
           onOpen={openSession}
           onToggleGroup={toggleGroup}
-          onToggleMenu={(sessionId) => dispatch({ type: "menu.toggled", sessionId })}
+          onToggleMenu={toggleMenu}
           onRename={handleRename}
           onStop={handleStop}
           onArchive={(session, archived) => {
-            closeMenu();
+            closeMenu(archived);
             transport.post({ version: 1, type: "session.archive", sessionId: session.id, archived });
           }}
           onDelete={openDelete}

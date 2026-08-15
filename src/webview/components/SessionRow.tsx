@@ -7,7 +7,7 @@ interface SessionRowProps {
   active: boolean;
   menuOpen: boolean;
   onOpen(): void;
-  onToggleMenu(): void;
+  onToggleMenu(returnFocus: HTMLButtonElement): void;
   onRename(): void;
   onStop(): void;
   onArchive(archived: boolean): void;
@@ -81,10 +81,12 @@ export function SessionRow({
         type="button"
         className="row-more icon-button"
         ref={moreActionsRef}
+        data-session-menu-trigger
+        data-session-id={session.id}
         aria-label={`More actions for ${session.title}`}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        onClick={onToggleMenu}
+        onClick={(event) => onToggleMenu(event.currentTarget)}
       >
         <span className="codicon codicon-ellipsis" aria-hidden="true" />
       </button>

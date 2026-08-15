@@ -248,6 +248,29 @@ describe("agent manager shell", () => {
     expect(screen.queryByRole("separator", { name: /resize agent list/i })).toBeNull();
   });
 
+  it("resizes and persists the pane with an accessible keyboard separator", async () => {
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([])} transport={transport} />);
+    const separator = screen.getByRole("separator", { name: /resize agent list/i });
+
+    expect(separator).toHaveAttribute("tabindex", "0");
+    expect(separator).toHaveAttribute("aria-valuemin", "180");
+    expect(separator).toHaveAttribute("aria-valuemax", "480");
+    expect(separator).toHaveAttribute("aria-valuenow", "248");
+
+    separator.focus();
+    await user.keyboard("{ArrowLeft}{Home}{End}{ArrowRight}");
+
+    expect(separator).toHaveAttribute("aria-valuenow", "470");
+    expect(transport.messages.filter((message) => message.type === "view.update")).toEqual([
+      { version: 1, type: "view.update", paneVisible: true, paneWidth: 258, collapsedGroups: [] },
+      { version: 1, type: "view.update", paneVisible: true, paneWidth: 180, collapsedGroups: [] },
+      { version: 1, type: "view.update", paneVisible: true, paneWidth: 480, collapsedGroups: [] },
+      { version: 1, type: "view.update", paneVisible: true, paneWidth: 470, collapsedGroups: [] },
+    ]);
+  });
+
   it("opens the narrow overlay even when the persisted wide pane is hidden", async () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
     const user = userEvent.setup();
@@ -301,6 +324,26 @@ describe("agent manager shell", () => {
       .toHaveAttribute("data-active", "false");
   });
 
+  it("shows a client-platform shortcut label for New Agent", () => {
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([])} transport={transport} />);
+    const paneButton = screen.getAllByRole("button", { name: /new agent/i })
+      .find((button) => button.classList.contains("new-agent-row"));
+
+    expect(paneButton).toHaveAttribute("aria-keyshortcuts", "Control+N");
+    expect(paneButton).toHaveTextContent("Ctrl+N");
+  });
+
+  it("reports webview focus changes for the scoped New Agent shortcut", () => {
+    const transport = new RecordingTransport();
+    render(<App initialState={stateWith([])} transport={transport} />);
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("blur"));
+
+    expect(transport.messages).toContainEqual({ version: 1, type: "view.focus", focused: true });
+    expect(transport.messages).toContainEqual({ version: 1, type: "view.focus", focused: false });
+  });
+
   it("focuses an attached session and resumes a stopped one", async () => {
     const user = userEvent.setup();
     const transport = new RecordingTransport();
@@ -334,23 +377,78 @@ describe("agent manager shell", () => {
     const transport = new RecordingTransport();
     render(<App initialState={stateWith([session("auth", "Auth cleanup")])} transport={transport} />);
 
-    await user.click(screen.getByRole("button", { name: /more actions for auth cleanup/i }));
+    const trigger = screen.getByRole("button", { name: /more actions for auth cleanup/i });
+    await user.click(trigger);
     await user.click(screen.getByRole("menuitem", { name: /delete/i }));
     expect(screen.getByRole("dialog", { name: /delete agent/i })).toBeVisible();
     expect(transport.messages).not.toContainEqual(expect.objectContaining({ type: "session.delete" }));
 
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^delete$/i }));
     expect(transport.messages).toContainEqual({ version: 1, type: "session.delete", sessionId: "auth" });
+    expect(trigger).toHaveFocus();
   });
 
   it("closes a session action menu with Escape", async () => {
     const user = userEvent.setup();
     const transport = new RecordingTransport();
     render(<App initialState={stateWith([session("auth", "Auth cleanup")])} transport={transport} />);
-    await user.click(screen.getByRole("button", { name: /more actions for auth cleanup/i }));
+    const trigger = screen.getByRole("button", { name: /more actions for auth cleanup/i });
+    await user.click(trigger);
     expect(screen.getByRole("menu", { name: /actions for auth cleanup/i })).toBeVisible();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu", { name: /actions for auth cleanup/i })).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("restores menu-trigger focus after toggling, renaming, and stopping", async () => {
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    const live = session("auth", "Auth cleanup", "waiting");
+    render(
+      <App
+        initialState={stateWith([live], [tab("tab-auth", "auth", "Auth cleanup")], "tab-auth")}
+        transport={transport}
+        terminalFactory={new FakeTerminalFactory()}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /more actions for auth cleanup/i });
+
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("menuitem", { name: /rename/i }));
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("menuitem", { name: /stop pi/i }));
+    expect(trigger).toHaveFocus();
+  });
+
+  it("restores focus to a relocated session menu trigger after archiving", async () => {
+    const user = userEvent.setup();
+    const transport = new RecordingTransport();
+    const original = session("auth", "Auth cleanup");
+    render(<App initialState={stateWith([original])} transport={transport} />);
+    await user.click(screen.getByRole("button", { name: /more actions for auth cleanup/i }));
+    await user.click(screen.getByRole("menuitem", { name: /^archive$/i }));
+
+    act(() => window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        version: 1,
+        type: "state.replace",
+        snapshot: {
+          sessions: [{ ...original, archived: true }],
+          tabs: [],
+          paneVisible: true,
+          paneWidth: 248,
+          collapsedGroups: [],
+        },
+      },
+    })));
+
+    expect(screen.getByRole("button", { name: /more actions for auth cleanup/i })).toHaveFocus();
   });
 
   it("opens delete confirmation from a focused session row", async () => {
