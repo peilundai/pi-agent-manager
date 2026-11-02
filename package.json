@@ -154,7 +154,7 @@
     "verify:package": "node scripts/verify-vsix.mjs"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.36",
+    "@vscode/codicons": "^0.0.45",
     "highlight.js": "^11.12.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
