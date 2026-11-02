@@ -158,3 +158,65 @@ describe("ChatSession", () => {
     expect(types.indexOf("abort")).toBeLessThan(types.indexOf("switch_session"));
   });
 });
+
+describe("ChatSession races", () => {
+  it("stops a Pi process that finishes starting after dispose", async () => {
+    let release: () => void = () => undefined;
+    let created: FakeClient | undefined;
+    const session = new ChatSession({
+      createClient: async (listener) => {
+        created = new FakeClient(listener);
+        const start = created.start.bind(created);
+        created.start = () => new Promise<void>((resolve) => (release = () => void start().then(resolve)));
+        created.stop = vi.fn(async () => {
+          created!.running = false;
+        });
+        return created;
+      },
+      post: () => undefined,
+      onSessionsChanged: () => undefined,
+    });
+    const starting = session.ensureStarted();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await session.dispose();
+    release();
+    await expect(starting).rejects.toThrow("startup was cancelled");
+    expect(created?.stop).toHaveBeenCalled();
+    expect(session.running).toBe(false);
+  });
+
+  it("drops events covered by a snapshot and replays only newer ones", async () => {
+    vi.useFakeTimers();
+    try {
+      const posted: HostToWebviewMessage[] = [];
+      let client: FakeClient | undefined;
+      const session = new ChatSession({
+        createClient: async (listener) => (client = new FakeClient(listener)),
+        post: (message) => posted.push(message),
+        onSessionsChanged: () => undefined,
+      });
+      await session.ensureStarted();
+      const fake = client!;
+      // Simulate Pi's ordered stream: an event before the get_messages response, then one after.
+      const request = fake.request.bind(fake);
+      fake.request = async <T,>(command: Record<string, unknown> & { type: string }) => {
+        if (command.type === "get_messages") {
+          fake.listener.onEvent({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "old" }] } });
+          fake.listener.onResponse?.({ command: "get_messages", success: true });
+          fake.listener.onEvent({ type: "message_start", message: { role: "assistant", content: [] } });
+        }
+        return request<T>(command);
+      };
+      // An event already queued (not yet flushed) when the snapshot starts is superseded too.
+      fake.listener.onEvent({ type: "turn_start" });
+      posted.length = 0;
+      await session.postSnapshot();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(posted.map((message) => message.type)).toEqual(["snapshot", "pi.events"]);
+      const events = posted[1] as Extract<HostToWebviewMessage, { type: "pi.events" }>;
+      expect(events.events).toEqual([{ type: "message_start", message: { role: "assistant", content: [] } }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
