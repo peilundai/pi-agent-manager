@@ -155,11 +155,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const mention = menuDismissed ? undefined : mentionAt(text, caret);
   const slash = menuDismissed ? undefined : slashQuery(text, caret);
 
+  // Keep the latest `post` in a ref so a new callback identity does not re-issue the search
+  // (which would invalidate the results currently on screen).
+  const postRef = useRef(post);
+  postRef.current = post;
+  const mentionQuery = mention?.query;
   useEffect(() => {
-    if (mention === undefined) return;
+    if (mentionQuery === undefined) return;
     requestRef.current += 1;
-    post({ version: 1, type: "files.search", requestId: requestRef.current, query: mention.query });
-  }, [mention?.query, mention === undefined, post]); // eslint-disable-line react-hooks/exhaustive-deps
+    postRef.current({ version: 1, type: "files.search", requestId: requestRef.current, query: mentionQuery });
+  }, [mentionQuery]);
 
   const replaceRange = useCallback((start: number, end: number, value: string) => {
     setText((current) => current.slice(0, start) + value + current.slice(end));
