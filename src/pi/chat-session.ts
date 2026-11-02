@@ -45,13 +45,18 @@ export class ChatSession {
   private disposed = false;
   private generation = 0;
   /**
-   * Snapshot/event boundary. While a snapshot is being built, events Pi emitted before its
-   * `get_messages` response are already part of the transcript ("before": dropped), and events
-   * after it are newer ("after": held, then replayed once the snapshot is posted).
+   * Snapshot/event boundary. Pi writes responses and events to one ordered stream, and
+   * `get_messages` returns only completed messages. While a snapshot is built, events read
+   * before its `get_messages` response are collected in `beforeEvents` (completed messages among
+   * them are already in the transcript), and events read after it in `afterEvents`. Both are
+   * replayed, minus what the snapshot covers, once the snapshot is posted.
    */
   private snapshotGate: "idle" | "before" | "after" = "idle";
-  private heldEvents: PiEvent[] = [];
+  private beforeEvents: PiEvent[] = [];
+  private afterEvents: PiEvent[] = [];
   private snapshotInFlight: Promise<void> | undefined;
+  /** Extension dialogs Pi is still waiting on; re-sent after each snapshot. */
+  private readonly pendingDialogs = new Map<string, { event: PiEvent; expiresAt: number | undefined }>();
 
   constructor(private readonly options: ChatSessionOptions) {}
 
@@ -159,6 +164,7 @@ export class ChatSession {
   }
 
   respondToDialog(response: DialogResponse): void {
+    this.pendingDialogs.delete(response.id);
     this.client?.send({ type: "extension_ui_response", ...response });
   }
 
@@ -174,10 +180,11 @@ export class ChatSession {
     const client = this.client;
     if (!client?.running) return;
     const generation = this.generation;
-    // Anything still queued predates get_messages and is superseded by the snapshot.
-    this.discardQueue();
+    // Anything still queued predates get_messages; reconcile it with the snapshot below.
+    this.beforeEvents = this.takeQueue();
+    this.afterEvents = [];
     this.snapshotGate = "before";
-    this.heldEvents = [];
+    let posted = false;
     try {
       const [state, messages, models, commands, stats] = await Promise.all([
         client.request<PiState>({ type: "get_state" }),
@@ -200,12 +207,33 @@ export class ChatSession {
         ...(stats ? { stats } : {}),
       };
       this.options.post({ version: 1, type: "snapshot", snapshot });
+      posted = true;
     } finally {
-      const held = this.heldEvents;
+      const before = this.beforeEvents;
+      const after = this.afterEvents;
       this.snapshotGate = "idle";
-      this.heldEvents = [];
-      if (generation === this.generation) for (const event of held) this.enqueue(event);
+      this.beforeEvents = [];
+      this.afterEvents = [];
+      if (generation === this.generation) {
+        // Without a snapshot nothing is covered: replay everything in order.
+        const replay = [...(posted ? withoutSnapshotCoverage(before) : before), ...after];
+        if (posted) replay.push(...this.livePendingDialogs());
+        for (const event of replay) this.enqueueSanitized(event);
+        this.flush();
+      }
     }
+  }
+
+  private livePendingDialogs(): PiEvent[] {
+    const now = Date.now();
+    const live: PiEvent[] = [];
+    for (const [id, entry] of this.pendingDialogs) {
+      if (entry.expiresAt === undefined) live.push(entry.event);
+      else if (entry.expiresAt <= now) this.pendingDialogs.delete(id);
+      // Re-send with the time Pi has left before it auto-resolves the dialog.
+      else live.push({ ...entry.event, timeout: entry.expiresAt - now });
+    }
+    return live;
   }
 
   async dispose(): Promise<void> {
@@ -284,6 +312,7 @@ export class ChatSession {
     this.client = undefined;
     this.generation += 1;
     this.busy = false;
+    this.pendingDialogs.clear();
     await client?.stop();
   }
 
@@ -311,27 +340,34 @@ export class ChatSession {
           this.options.post({ version: 1, type: "composer.insert", text: event.text });
           return;
         }
+        if (typeof event.id === "string" && DIALOG_METHODS.has(String(event.method))) {
+          const timeout = typeof event.timeout === "number" && event.timeout > 0 ? event.timeout : undefined;
+          this.pendingDialogs.set(event.id, { event, expiresAt: timeout ? Date.now() + timeout : undefined });
+        }
         break;
     }
     this.enqueue(event);
   }
 
   private enqueue(event: PiEvent): void {
-    if (this.snapshotGate === "before") return;
-    if (this.snapshotGate === "after") {
-      this.heldEvents.push(event);
-      return;
-    }
     const sanitized = sanitizeEvent(event);
     if (!sanitized) return;
-    this.queue.push(sanitized);
+    if (this.snapshotGate === "before") this.beforeEvents.push(sanitized);
+    else if (this.snapshotGate === "after") this.afterEvents.push(sanitized);
+    else this.enqueueSanitized(sanitized);
+  }
+
+  private enqueueSanitized(event: PiEvent): void {
+    this.queue.push(event);
     this.flushTimer ??= setTimeout(() => this.flush(), EVENT_FLUSH_MS);
   }
 
-  private discardQueue(): void {
+  private takeQueue(): PiEvent[] {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
+    const events = this.queue;
     this.queue = [];
+    return events;
   }
 
   private flush(): void {
@@ -383,6 +419,43 @@ export class ChatSession {
   private notice(level: "info" | "warning" | "error", message: string): void {
     this.options.post({ version: 1, type: "notice", level, message });
   }
+}
+
+const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
+const MESSAGE_EVENTS = new Set(["message_start", "message_update", "message_end"]);
+
+/**
+ * Removes events whose effect a `get_messages` snapshot already contains: the lifecycle of every
+ * message that completed (`message_end`) before the boundary, and compaction results (the
+ * snapshot holds the compaction summary). A message still streaming at the boundary is not in
+ * the snapshot, so its `message_start`/`message_update` events are kept. Everything else
+ * (tool progress, dialogs, queue and status changes) is not part of the transcript and is kept.
+ */
+export function withoutSnapshotCoverage(events: readonly PiEvent[]): PiEvent[] {
+  const kept: PiEvent[] = [];
+  let message: PiEvent[] = [];
+  for (const event of events) {
+    if (MESSAGE_EVENTS.has(event.type)) {
+      if (event.type === "message_start") {
+        kept.push(...message);
+        message = [event];
+      } else if (event.type === "message_update") {
+        message.push(event);
+      } else {
+        message = [];
+      }
+      continue;
+    }
+    if (event.type === "compaction_end") {
+      const { result: _covered, ...rest } = event;
+      void _covered;
+      kept.push(rest as PiEvent);
+      continue;
+    }
+    kept.push(event);
+  }
+  kept.push(...message);
+  return kept;
 }
 
 function compactModel(model: PiModel): PiModel {

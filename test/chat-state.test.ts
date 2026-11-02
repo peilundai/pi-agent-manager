@@ -78,6 +78,12 @@ describe("chat reducer: streaming", () => {
     expect(state.items[0]).toMatchObject({ answer: "Yes" });
   });
 
+  it("shows one card per dialog request even when it is re-sent", () => {
+    const dialog = { type: "extension_ui_request", id: "d1", method: "confirm", title: "Allow?" };
+    const state = applyPiEvents(initialChatState, [dialog, dialog], 1);
+    expect(state.items.filter((item) => item.kind === "dialog")).toHaveLength(1);
+  });
+
   it("tracks queue, retry, compaction and session metadata", () => {
     const state = applyPiEvents(initialChatState, [
       { type: "queue_update", steering: ["now"], followUp: ["later"] },
