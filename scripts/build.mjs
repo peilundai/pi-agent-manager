@@ -2,7 +2,9 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
 
 await rm("dist", { recursive: true, force: true });
-await mkdir("dist/resources", { recursive: true });
+await mkdir("dist", { recursive: true });
+
+const production = process.env.NODE_ENV !== "development";
 
 await Promise.all([
   build({
@@ -12,8 +14,9 @@ await Promise.all([
     platform: "node",
     format: "cjs",
     target: "node20",
-    external: ["vscode", "node-pty"],
+    external: ["vscode"],
     sourcemap: true,
+    minify: production,
   }),
   build({
     entryPoints: ["src/webview/main.tsx"],
@@ -24,26 +27,18 @@ await Promise.all([
     target: "es2022",
     jsx: "automatic",
     sourcemap: true,
-  }),
-  build({
-    entryPoints: ["resources/pi-status.ts"],
-    outfile: "dist/resources/pi-status.mjs",
-    bundle: true,
-    platform: "node",
-    format: "esm",
-    target: "node20",
-    sourcemap: true,
+    minify: production,
+    define: { "process.env.NODE_ENV": JSON.stringify(production ? "production" : "development") },
   }),
 ]);
 
-const [xtermCss, codiconCss, managerCss] = await Promise.all([
-  readFile("node_modules/@xterm/xterm/css/xterm.css", "utf8"),
+const [codiconCss, themeCss, chatCss] = await Promise.all([
   readFile("node_modules/@vscode/codicons/dist/codicon.css", "utf8"),
+  readFile("src/webview/theme.css", "utf8"),
   readFile("src/webview/styles.css", "utf8"),
 ]);
 
 await Promise.all([
-  writeFile("dist/webview.css", `${xtermCss}\n${codiconCss}\n${managerCss}`, "utf8"),
+  writeFile("dist/webview.css", `${codiconCss}\n${themeCss}\n${chatCss}`, "utf8"),
   copyFile("node_modules/@vscode/codicons/dist/codicon.ttf", "dist/codicon.ttf"),
-  copyFile("src/webview/index.html", "dist/index.html"),
 ]);
