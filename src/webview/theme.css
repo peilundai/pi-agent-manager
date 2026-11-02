@@ -1,0 +1,130 @@
+/*
+ * Pi color tokens, taken from pi-coding-agent 1.5 `theme/dark.json` and `theme/light.json`
+ * (okhsl values converted to sRGB). Surfaces follow the VS Code theme so the view blends in.
+ */
+:root,
+body.vscode-dark {
+  --pi-accent: #a798d7;
+  --pi-accent-border: #a08ed5;
+  --pi-border: #5fa8cc;
+  --pi-border-muted: #768186;
+  --pi-success: #68b78d;
+  --pi-error: #ea7f81;
+  --pi-warning: #cd9a22;
+  --pi-text: #dee0e1;
+  --pi-muted: #9da5a9;
+  --pi-dim: #7e888e;
+  --pi-thinking: #96a0a4;
+  --pi-selected-bg: #213b49;
+  --pi-user-bg: #213b49;
+  --pi-custom-bg: #3a3055;
+  --pi-tool-pending-bg: #34383a;
+  --pi-tool-success-bg: #254131;
+  --pi-tool-error-bg: #5b282a;
+  --pi-md-heading: #cd9a22;
+  --pi-md-link: #69add0;
+  --pi-md-code: #a798d7;
+  --pi-md-quote: #9da5a9;
+  --pi-diff-added: #68b78d;
+  --pi-diff-removed: #ea7f81;
+  --pi-syntax-comment: #9da5a9;
+  --pi-syntax-keyword: #69add0;
+  --pi-syntax-function: #cd9a22;
+  --pi-syntax-variable: #5db3ba;
+  --pi-syntax-string: #de8d5a;
+  --pi-syntax-number: #68b78d;
+  --pi-syntax-type: #a798d7;
+  --pi-syntax-operator: #9da5a9;
+  --pi-thinking-off: #6c767b;
+  --pi-thinking-minimal: #68808d;
+  --pi-thinking-low: #5489a4;
+  --pi-thinking-medium: #6185cc;
+  --pi-thinking-high: #9776e5;
+  --pi-thinking-xhigh: #de54c1;
+  --pi-thinking-max: #fe5462;
+  --pi-card-bg: #282c34;
+
+  --pi-surface: var(--vscode-sideBar-background, #1e1f22);
+  --pi-raise: white 12%;
+  --pi-sink: black 15%;
+  --pi-on-accent: #1b1530;
+  --pi-shadow: 0 8px 28px rgb(0 0 0 / 45%);
+  color-scheme: dark;
+}
+
+body.vscode-light {
+  --pi-accent: #7459b4;
+  --pi-accent-border: #8a72cb;
+  --pi-border: #3d8eb3;
+  --pi-border-muted: #9aa2a7;
+  --pi-success: #337e58;
+  --pi-error: #c8253d;
+  --pi-warning: #8f6802;
+  --pi-text: #3b3f41;
+  --pi-muted: #677176;
+  --pi-dim: #879095;
+  --pi-thinking: #7c868c;
+  --pi-selected-bg: #dfe7ec;
+  --pi-user-bg: #dfe7ec;
+  --pi-custom-bg: #e6e4ee;
+  --pi-tool-pending-bg: #e4e5e6;
+  --pi-tool-success-bg: #dee9e1;
+  --pi-tool-error-bg: #eee2e1;
+  --pi-md-heading: #8f6802;
+  --pi-md-link: #2f7899;
+  --pi-md-code: #7459b4;
+  --pi-md-quote: #677176;
+  --pi-diff-added: #337e58;
+  --pi-diff-removed: #c8253d;
+  --pi-syntax-comment: #677176;
+  --pi-syntax-keyword: #2f7899;
+  --pi-syntax-function: #8f6802;
+  --pi-syntax-variable: #287a81;
+  --pi-syntax-string: #a45417;
+  --pi-syntax-number: #337e58;
+  --pi-syntax-type: #7459b4;
+  --pi-syntax-operator: #677176;
+  --pi-thinking-off: #c2c8ca;
+  --pi-thinking-minimal: #b5c4cb;
+  --pi-thinking-low: #9fc2d5;
+  --pi-thinking-medium: #a2b7e0;
+  --pi-thinking-high: #b5a5e8;
+  --pi-thinking-xhigh: #e585cd;
+  --pi-thinking-max: #fe7479;
+  --pi-card-bg: #f7f6f6;
+
+  --pi-surface: var(--vscode-sideBar-background, #f8f8f8);
+  --pi-raise: black 4%;
+  --pi-sink: black 5%;
+  --pi-on-accent: #ffffff;
+  --pi-shadow: 0 8px 24px rgb(0 0 0 / 16%);
+  color-scheme: light;
+}
+
+/* Derived tokens are computed on <body> so they follow the active light/dark base tokens. */
+body {
+  --pi-surface-raised: color-mix(in srgb, var(--pi-surface), var(--pi-raise));
+  --pi-surface-sunken: color-mix(in srgb, var(--pi-surface), var(--pi-sink));
+  --pi-hairline: color-mix(in srgb, var(--pi-text) 14%, transparent);
+  --pi-hairline-strong: color-mix(in srgb, var(--pi-text) 24%, transparent);
+  --pi-hover: color-mix(in srgb, var(--pi-text) 8%, transparent);
+  --pi-accent-soft: color-mix(in srgb, var(--pi-accent) 18%, transparent);
+}
+
+body.vscode-light .composer,
+body.vscode-light .popover {
+  background: var(--vscode-input-background, #ffffff);
+}
+
+/* High contrast: defer to VS Code's own colors for maximum legibility. */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --pi-text: var(--vscode-foreground);
+  --pi-muted: var(--vscode-descriptionForeground);
+  --pi-dim: var(--vscode-descriptionForeground);
+  --pi-hairline: var(--vscode-contrastBorder);
+  --pi-hairline-strong: var(--vscode-contrastActiveBorder);
+  --pi-surface: var(--vscode-sideBar-background);
+  --pi-surface-raised: var(--vscode-sideBar-background);
+  --pi-user-bg: var(--vscode-sideBar-background);
+}

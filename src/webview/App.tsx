@@ -1,411 +1,314 @@
-import {
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import type { SessionSummary, SetupErrorState, TerminalTab } from "../shared/model";
-import { isHostMessage } from "../shared/protocol";
-import { ConfirmDialog } from "./components/ConfirmDialog";
-import { ManagerHeader } from "./components/ManagerHeader";
-import { SessionPane } from "./components/SessionPane";
-import { SessionTabs } from "./components/SessionTabs";
-import {
-  browserTerminalFactory,
-  TerminalWorkspace,
-  type TerminalWorkspaceFactory,
-} from "./components/TerminalWorkspace";
-import {
-  createInitialState,
-  webviewReducer,
-  type WebviewState,
-} from "./state";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { isHostMessage, type HostToWebviewMessage, type ImageAttachment, type PromptMode, type WebviewToHostMessage } from "../shared/protocol";
+import { chatReducer, initialChatState, type ChatState } from "./chat-state";
+import { Composer, type ComposerHandle, type LocalCommand } from "./components/Composer";
+import { ChatContext } from "./components/context";
+import { EmptyState, PiMascot } from "./components/EmptyState";
+import { Header, SessionPicker } from "./components/Header";
+import { TranscriptItem } from "./components/Transcript";
 import type { WebviewTransport } from "./vscode";
+import { generateSessionTitle } from "../pi/session-title";
 
-export interface AppProps {
-  transport: WebviewTransport;
-  initialState?: WebviewState;
-  terminalFactory?: TerminalWorkspaceFactory;
+const MAX_HISTORY = 50;
+const SPINNER_FRAMES = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+const WORKING_WORDS = ["Working", "Thinking", "Pondering", "Computing", "Crunching", "Reasoning", "Iterating"];
+
+function useElapsed(since: number | undefined): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!since) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [since]);
+  return since ? Math.max(0, now - since) : 0;
 }
 
-function liveTabFor(session: SessionSummary, tabs: readonly TerminalTab[]): TerminalTab | undefined {
-  return tabs.find(
-    (tab) =>
-      tab.attached &&
-      (tab.sessionId === session.id || tab.sessionPath === session.path),
+function StatusLine({ state }: { state: ChatState }) {
+  const elapsed = useElapsed(state.busy ? state.busySince ?? Date.now() : undefined);
+  const word = useMemo(() => WORKING_WORDS[Math.floor(Math.random() * WORKING_WORDS.length)], [state.busySince]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!state.busy && !state.activity) return null;
+  const frame = SPINNER_FRAMES[Math.floor(elapsed / 120) % SPINNER_FRAMES.length];
+  const seconds = Math.floor(elapsed / 1000);
+  return (
+    <div className="status-line" role="status" aria-live="polite">
+      <span className="spinner" aria-hidden="true">
+        {frame}
+      </span>
+      <span className="status-word shimmer">{state.activity ?? `${word}…`}</span>
+      <span className="status-meta">
+        {seconds > 0 ? `${seconds}s · ` : ""}esc to interrupt
+      </span>
+    </div>
   );
 }
 
-function SetupErrorView({ error, transport }: { error: SetupErrorState; transport: WebviewTransport }) {
+function QueueChips({ queue }: { queue: ChatState["queue"] }) {
+  const entries = [
+    ...queue.steering.map((text) => ({ text, kind: "steer" })),
+    ...queue.followUp.map((text) => ({ text, kind: "queued" })),
+  ];
+  if (!entries.length) return null;
+  return (
+    <div className="queue">
+      {entries.map((entry, index) => (
+        <div key={index} className="queue-chip" title={entry.text}>
+          <span className="badge">{entry.kind}</span>
+          <span className="queue-text">{entry.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SetupView({ state, post }: { state: ChatState; post(message: WebviewToHostMessage): void }) {
+  const error = state.setupError;
+  if (!error) return null;
   if (error.kind === "workspace") {
     return (
-      <div className="terminal-empty setup-error">
-        <span className="empty-mark codicon codicon-folder-opened" aria-hidden="true" />
-        <h1>Open a workspace folder</h1>
-        <p>Pi Agent Manager needs a workspace folder for sessions, history, and process working directories.</p>
-        <button className="button primary" type="button" onClick={() => transport.post({ version: 1, type: "setup.action", action: "openFolder" })}>
-          <span className="codicon codicon-folder-opened" aria-hidden="true" /> Open Folder
+      <div className="setup">
+        <PiMascot size={6} />
+        <h2>Open a folder to chat with Pi</h2>
+        <p>Pi works inside a workspace folder and keeps its chats per folder.</p>
+        <button type="button" className="button primary" onClick={() => post({ version: 1, type: "setup.action", action: "openFolder" })}>
+          Open Folder
         </button>
       </div>
     );
   }
   return (
-    <div className="terminal-empty setup-error">
-      <span className="empty-mark codicon codicon-warning" aria-hidden="true" />
-      <h1>Set up Pi executable</h1>
-      <p>{error.message}</p>
-      <div className="setup-error-actions">
-        <button className="button primary" type="button" onClick={() => transport.post({ version: 1, type: "setup.action", action: "chooseExecutable" })}>
-          Choose Executable
+    <div className="setup">
+      <PiMascot size={6} />
+      <h2>Pi CLI not found</h2>
+      <p>Pi Chat uses your local Pi installation. Install it, run <code>pi</code> once in a terminal to sign in, then retry.</p>
+      <pre className="setup-command">npm install -g @earendil-works/pi-coding-agent</pre>
+      <p className="muted">{error.message}</p>
+      <div className="setup-actions">
+        <button type="button" className="button primary" onClick={() => post({ version: 1, type: "setup.action", action: "retry" })}>
+          Retry
         </button>
-        <button className="button secondary" type="button" onClick={() => transport.post({ version: 1, type: "setup.action", action: "openSettings" })}>
-          Open Settings
+        <button type="button" className="button" onClick={() => post({ version: 1, type: "setup.action", action: "chooseExecutable" })}>
+          Choose Executable…
+        </button>
+        <button type="button" className="button" onClick={() => post({ version: 1, type: "setup.action", action: "openSettings" })}>
+          Settings
         </button>
       </div>
     </div>
   );
 }
 
-const NARROW_VIEWPORT_QUERY = "(max-width: 680px)";
-const MINIMUM_PANE_WIDTH = 180;
-const MAXIMUM_PANE_WIDTH = 480;
-const PANE_KEYBOARD_STEP = 10;
-
-function clampPaneWidth(width: number): number {
-  return Math.min(MAXIMUM_PANE_WIDTH, Math.max(MINIMUM_PANE_WIDTH, Math.round(width)));
+function ProcessBanner({ state, post }: { state: ChatState; post(message: WebviewToHostMessage): void }) {
+  const { process } = state;
+  if (process.status === "starting" && !state.items.length) {
+    return <div className="process-banner muted">Starting Pi…</div>;
+  }
+  if (process.status !== "exited" || !process.error) return null;
+  return (
+    <div className="process-banner error" role="alert">
+      <div className="process-title">
+        <span className="codicon codicon-error" aria-hidden="true" />
+        {process.error}
+      </div>
+      {process.stderr && (
+        <details>
+          <summary>Details</summary>
+          <pre>{process.stderr}</pre>
+        </details>
+      )}
+      <button type="button" className="button primary" onClick={() => post({ version: 1, type: "restart" })}>
+        Restart Pi
+      </button>
+    </div>
+  );
 }
 
-function isNarrowViewport(): boolean {
-  return window.matchMedia?.(NARROW_VIEWPORT_QUERY).matches ?? window.innerWidth <= 680;
-}
+export function App({ transport }: { transport: WebviewTransport }) {
+  const [state, dispatch] = useReducer(chatReducer, initialChatState);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [files, setFiles] = useState<{ requestId: number; files: string[] }>({ requestId: -1, files: [] });
+  const persisted = useRef(transport.getState());
+  const [history, setHistory] = useState<string[]>(() => persisted.current.history ?? []);
+  const composer = useRef<ComposerHandle>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
+  const pending = useRef<HostToWebviewMessage[]>([]);
+  const frame = useRef<number | undefined>(undefined);
 
-function useNarrowViewport(): boolean {
-  const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
+  const post = useCallback((message: WebviewToHostMessage) => transport.post(message), [transport]);
+  const context = useMemo(() => ({ post }), [post]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia?.(NARROW_VIEWPORT_QUERY);
-    if (!mediaQuery) {
-      window.addEventListener("resize", syncViewport);
-      return () => window.removeEventListener("resize", syncViewport);
-    }
-
-    const onChange = (event: MediaQueryListEvent): void => setNarrowViewport(event.matches);
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", onChange);
-      return () => mediaQuery.removeEventListener("change", onChange);
-    }
-    if (typeof mediaQuery.addListener === "function") {
-      mediaQuery.addListener(onChange);
-      return () => mediaQuery.removeListener(onChange);
-    }
-    window.addEventListener("resize", syncViewport);
-    return () => window.removeEventListener("resize", syncViewport);
-
-    function syncViewport(): void {
-      setNarrowViewport(isNarrowViewport());
-    }
-  }, []);
-
-  return narrowViewport;
-}
-
-export function App({ transport, initialState, terminalFactory = browserTerminalFactory }: AppProps) {
-  const [state, dispatch] = useReducer(
-    webviewReducer,
-    initialState ?? createInitialState(),
-  );
-  const activeTab = state.snapshot.tabs.find((tab) => tab.tabId === state.snapshot.activeTabId);
-  const narrowViewport = useNarrowViewport();
-  const paneVisible = narrowViewport ? state.narrowOverlayOpen : state.snapshot.paneVisible;
-  const deleteSession = useMemo(
-    () => state.snapshot.sessions.find((session) => session.id === state.confirmDeleteSessionId),
-    [state.confirmDeleteSessionId, state.snapshot.sessions],
-  );
-  const deleteReturnFocusRef = useRef<HTMLElement | null>(null);
-  const menuReturnFocusRef = useRef<{
-    sessionId: string;
-    element: HTMLElement | null;
-    archived?: boolean;
-  } | null>(null);
-
-  useEffect(() => {
-    const receive = (event: MessageEvent<unknown>): void => {
-      if (isHostMessage(event.data)) dispatch({ type: "host.received", message: event.data });
+    const flush = () => {
+      frame.current = undefined;
+      const messages = pending.current.splice(0);
+      const now = Date.now();
+      for (const message of messages) dispatch({ type: "host", message, now });
     };
-    window.addEventListener("message", receive);
-    transport.post({ version: 1, type: "ready" });
-    return () => window.removeEventListener("message", receive);
-  }, [transport]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
-      if (state.openMenuSessionId) {
-        dispatch({ type: "menu.toggled", sessionId: undefined });
-        event.preventDefault();
-      } else if (isNarrowViewport() && state.narrowOverlayOpen) {
-        dispatch({ type: "narrow-overlay.visibility", visible: false });
-        event.preventDefault();
+    const onMessage = (event: MessageEvent) => {
+      const message: unknown = event.data;
+      if (!isHostMessage(message)) return;
+      switch (message.type) {
+        case "composer.insert":
+          composer.current?.insert(message.text, message.images);
+          return;
+        case "composer.focus":
+          composer.current?.focus();
+          return;
+        case "history.toggle":
+          setHistoryOpen((open) => !open);
+          post({ version: 1, type: "sessions.refresh" });
+          return;
+        case "files.result":
+          setFiles({ requestId: message.requestId, files: message.files });
+          return;
+        default:
+          // Batch streaming updates to one render per animation frame.
+          pending.current.push(message);
+          frame.current ??= requestAnimationFrame(flush);
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [state.narrowOverlayOpen, state.openMenuSessionId]);
-
-  useEffect(() => {
-    const reportFocused = (): void => transport.post({ version: 1, type: "view.focus", focused: true });
-    const reportBlurred = (): void => transport.post({ version: 1, type: "view.focus", focused: false });
-    if (document.hasFocus()) reportFocused();
-    window.addEventListener("focus", reportFocused);
-    window.addEventListener("blur", reportBlurred);
+    window.addEventListener("message", onMessage);
+    post({ version: 1, type: "ready" });
+    const onFocus = () => post({ version: 1, type: "focus.changed", focused: true });
+    const onBlur = () => post({ version: 1, type: "focus.changed", focused: false });
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("focus", reportFocused);
-      window.removeEventListener("blur", reportBlurred);
-      reportBlurred();
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+      if (frame.current) cancelAnimationFrame(frame.current);
     };
-  }, [transport]);
+  }, [post]);
+
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
+  });
 
   useEffect(() => {
-    if (!state.confirmDeleteSessionId && deleteReturnFocusRef.current) {
-      deleteReturnFocusRef.current.focus();
-      deleteReturnFocusRef.current = null;
-    }
-  }, [state.confirmDeleteSessionId]);
+    stickToBottom.current = true;
+  }, [state.epoch]);
 
-  useEffect(() => {
-    const pending = menuReturnFocusRef.current;
-    if (!pending || state.openMenuSessionId || state.confirmDeleteSessionId) return;
-    if (pending.archived !== undefined) {
-      const session = state.snapshot.sessions.find((candidate) => candidate.id === pending.sessionId);
-      if (session?.archived !== pending.archived) return;
-    }
+  const onDraftChange = useCallback(
+    (draft: string) => {
+      persisted.current = { ...persisted.current, draft };
+      transport.setState(persisted.current);
+    },
+    [transport],
+  );
 
-    const original = pending.element?.isConnected ? pending.element : undefined;
-    const relocated = [...document.querySelectorAll<HTMLButtonElement>("[data-session-menu-trigger]")]
-      .find((button) => button.dataset.sessionId === pending.sessionId);
-    (original ?? relocated)?.focus();
-    menuReturnFocusRef.current = null;
-  }, [state.confirmDeleteSessionId, state.openMenuSessionId, state.snapshot.sessions]);
+  const submit = useCallback(
+    (text: string, images: ImageAttachment[], mode: PromptMode) => {
+      if (mode === "send") dispatch({ type: "user.send", text, images });
+      stickToBottom.current = true;
+      post({ version: 1, type: "prompt", text, images, mode });
+      if (text) {
+        setHistory((current) => {
+          const next = [...current.filter((entry) => entry !== text), text].slice(-MAX_HISTORY);
+          persisted.current = { ...persisted.current, history: next };
+          transport.setState(persisted.current);
+          return next;
+        });
+      }
+    },
+    [post, transport],
+  );
 
-  const postViewState = (
-    paneVisible: boolean,
-    paneWidth: number,
-    collapsedGroups: string[],
-  ): void => {
-    transport.post({
-      version: 1,
-      type: "view.update",
-      paneVisible,
-      paneWidth,
-      collapsedGroups,
-    });
-  };
+  const newChat = useCallback(() => {
+    setHistoryOpen(false);
+    post({ version: 1, type: "chat.new" });
+  }, [post]);
 
-  const toggleGroup = (groupId: string): void => {
-    const collapsed = new Set(state.snapshot.collapsedGroups);
-    if (collapsed.has(groupId)) collapsed.delete(groupId);
-    else collapsed.add(groupId);
-    const collapsedGroups = [...collapsed];
-    dispatch({ type: "group.toggled", groupId });
-    postViewState(state.snapshot.paneVisible, state.snapshot.paneWidth, collapsedGroups);
-  };
+  const localCommands: LocalCommand[] = useMemo(
+    () => [
+      { name: "new", description: "Start a new chat", run: newChat },
+      { name: "compact", description: "Summarize the conversation to free context", run: () => post({ version: 1, type: "compact" }) },
+      { name: "model", description: "Choose model and thinking level", run: () => composer.current?.toggleModelPicker() },
+      { name: "rename", description: "Rename this chat", run: () => post({ version: 1, type: "chat.rename" }) },
+      { name: "history", description: "Browse past chats", run: () => setHistoryOpen(true) },
+    ],
+    [newChat, post],
+  );
 
-  const togglePane = (): void => {
-    if (isNarrowViewport()) {
-      dispatch({ type: "narrow-overlay.visibility", visible: !state.narrowOverlayOpen });
-      return;
-    }
-    const paneVisible = !state.snapshot.paneVisible;
-    dispatch({ type: "pane.visibility", visible: paneVisible });
-    postViewState(paneVisible, state.snapshot.paneWidth, state.snapshot.collapsedGroups);
-  };
-
-  const beginResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const startX = event.clientX;
-    const startWidth = state.snapshot.paneWidth;
-    const move = (moveEvent: PointerEvent): void => {
-      const width = clampPaneWidth(startWidth + startX - moveEvent.clientX);
-      dispatch({ type: "pane.width", width });
-    };
-    const finish = (upEvent: PointerEvent): void => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      const width = clampPaneWidth(startWidth + startX - upEvent.clientX);
-      postViewState(state.snapshot.paneVisible, width, state.snapshot.collapsedGroups);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish);
-  };
-
-  const resizePaneWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    let width: number | undefined;
-    switch (event.key) {
-      case "ArrowLeft":
-        width = state.snapshot.paneWidth + PANE_KEYBOARD_STEP;
-        break;
-      case "ArrowRight":
-        width = state.snapshot.paneWidth - PANE_KEYBOARD_STEP;
-        break;
-      case "Home":
-        width = MINIMUM_PANE_WIDTH;
-        break;
-      case "End":
-        width = MAXIMUM_PANE_WIDTH;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    const nextWidth = clampPaneWidth(width);
-    dispatch({ type: "pane.width", width: nextWidth });
-    postViewState(state.snapshot.paneVisible, nextWidth, state.snapshot.collapsedGroups);
-  };
-
-  const openSession = (session: SessionSummary, liveTab?: TerminalTab): void => {
-    const tab = liveTab ?? liveTabFor(session, state.snapshot.tabs);
-    if (tab) transport.post({ version: 1, type: "session.focus", tabId: tab.tabId });
-    else transport.post({ version: 1, type: "session.resume", sessionId: session.id });
-  };
-
-  const closeMenu = (archived?: boolean): void => {
-    if (menuReturnFocusRef.current && archived !== undefined) {
-      menuReturnFocusRef.current.archived = archived;
-    }
-    dispatch({ type: "menu.toggled", sessionId: undefined });
-  };
-
-  const toggleMenu = (sessionId: string, returnFocus: HTMLElement): void => {
-    menuReturnFocusRef.current = { sessionId, element: returnFocus };
-    dispatch({
-      type: "menu.toggled",
-      sessionId: state.openMenuSessionId === sessionId ? undefined : sessionId,
-    });
-  };
-
-  const openDelete = (session: SessionSummary, returnFocus?: HTMLElement): void => {
-    deleteReturnFocusRef.current = returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    dispatch({ type: "delete.opened", sessionId: session.id });
-  };
-
-  const handleRename = (session: SessionSummary, liveTab?: TerminalTab): void => {
-    closeMenu();
-    if (liveTab) transport.post({ version: 1, type: "session.rename", sessionId: session.id });
-  };
-
-  const handleStop = (_session: SessionSummary, liveTab?: TerminalTab): void => {
-    closeMenu();
-    if (liveTab) transport.post({ version: 1, type: "session.stop", tabId: liveTab.tabId });
-  };
+  const activeSession = state.sessions.find((session) => session.path === state.pi.sessionFile);
+  const firstPrompt = state.items.find((item) => item.kind === "user");
+  const title =
+    state.pi.sessionName ||
+    (state.items.length ? activeSession?.title : undefined) ||
+    (firstPrompt?.kind === "user" && firstPrompt.text ? generateSessionTitle(firstPrompt.text) : undefined) ||
+    "Untitled";
+  const busy = state.busy;
+  const disabled = Boolean(state.setupError) || state.process.status === "exited";
 
   return (
-    <div className="app-shell">
-      <div className="app-content" inert={deleteSession ? true : undefined} aria-hidden={deleteSession ? true : undefined}>
-      <ManagerHeader
-        title={state.snapshot.setupError ? "Setup required" : activeTab?.title ?? "New Agent"}
-        paneVisible={paneVisible}
-        onNew={() => transport.post({ version: 1, type: "session.new" })}
-        onRefresh={() => transport.post({ version: 1, type: "history.refresh" })}
-        onTogglePane={togglePane}
-      />
-      <SessionTabs
-        tabs={state.snapshot.tabs}
-        activeTabId={state.snapshot.activeTabId}
-        onFocus={(tabId) => transport.post({ version: 1, type: "session.focus", tabId })}
-        onClose={(tabId) => transport.post({ version: 1, type: "session.detach", tabId })}
-        onNew={() => transport.post({ version: 1, type: "session.new" })}
-      />
-      <div
-        className="manager-layout"
-        style={{ "--session-pane-width": `${paneVisible ? state.snapshot.paneWidth : 0}px` } as CSSProperties}
-      >
-        <main className="terminal-area" aria-label="Pi terminal">
-          {state.snapshot.setupError ? (
-            <SetupErrorView error={state.snapshot.setupError} transport={transport} />
-          ) : state.snapshot.tabs.some((tab) => tab.attached) ? (
-            <TerminalWorkspace
-              tabs={state.snapshot.tabs}
-              {...(state.snapshot.activeTabId ? { activeTabId: state.snapshot.activeTabId } : {})}
-              transport={transport}
-              factory={terminalFactory}
-              messages={state.terminalMessages}
-              onMessagesHandled={(ids) => dispatch({ type: "terminal.messages.handled", ids })}
-            />
-          ) : (
-            <div className="terminal-empty">
-              <span className="empty-mark" aria-hidden="true">π</span>
-              <h1>Start a Pi agent</h1>
-              <p>Run a task in this workspace without leaving your editor.</p>
-              <button className="button primary" type="button" onClick={() => transport.post({ version: 1, type: "session.new" })}>
-                <span className="codicon codicon-send" aria-hidden="true" /> New Agent
-              </button>
+    <ChatContext.Provider value={context}>
+      <div className="app">
+        <Header
+          title={title}
+          historyOpen={historyOpen}
+          canRename={Boolean(state.pi.sessionFile) && state.items.length > 0}
+          onToggleHistory={() => {
+            if (!historyOpen) post({ version: 1, type: "sessions.refresh" });
+            setHistoryOpen(!historyOpen);
+          }}
+          onNewChat={newChat}
+        />
+        {historyOpen && <SessionPicker sessions={state.sessions} activePath={state.pi.sessionFile} onClose={() => setHistoryOpen(false)} />}
+        {state.setupError ? (
+          <SetupView state={state} post={post} />
+        ) : (
+          <>
+            <div
+              className="transcript"
+              ref={scroller}
+              onScroll={(event) => {
+                const element = event.currentTarget;
+                stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
+              }}
+            >
+              {state.items.length === 0 ? (
+                <EmptyState platform={state.platform} workspaceName={state.workspaceName} />
+              ) : (
+                <div className="messages">
+                  {state.items.map((item) => (
+                    <TranscriptItem
+                      key={item.id}
+                      item={item}
+                      tools={state.tools}
+                      onDialogAnswer={(id, answer) => dispatch({ type: "dialog.answer", id, answer })}
+                      onDismiss={(id) => dispatch({ type: "notice.dismiss", id })}
+                    />
+                  ))}
+                </div>
+              )}
+              <ProcessBanner state={state} post={post} />
             </div>
-          )}
-        </main>
-        {paneVisible ? (
-          <div
-            className="pane-divider"
-            role="separator"
-            tabIndex={0}
-            aria-orientation="vertical"
-            aria-label="Resize agent list"
-            aria-valuemin={MINIMUM_PANE_WIDTH}
-            aria-valuemax={MAXIMUM_PANE_WIDTH}
-            aria-valuenow={state.snapshot.paneWidth}
-            onPointerDown={beginResize}
-            onKeyDown={resizePaneWithKeyboard}
-          />
-        ) : null}
-        <SessionPane
-          sessions={state.snapshot.sessions}
-          tabs={state.snapshot.tabs}
-          activeTabId={state.snapshot.activeTabId}
-          query={state.searchQuery}
-          visible={paneVisible}
-          narrowOverlayOpen={state.narrowOverlayOpen}
-          collapsedGroups={state.snapshot.collapsedGroups}
-          openMenuSessionId={state.openMenuSessionId}
-          onSearch={(query) => dispatch({ type: "search.changed", query })}
-          onNew={() => transport.post({ version: 1, type: "session.new" })}
-          onOpen={openSession}
-          onToggleGroup={toggleGroup}
-          onToggleMenu={toggleMenu}
-          onRename={handleRename}
-          onStop={handleStop}
-          onArchive={(session, archived) => {
-            closeMenu(archived);
-            transport.post({ version: 1, type: "session.archive", sessionId: session.id, archived });
-          }}
-          onDelete={openDelete}
-        />
+            <div className="bottom">
+              <StatusLine state={state} />
+              <QueueChips queue={state.queue} />
+              <Composer
+                ref={composer}
+                busy={busy}
+                disabled={disabled}
+                platform={state.platform}
+                models={state.models}
+                model={state.pi.model}
+                thinkingLevel={state.pi.thinkingLevel}
+                commands={state.commands}
+                localCommands={localCommands}
+                stats={state.stats}
+                initialDraft={persisted.current.draft ?? ""}
+                history={history}
+                onDraftChange={onDraftChange}
+                onSubmit={submit}
+                onAbort={() => post({ version: 1, type: "abort" })}
+                files={files}
+              />
+            </div>
+          </>
+        )}
       </div>
-
-      {state.notice ? (
-        <div className={`notice notice-${state.notice.level}`} role={state.notice.level === "error" ? "alert" : "status"}>
-          <span>{state.notice.message}</span>
-          <button className="icon-button" type="button" aria-label="Dismiss notification" onClick={() => dispatch({ type: "notice.closed" })}>
-            <span className="codicon codicon-close" aria-hidden="true" />
-          </button>
-        </div>
-      ) : null}
-      </div>
-
-      {deleteSession ? (
-        <ConfirmDialog
-          title="Delete Agent?"
-          description={`Delete “${deleteSession.title}” and its Pi transcript? This cannot be undone.`}
-          confirmLabel="Delete"
-          onCancel={() => dispatch({ type: "delete.closed" })}
-          onConfirm={() => {
-            transport.post({ version: 1, type: "session.delete", sessionId: deleteSession.id });
-            dispatch({ type: "delete.closed" });
-          }}
-        />
-      ) : null}
-    </div>
+    </ChatContext.Provider>
   );
 }
