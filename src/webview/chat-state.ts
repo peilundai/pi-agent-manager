@@ -518,7 +518,10 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
           break;
         }
         const request = dialogFrom(event, now);
-        if (request) draft.items.push({ kind: "dialog", id: nextId(draft, "d"), request });
+        // Pending dialogs are re-sent after a snapshot; keep a single card per request.
+        if (request && !draft.items.some((item) => item.kind === "dialog" && item.request.id === request.id)) {
+          draft.items.push({ kind: "dialog", id: nextId(draft, "d"), request });
+        }
         break;
       }
       case "session_info_changed": {

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { ChatSession, type RpcClientLike } from "../src/pi/chat-session";
+import { ChatSession, withoutSnapshotCoverage, type RpcClientLike } from "../src/pi/chat-session";
 import type { RpcClientListener } from "../src/pi/rpc-client";
 import type { HostToWebviewMessage } from "../src/shared/protocol";
+import type { PiEvent } from "../src/pi/rpc-types";
 
 class FakeClient implements RpcClientLike {
   running = false;
@@ -185,7 +186,87 @@ describe("ChatSession races", () => {
     expect(session.running).toBe(false);
   });
 
-  it("drops events covered by a snapshot and replays only newer ones", async () => {
+  /** Starts a session whose fake client emits `before`/`after` events around the get_messages response. */
+  async function snapshotHarness(before: Array<Record<string, unknown>>, after: Array<Record<string, unknown>>) {
+    const posted: HostToWebviewMessage[] = [];
+    let client: FakeClient | undefined;
+    const session = new ChatSession({
+      createClient: async (listener) => (client = new FakeClient(listener)),
+      post: (message) => posted.push(message),
+      onSessionsChanged: () => undefined,
+    });
+    await session.ensureStarted();
+    const fake = client!;
+    const request = fake.request.bind(fake);
+    fake.request = async <T,>(command: Record<string, unknown> & { type: string }) => {
+      if (command.type === "get_messages") {
+        for (const event of before) fake.listener.onEvent(event as PiEvent);
+        fake.listener.onResponse?.({ command: "get_messages", success: true });
+        for (const event of after) fake.listener.onEvent(event as PiEvent);
+      }
+      return request<T>(command);
+    };
+    return { session, posted, fake };
+  }
+
+  const replayed = (posted: HostToWebviewMessage[]) =>
+    posted.flatMap((message) => (message.type === "pi.events" ? message.events : []));
+
+  it("drops completed messages the snapshot covers and replays everything else in order", async () => {
+    const { session, posted } = await snapshotHarness(
+      [
+        { type: "turn_start" },
+        { type: "message_start", message: { role: "assistant", content: [] } },
+        { type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "old" } },
+        { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "old" }] } },
+        { type: "compaction_end", reason: "manual", result: { tokensBefore: 10 }, aborted: false },
+      ],
+      [{ type: "message_start", message: { role: "assistant", content: [] } }],
+    );
+    posted.length = 0;
+    await session.postSnapshot();
+    expect(posted[0]?.type).toBe("snapshot");
+    expect(replayed(posted)).toEqual([
+      { type: "turn_start" },
+      { type: "compaction_end", reason: "manual", aborted: false },
+      { type: "message_start", message: { role: "assistant", content: [] } },
+    ]);
+  });
+
+  it("keeps a message that is still streaming at the boundary", async () => {
+    const { session, posted } = await snapshotHarness(
+      [
+        { type: "message_start", message: { role: "assistant", content: [] } },
+        { type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hel" } },
+      ],
+      [{ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "lo" } }],
+    );
+    posted.length = 0;
+    await session.postSnapshot();
+    expect(replayed(posted).map((event) => event.type)).toEqual(["message_start", "message_update", "message_update"]);
+  });
+
+  it("never drops an extension dialog and re-sends pending ones after each snapshot", async () => {
+    const dialog = { type: "extension_ui_request", id: "d1", method: "editor", title: "Commit message" };
+    const { session, posted, fake } = await snapshotHarness([dialog], []);
+    posted.length = 0;
+    await session.postSnapshot();
+    // Once from the replayed stream and once as a pending dialog; the webview dedupes by id.
+    expect(replayed(posted).filter((event) => event.id === "d1")).toHaveLength(2);
+
+    posted.length = 0;
+    await session.postSnapshot();
+    expect(replayed(posted).filter((event) => event.id === "d1").length).toBeGreaterThan(0);
+
+    session.respondToDialog({ id: "d1", value: "fix: x" });
+    expect(fake.sent).toEqual([{ type: "extension_ui_response", id: "d1", value: "fix: x" }]);
+    posted.length = 0;
+    fake.request = FakeClient.prototype.request.bind(fake);
+    await session.postSnapshot();
+    expect(replayed(posted).some((event) => event.id === "d1")).toBe(false);
+  });
+
+  it("re-sends timed dialogs with their remaining time and forgets expired ones", async () => {
     vi.useFakeTimers();
     try {
       const posted: HostToWebviewMessage[] = [];
@@ -196,27 +277,38 @@ describe("ChatSession races", () => {
         onSessionsChanged: () => undefined,
       });
       await session.ensureStarted();
-      const fake = client!;
-      // Simulate Pi's ordered stream: an event before the get_messages response, then one after.
-      const request = fake.request.bind(fake);
-      fake.request = async <T,>(command: Record<string, unknown> & { type: string }) => {
-        if (command.type === "get_messages") {
-          fake.listener.onEvent({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "old" }] } });
-          fake.listener.onResponse?.({ command: "get_messages", success: true });
-          fake.listener.onEvent({ type: "message_start", message: { role: "assistant", content: [] } });
-        }
-        return request<T>(command);
-      };
-      // An event already queued (not yet flushed) when the snapshot starts is superseded too.
-      fake.listener.onEvent({ type: "turn_start" });
+      client!.listener.onEvent({ type: "extension_ui_request", id: "c1", method: "confirm", title: "Allow?", timeout: 10_000 });
+      await vi.advanceTimersByTimeAsync(4_000);
       posted.length = 0;
       await session.postSnapshot();
-      await vi.advanceTimersByTimeAsync(20);
-      expect(posted.map((message) => message.type)).toEqual(["snapshot", "pi.events"]);
-      const events = posted[1] as Extract<HostToWebviewMessage, { type: "pi.events" }>;
-      expect(events.events).toEqual([{ type: "message_start", message: { role: "assistant", content: [] } }]);
+      const resent = replayed(posted).find((event) => event.id === "c1");
+      expect(resent?.timeout).toBeLessThanOrEqual(6_000);
+      expect(resent?.timeout).toBeGreaterThan(5_000);
+      await vi.advanceTimersByTimeAsync(7_000);
+      posted.length = 0;
+      await session.postSnapshot();
+      expect(replayed(posted).some((event) => event.id === "c1")).toBe(false);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+});
+
+describe("withoutSnapshotCoverage", () => {
+  it("drops orphan message ends and keeps unrelated events", () => {
+    expect(
+      withoutSnapshotCoverage([
+        { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "x" } },
+        { type: "message_end", message: { role: "assistant" } },
+        { type: "tool_execution_start", toolCallId: "t" },
+        { type: "tool_execution_end", toolCallId: "t" },
+        { type: "queue_update", steering: [], followUp: ["next"] },
+      ]),
+    ).toEqual([
+      { type: "tool_execution_start", toolCallId: "t" },
+      { type: "tool_execution_end", toolCallId: "t" },
+      { type: "queue_update", steering: [], followUp: ["next"] },
+    ]);
   });
 });
