@@ -4,7 +4,7 @@ import { isAbsolute, join, relative } from "node:path";
 import * as vscode from "vscode";
 import { boundFilePosition, imageMimeType, searchFiles, selectionFromEditor } from "../editor/editor-context";
 import { formatEditorSelection } from "../editor/selection";
-import { ChatSession } from "../pi/chat-session";
+import { ChatSession, type ChatSessionOptions } from "../pi/chat-session";
 import { augmentPath, buildPiInvocation, buildRpcArgs, resolvePiCommand } from "../pi/command-resolver";
 import { PiRpcClient } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
@@ -23,7 +23,9 @@ export const CONTAINER_COMMAND = "workbench.view.extension.piChat";
 export interface ChatViewProviderOptions {
   extensionUri: vscode.Uri;
   workspaceFolder: vscode.WorkspaceFolder | undefined;
-  repository: PiSessionRepository;
+  repository: Pick<PiSessionRepository, "list" | "watch" | "delete">;
+  /** Test seam: replaces spawning the real `pi --mode rpc` process. */
+  createClient?: ChatSessionOptions["createClient"];
 }
 
 function errorMessage(error: unknown): string {
@@ -72,7 +74,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   constructor(private readonly options: ChatViewProviderOptions) {
     this.setupError = options.workspaceFolder ? undefined : { kind: "workspace" };
     this.session = new ChatSession({
-      createClient: (listener) => this.createClient(listener),
+      createClient: options.createClient ?? ((listener) => this.createClient(listener)),
       post: (message) => this.post(message),
       onSessionsChanged: () => this.scheduleSessions(),
     });

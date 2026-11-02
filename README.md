@@ -1,5 +1,7 @@
 # Pi Chat for VS Code
 
+[![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
+
 Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar. The look, feel and flow follow the Claude Code extension, in Pi's own colors.
 
 <p align="center">
@@ -92,11 +94,24 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 
 ```sh
 npm install
-npm run check      # TypeScript + ESLint
-npm test           # Vitest (unit + webview component tests)
-npm run build      # esbuild bundles into dist/
-npm run package    # check, test, build, then a verified universal .vsix
+npm run check          # TypeScript + ESLint
+npm test               # unit + React component tests (Vitest, jsdom)
+npm run test:coverage  # same, with V8 coverage thresholds
+npm run test:e2e       # real Pi CLI (devDependency) against a mock LLM
+npm run test:ui        # build, then drive the webview in Chromium (Playwright)
+npm run package        # check, test, build, then a verified universal .vsix
 ```
+
+The end-to-end suites need no API key. They point a custom OpenAI-compatible `mock` provider (in a temporary `~/.pi/agent/models.json`) at a local scripted server. That server streams thinking, `read` → `edit` → `bash` tool calls and Markdown. A test extension asks for confirmation before `bash`. Playwright saves light and dark screenshots to `test-results/screenshots/`.
+
+**CI** (`.github/workflows/ci.yml`):
+- typecheck and lint
+- unit tests on Ubuntu, macOS and Windows (Node 22, plus Node 20 on Ubuntu)
+- coverage with thresholds
+- the real-Pi and Playwright suites
+- a packaged `.vsix` artifact
+
+Pushing a `vX.Y.Z` tag that matches `package.json` publishes a GitHub Release with the VSIX and its CHANGELOG notes. Dependabot keeps npm packages and actions current.
 
 See [docs/architecture.md](docs/architecture.md) for how the extension talks to Pi.
 

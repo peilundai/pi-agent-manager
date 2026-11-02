@@ -146,6 +146,10 @@
     "check": "tsc --noEmit && eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:ui": "npm run build && playwright test",
+    "test:all": "npm run test:coverage && npm run test:e2e && npm run test:ui",
     "package": "npm run check && npm test && npm run build && node scripts/package-vsix.mjs",
     "verify:package": "node scripts/verify-vsix.mjs"
   },
@@ -159,7 +163,9 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.0",
     "@eslint/js": "^9.33.0",
+    "@playwright/test": "1.63.0",
     "@testing-library/jest-dom": "^6.6.4",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
@@ -169,6 +175,7 @@
     "@types/vscode": "^1.106.0",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
+    "@vitest/coverage-v8": "3.2.7",
     "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.25.9",
     "eslint": "^9.33.0",
