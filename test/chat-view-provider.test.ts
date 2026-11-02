@@ -166,6 +166,21 @@ describe("ChatViewProvider", () => {
     expect(repository.delete).toHaveBeenCalledWith(session);
   });
 
+  it("keeps the active chat when an extension vetoes new_session", async () => {
+    mock.window.showWarningMessage.mockResolvedValue("Delete");
+    const { posted, send, ready, repository, client } = setup();
+    await ready();
+    const fake = client();
+    const request = fake.request.bind(fake);
+    fake.request = async <T,>(command: Record<string, unknown> & { type: string }) =>
+      command.type === "new_session" ? ({ cancelled: true } as T) : request<T>(command);
+    repository.list.mockResolvedValue([{ ...session, path: "/s/one.jsonl" }]);
+    await send({ version: 1, type: "sessions.refresh" });
+    await send({ version: 1, type: "chat.delete", path: "/s/one.jsonl" });
+    expect(repository.delete).not.toHaveBeenCalled();
+    expect(posted.at(-1)).toEqual({ version: 1, type: "notice", level: "warning", message: "This chat is still active, so it was not deleted." });
+  });
+
   it("renames the current chat through an input box", async () => {
     mock.window.showInputBox.mockResolvedValue("  New   name ");
     const { send, ready, client } = setup();
