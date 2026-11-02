@@ -10,8 +10,18 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["test/**/*.test.{ts,tsx}"],
+    exclude: ["test/e2e/**", "test/ui/**", "node_modules/**"],
     setupFiles: ["test/setup.ts"],
     clearMocks: true,
     restoreMocks: true,
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/webview/main.tsx", "src/**/*.d.ts", "src/pi/rpc-types.ts", "src/shared/model.ts"],
+      reporter: ["text", "html", "lcov", "json-summary"],
+      reportsDirectory: "coverage",
+      // Keep just under current coverage; raise as tests are added.
+      thresholds: { lines: 85, statements: 85, functions: 78, branches: 72 },
+    },
   },
 });
