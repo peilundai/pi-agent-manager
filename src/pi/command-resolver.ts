@@ -179,8 +179,55 @@ export function buildPiInvocation(
   };
 }
 
-export function buildPiArgs(statusExtensionPath: string, sessionPath?: string): string[] {
-  const args = ["--extension", statusExtensionPath];
-  if (sessionPath) args.push("--session", sessionPath);
+/** Flags owned by the extension; user-supplied extra arguments may not override them. */
+const RESERVED_FLAGS = new Set([
+  "--mode",
+  "-p",
+  "--print",
+  "--no-session",
+  "--session",
+  "--session-id",
+  "-c",
+  "--continue",
+  "-r",
+  "--resume",
+  "--fork",
+  "--export",
+]);
+
+export interface RpcArgsOptions {
+  sessionPath?: string;
+  extraArgs?: readonly string[];
+}
+
+/** Builds the argument list for `pi --mode rpc`, rejecting reserved user flags. */
+export function buildRpcArgs(options: RpcArgsOptions = {}): string[] {
+  const extra = (options.extraArgs ?? []).map((value) => value.trim()).filter(Boolean);
+  for (const value of extra) {
+    const flag = value.split("=", 1)[0] ?? value;
+    if (RESERVED_FLAGS.has(flag)) {
+      throw new Error(`The Pi argument “${flag}” is managed by the extension and cannot be set in piChat.extraArgs.`);
+    }
+  }
+  const args = ["--mode", "rpc", ...extra];
+  if (options.sessionPath) args.push("--session", options.sessionPath);
   return args;
+}
+
+/**
+ * Pi is usually a Node script (`#!/usr/bin/env node`). GUI-launched editors often
+ * miss shell PATH entries (nvm, Homebrew), so make the directory that contains the
+ * resolved executable, plus common bin directories, visible to the child process.
+ */
+export function augmentPath(
+  piPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const path = pathApi(platform);
+  const extra = [path.dirname(piPath)];
+  if (platform !== "win32") extra.push("/opt/homebrew/bin", "/usr/local/bin");
+  const current = (env.PATH ?? env.Path ?? "").split(path.delimiter).filter(Boolean);
+  const merged = [...extra.filter((entry) => !current.includes(entry)), ...current];
+  return merged.join(path.delimiter);
 }

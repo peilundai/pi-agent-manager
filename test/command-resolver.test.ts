@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildPiArgs,
+  augmentPath,
+  buildRpcArgs,
   buildPiInvocation,
   PiCommandNotFoundError,
   resolvePiCommand,
@@ -59,15 +60,32 @@ describe("buildPiInvocation", () => {
   });
 });
 
-describe("buildPiArgs", () => {
-  it("loads the manager extension before an optional transcript", () => {
-    expect(buildPiArgs("/extension/pi-status.mjs", "/sessions/one.jsonl")).toEqual([
-      "--extension",
-      "/extension/pi-status.mjs",
+describe("buildRpcArgs", () => {
+  it("starts RPC mode with an optional transcript", () => {
+    expect(buildRpcArgs({ sessionPath: "/sessions/one.jsonl" })).toEqual([
+      "--mode",
+      "rpc",
       "--session",
       "/sessions/one.jsonl",
     ]);
-    expect(buildPiArgs("/extension/pi-status.mjs")).toEqual(["--extension", "/extension/pi-status.mjs"]);
+    expect(buildRpcArgs()).toEqual(["--mode", "rpc"]);
+  });
+
+  it("passes extra arguments but rejects reserved flags", () => {
+    expect(buildRpcArgs({ extraArgs: [" --offline ", ""] })).toEqual(["--mode", "rpc", "--offline"]);
+    expect(() => buildRpcArgs({ extraArgs: ["--mode=json"] })).toThrow(/managed by the extension/);
+    expect(() => buildRpcArgs({ extraArgs: ["--session"] })).toThrow(/managed by the extension/);
+  });
+});
+
+describe("augmentPath", () => {
+  it("prepends the executable directory once", () => {
+    expect(augmentPath("/home/u/.nvm/bin/pi", { PATH: "/usr/bin" }, "linux")).toBe(
+      "/home/u/.nvm/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin",
+    );
+    expect(augmentPath("/usr/bin/pi", { PATH: "/usr/bin:/usr/local/bin" }, "linux")).toBe(
+      "/opt/homebrew/bin:/usr/bin:/usr/local/bin",
+    );
   });
 });
 
