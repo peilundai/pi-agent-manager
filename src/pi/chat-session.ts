@@ -44,6 +44,14 @@ export class ChatSession {
   private busy = false;
   private disposed = false;
   private generation = 0;
+  /**
+   * Snapshot/event boundary. While a snapshot is being built, events Pi emitted before its
+   * `get_messages` response are already part of the transcript ("before": dropped), and events
+   * after it are newer ("after": held, then replayed once the snapshot is posted).
+   */
+  private snapshotGate: "idle" | "before" | "after" = "idle";
+  private heldEvents: PiEvent[] = [];
+  private snapshotInFlight: Promise<void> | undefined;
 
   constructor(private readonly options: ChatSessionOptions) {}
 
@@ -156,26 +164,48 @@ export class ChatSession {
 
   /** Posts a full snapshot (state, transcript, models, commands, stats). */
   async postSnapshot(): Promise<void> {
+    this.snapshotInFlight ??= this.buildSnapshot().finally(() => {
+      this.snapshotInFlight = undefined;
+    });
+    return this.snapshotInFlight;
+  }
+
+  private async buildSnapshot(): Promise<void> {
     const client = this.client;
     if (!client?.running) return;
     const generation = this.generation;
-    const [state, messages, models, commands, stats] = await Promise.all([
-      client.request<PiState>({ type: "get_state" }),
-      client.request<{ messages?: PiMessage[] }>({ type: "get_messages" }).then((data) => data?.messages ?? []),
-      client.request<{ models?: PiModel[] }>({ type: "get_available_models" }).then((data) => data?.models ?? []).catch(() => []),
-      client.request<{ commands?: PiCommand[] }>({ type: "get_commands" }).then((data) => data?.commands ?? []).catch(() => []),
-      client.request<PiSessionStats>({ type: "get_session_stats" }).catch(() => undefined),
-    ]);
-    if (generation !== this.generation) return;
-    this.applyState(state);
-    const snapshot: ChatSnapshot = {
-      state: this.state,
-      messages: sanitizeMessages(messages),
-      models: models.map(compactModel),
-      commands: commands.map(({ name, description, source }) => ({ name, description: description ?? "", source })),
-      ...(stats ? { stats } : {}),
-    };
-    this.options.post({ version: 1, type: "snapshot", snapshot });
+    // Anything still queued predates get_messages and is superseded by the snapshot.
+    this.discardQueue();
+    this.snapshotGate = "before";
+    this.heldEvents = [];
+    try {
+      const [state, messages, models, commands, stats] = await Promise.all([
+        client.request<PiState>({ type: "get_state" }),
+        client.request<{ messages?: PiMessage[] }>({ type: "get_messages" }).then((data) => {
+          // Fallback for clients that do not report responses synchronously.
+          if (this.snapshotGate === "before") this.snapshotGate = "after";
+          return data?.messages ?? [];
+        }),
+        client.request<{ models?: PiModel[] }>({ type: "get_available_models" }).then((data) => data?.models ?? []).catch(() => []),
+        client.request<{ commands?: PiCommand[] }>({ type: "get_commands" }).then((data) => data?.commands ?? []).catch(() => []),
+        client.request<PiSessionStats>({ type: "get_session_stats" }).catch(() => undefined),
+      ]);
+      if (generation !== this.generation) return;
+      this.applyState(state);
+      const snapshot: ChatSnapshot = {
+        state: this.state,
+        messages: sanitizeMessages(messages),
+        models: models.map(compactModel),
+        commands: commands.map(({ name, description, source }) => ({ name, description: description ?? "", source })),
+        ...(stats ? { stats } : {}),
+      };
+      this.options.post({ version: 1, type: "snapshot", snapshot });
+    } finally {
+      const held = this.heldEvents;
+      this.snapshotGate = "idle";
+      this.heldEvents = [];
+      if (generation === this.generation) for (const event of held) this.enqueue(event);
+    }
   }
 
   async dispose(): Promise<void> {
@@ -196,6 +226,11 @@ export class ChatSession {
         onEvent: (event) => {
           if (generation === this.generation) this.handleEvent(event);
         },
+        onResponse: ({ command }) => {
+          if (generation === this.generation && command === "get_messages" && this.snapshotGate === "before") {
+            this.snapshotGate = "after";
+          }
+        },
         onExit: ({ code, signal, stderr, expected }) => {
           if (generation !== this.generation) return;
           this.flush();
@@ -212,8 +247,15 @@ export class ChatSession {
       });
       await client.start();
     } catch (error) {
-      this.options.post({ version: 1, type: "process", status: "exited", error: errorMessage(error) });
+      if (generation === this.generation) {
+        this.options.post({ version: 1, type: "process", status: "exited", error: errorMessage(error) });
+      }
       throw error;
+    }
+    if (this.disposed || generation !== this.generation) {
+      // Disposed or restarted while Pi was starting: do not leave an orphaned process.
+      await client.stop();
+      throw new Error("Pi Chat startup was cancelled.");
     }
     this.client = client;
     try {
@@ -275,10 +317,21 @@ export class ChatSession {
   }
 
   private enqueue(event: PiEvent): void {
+    if (this.snapshotGate === "before") return;
+    if (this.snapshotGate === "after") {
+      this.heldEvents.push(event);
+      return;
+    }
     const sanitized = sanitizeEvent(event);
     if (!sanitized) return;
     this.queue.push(sanitized);
     this.flushTimer ??= setTimeout(() => this.flush(), EVENT_FLUSH_MS);
+  }
+
+  private discardQueue(): void {
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = undefined;
+    this.queue = [];
   }
 
   private flush(): void {

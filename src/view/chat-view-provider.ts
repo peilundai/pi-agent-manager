@@ -316,7 +316,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       "Delete",
     );
     if (answer !== "Delete") return;
-    if (this.session.sessionFile === path) await this.session.newChat();
+    if (this.session.sessionFile === path) {
+      await this.session.newChat();
+      if (this.session.sessionFile === path) {
+        // An extension vetoed new_session; Pi is still attached to this transcript.
+        this.notice("warning", "This chat is still active, so it was not deleted.");
+        return;
+      }
+    }
     await this.options.repository.delete(target);
     await this.refreshSessions();
   }

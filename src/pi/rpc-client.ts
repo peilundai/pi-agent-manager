@@ -16,6 +16,11 @@ export interface RpcSpawnOptions {
 export interface RpcClientListener {
   onEvent(event: PiEvent): void;
   onExit(info: { code: number | null; signal: NodeJS.Signals | null; stderr: string; expected: boolean }): void;
+  /**
+   * Called synchronously when a response is read, before its promise settles. Responses and
+   * events share one ordered stream, so this marks the exact boundary between them.
+   */
+  onResponse?(response: { command: string; success: boolean }): void;
 }
 
 /** Spawn function seam for tests. */
@@ -157,6 +162,7 @@ export class PiRpcClient {
       if (!pending || typeof response.id !== "string") return;
       this.pending.delete(response.id);
       clearTimeout(pending.timer);
+      this.listener.onResponse?.({ command: response.command, success: response.success });
       if (response.success) pending.resolve(response.data);
       else pending.reject(new RpcError(response.error || `Pi rejected “${response.command}”.`, response.command));
       return;
