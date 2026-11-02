@@ -176,7 +176,7 @@
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
     "@vitest/coverage-v8": "3.2.7",
-    "@vscode/vsce": "^3.6.0",
+    "@vscode/vsce": "^4.1.0",
     "esbuild": "^0.25.9",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
