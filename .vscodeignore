@@ -15,3 +15,7 @@ tsconfig.json
 vitest.config.ts
 package-lock.json
 *.vsix
+test-results/**
+playwright-report/**
+playwright.config.ts
+vitest.e2e.config.ts

@@ -6,7 +6,7 @@ import globals from "globals";
 
 export default [
   {
-    ignores: ["dist/**", "coverage/**", "node_modules/**"],
+    ignores: ["dist/**", "coverage/**", "node_modules/**", "test-results/**", "playwright-report/**"],
   },
   {
     ...js.configs.recommended,
@@ -38,6 +38,14 @@ export default [
       "no-undef": "off",
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-explicit-any": "error"
+    },
+  },
+  {
+    // Playwright fixtures use `({}, use) => …`, which these rules misread as React hooks.
+    files: ["test/ui/**/*.ts"],
+    rules: {
+      "no-empty-pattern": "off",
+      "react-hooks/rules-of-hooks": "off",
     },
   },
 ];
