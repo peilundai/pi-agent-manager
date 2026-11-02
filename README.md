@@ -1,101 +1,105 @@
-# Pi Agent Manager
+# Pi Chat for VS Code
 
-Run real [Pi coding agent](https://github.com/badlogic/pi-mono) terminal sessions beside your editor. Pi Agent Manager keeps the Pi TUI intact and adds a compact, workspace-scoped shell for session history, tabs, status, lifecycle actions, and editor context.
+Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar. The look, feel and flow follow the Claude Code extension, in Pi's own colors.
+
+<p align="center">
+  <img src="docs/images/chat-dark.png" width="360" alt="Pi Chat in a dark theme" />
+  <img src="docs/images/chat-light.png" width="360" alt="Pi Chat in a light theme" />
+</p>
+
+## Zero setup
+
+If `pi` already works in your terminal, Pi Chat works too. It runs your installed CLI in RPC mode (`pi --mode rpc`), so it uses your existing:
+
+- providers, API keys and logins,
+- default model and thinking level,
+- skills, prompt templates and extensions,
+- session history in `~/.pi/agent/sessions`.
+
+The extension adds no accounts, keys or configuration of its own.
 
 ## Features
 
-- Real Pi TUI sessions backed by pseudoterminals, with terminal scrollback preserved while switching tabs.
-- A Pi view in VS Code's Secondary Side Bar with horizontal live-session tabs and a searchable, date-grouped history pane.
-- Live `starting`, `working`, `waiting`, `stopped`, and `failed` status indicators.
-- Persistent open tabs, active tab, session-pane layout, collapsed groups, and workspace session history.
-- Session rename, detach, stop, resume, archive, restore, and guarded delete actions.
-- Clickable HTTP(S) links and workspace file locations from terminal output.
-- Selected-code insertion with `Cmd+L` on macOS or `Ctrl+L` on Windows and Linux.
-- Responsive layouts, VS Code theme colors, keyboard navigation, and reduced-motion support.
+- **Chat in the Secondary Side Bar.** Click the π icon in an editor title bar, or run **Pi: Open Pi Chat**.
+- **Streaming transcript.** Markdown with syntax highlighting, collapsible thinking, and a status dot per step.
+- **Tool cards** for `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` and custom tools:
+  - one-line summaries (`⎿ Read 120 lines`),
+  - inline diffs for edits and writes,
+  - command output,
+  - click a path to open the file.
+- **Extension dialogs.** Pi extension `confirm`, `select`, `input` and `editor` prompts appear as inline cards. Notifications appear as notices.
+- **Composer:**
+  - <kbd>Enter</kbd> sends and <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a new line.
+  - <kbd>Esc</kbd> interrupts Pi while it works.
+  - Messages sent while Pi works are queued as follow-ups. <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> steers immediately instead.
+  - <kbd>↑</kbd> recalls earlier prompts.
+- **`/` menu.** Pi's prompt templates, skills and extension commands, plus `/new`, `/compact`, `/model`, `/rename` and `/history`.
+- **`@` mentions.** Fuzzy workspace file search.
+- **Images.** Paste or drop screenshots, or attach files with <kbd>+</kbd>.
+- **Model pill.** Switch model and thinking level, with a context-usage ring showing tokens and cost.
+- **Past chats.** A searchable list grouped by Today, Yesterday, Last 7 Days and so on. Resume or delete chats, and rename the current one from the header.
+- **Add selection.** Select code and press <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> to insert a fenced snippet with its path and lines.
+- **Themes.** Light, dark and high-contrast, with Pi's palette for accents, status, diffs and syntax colors.
+
+| Model & thinking picker | Extension confirm dialog |
+|---|---|
+| <img src="docs/images/model-picker-dark.png" width="320" alt="Model picker" /> | <img src="docs/images/dialog-dark.png" width="320" alt="Dialog card" /> |
 
 ## Requirements
 
 - VS Code 1.106 or newer.
-- Pi installed and available as `pi` on VS Code's process path.
-- A VSIX whose target matches the machine running the VS Code extension host.
+- Pi installed and working in a terminal:
 
-Pi Agent Manager is a workspace extension and contains a native `node-pty` runtime. The relevant platform is therefore the extension host, not necessarily the machine displaying the VS Code UI. A local window uses the local machine; Remote SSH, containers, and similar workspaces need a package built for the remote extension host.
+  ```sh
+  npm install -g @earendil-works/pi-coding-agent
+  pi            # sign in / pick a provider once
+  ```
 
-Platform-specific packages are supported for macOS x64/arm64, Windows x64/arm64, and glibc Linux x64/arm64. Each package must be built and smoke-tested on its matching host; the project does not claim native cross-compilation. Alpine/musl packages are not yet verified.
+If VS Code can't find `pi`, the view offers **Choose Executable…**. You can also set `piChat.command` to an absolute path.
 
-Verify Pi before starting VS Code:
+Pi is looked up in this order:
 
-```sh
-pi --version
-```
+1. The `piChat.command` setting.
+2. `PATH`.
+3. npm's global bin directory.
+4. Homebrew and `/usr/local/bin`.
 
-If Pi is installed elsewhere, set `piAgent.command` to its absolute executable path.
+The executable's directory is added to the child process `PATH`, so nvm-managed Node installs work when VS Code is launched from the Dock.
 
-## Open, start, and resume
-
-Open the manager with the Pi icon in an editor title bar or run **Pi: Open Agent Manager** from the Command Palette. The manager appears in the Secondary Side Bar.
-
-Choose **New Agent**, the plus button in the tab strip, or run **Pi: New Agent** to start Pi in the current workspace. Select a stopped session in history to resume its transcript with `pi --session`.
-
-Pi Agent Manager scopes discovery, persisted view state, and process working directories to one workspace folder. In a multi-root window, activate it from an editor that belongs to the intended folder.
-
-## Send selected code
-
-Select code in an editor and press `Cmd+L` on macOS or `Ctrl+L` on Windows and Linux. With no selection, the current line is used. The manager opens and inserts a workspace-relative path, one-based line range, language-tagged fenced code block, and the selected text into the active waiting Pi input.
-
-The insertion is a bracketed paste only: it does not submit the prompt. Review or extend the text in Pi, then submit it yourself.
-
-## Sessions and status
-
-The history pane groups sessions into Today, Yesterday, Last 7 Days, Last 30 Days, Older, and Archived. Search matches session titles and transcript metadata.
-
-- **Starting** — the Pi process is launching.
-- **Working** — Pi is processing a request.
-- **Waiting** — Pi is ready for input.
-- **Stopped** — the process is not running; the transcript can be resumed.
-- **Failed** — Pi exited unexpectedly or could not start. The transcript remains available when one exists.
-
-An explicit Pi session name, including one set with `/name`, takes precedence over the locally generated first-prompt title and updates the tab and history without reopening the manager.
-
-## Close, stop, archive, and delete
-
-Closing a tab detaches its UI by default; Pi continues running. Use **Stop** when you intend to terminate the process. You can change tab-close behavior with `piAgent.closeBehavior`.
-
-Archiving changes only workspace-scoped extension metadata. It moves the session row to Archived and detaches its tab without moving or rewriting Pi's JSONL transcript. Restore reverses that metadata change.
-
-Delete is permanent. It requires an in-view confirmation followed by a VS Code modal confirmation, stops a matching live process, then removes the selected JSONL transcript and its same-name sidecar directory. Use it only for disposable sessions.
-
-## Configuration
+## Settings
 
 | Setting | Default | Description |
-| --- | --- | --- |
-| `piAgent.command` | `pi` | Executable name or absolute path used to start Pi. |
-| `piAgent.closeBehavior` | `detach` | Whether closing a tab detaches its UI or stops Pi. Values: `detach`, `stop`. |
+|---|---|---|
+| `piChat.command` | `pi` | Executable name or absolute path of the Pi CLI. |
+| `piChat.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]` or `["--offline"]`. Mode and session flags are managed by the extension. |
 
-## Privacy
+## Keyboard shortcuts
 
-Pi Agent Manager sends no telemetry and makes no network requests or hidden model calls. It reads Pi session metadata for the active workspace, launches the configured Pi executable locally, and stores presentation/archive state in VS Code's workspace storage. Pi itself and any Pi extensions or model providers retain their own behavior and privacy terms.
+| Shortcut | Action |
+|---|---|
+| <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> | Add the editor selection (or current line) to the chat |
+| <kbd>⌘Esc</kbd> / <kbd>Ctrl+Esc</kbd> | Focus the chat input |
+| <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in the chat) | New chat |
+| <kbd>Esc</kbd> (while working) | Interrupt Pi |
+
+## Notes
+
+- Chats are scoped to the workspace folder of the active editor, or the first folder in a multi-root window.
+- Pi's [project trust](https://github.com/earendil-works/pi) applies as in the CLI. RPC mode cannot show the trust prompt, so trust a project once with `/trust` in the terminal, or pass `--approve` through `piChat.extraArgs`.
+- Built-in TUI-only commands (for example `/settings`) are not available over RPC.
 
 ## Development
 
 ```sh
 npm install
-npm run check
-npm test
-npm run build
-npm run package
+npm run check      # TypeScript + ESLint
+npm test           # Vitest (unit + webview component tests)
+npm run build      # esbuild bundles into dist/
+npm run package    # check, test, build, then a verified universal .vsix
 ```
 
-Open this repository in VS Code and press `F5` to launch an Extension Development Host. The production bundles are written to `dist/`.
-
-`npm run package` derives the current build host's VSCE target, includes only its matching native `node-pty` files, writes target metadata into `pi-agent-manager-0.1.0.vsix`, extracts the result, and runs a native PTY smoke test. Run it separately on every supported host needed for distribution. Marketplace publishing should upload each resulting VSIX as its platform-specific variant; preserve target-scoped copies outside the repository if collecting artifacts from multiple build hosts.
-
-This workflow deliberately refuses unsupported architectures and Alpine/musl instead of producing a misleading package. It is not a cross-compiler: native packages are valid only when built and verified on their matching extension host platform.
-
-## Known follow-up features
-
-Version 0.1.0 does not include audio cues, fork/rewind UI, or multi-agent panel orchestration. These are planned as follow-up capabilities rather than shipped features.
+See [docs/architecture.md](docs/architecture.md) for how the extension talks to Pi.
 
 ## License
 
-MIT License.
+MIT
