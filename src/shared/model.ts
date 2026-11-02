@@ -14,22 +14,3 @@ export interface SessionSummary {
   archived: boolean;
   status: SessionStatus;
 }
-
-export interface TerminalTab {
-  tabId: string;
-  sessionId?: string;
-  sessionPath?: string;
-  title: string;
-  status: SessionStatus;
-  attached: boolean;
-}
-
-export interface ViewSnapshot {
-  sessions: SessionSummary[];
-  tabs: TerminalTab[];
-  activeTabId?: string;
-  paneVisible: boolean;
-  paneWidth: number;
-  collapsedGroups: string[];
-  setupError?: SetupErrorState;
-}

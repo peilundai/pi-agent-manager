@@ -18,7 +18,6 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "resources/**/*.ts",
     "test/**/*.ts",
     "test/**/*.tsx",
     "vitest.config.ts"

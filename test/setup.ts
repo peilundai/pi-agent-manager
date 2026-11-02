@@ -2,34 +2,19 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
-Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
-  configurable: true,
-  value: () => null,
-});
-
-class ResizeObserverMock implements ResizeObserver {
-  disconnect(): void {}
-  observe(): void {}
-  unobserve(): void {}
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => true,
+    }),
+  });
+  afterEach(() => cleanup());
 }
-
-Object.defineProperty(globalThis, "ResizeObserver", {
-  configurable: true,
-  value: ResizeObserverMock,
-});
-
-Object.defineProperty(window, "matchMedia", {
-  configurable: true,
-  value: (query: string): MediaQueryList => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    dispatchEvent: () => true,
-  }),
-});
-
-afterEach(() => cleanup());

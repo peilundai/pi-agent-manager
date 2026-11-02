@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  asBracketedPaste,
   formatEditorSelection,
   isSupportedDocumentScheme,
 } from "../src/editor/selection";
@@ -18,8 +17,6 @@ describe("formatEditorSelection", () => {
     expect(text).toBe(
       "From `src/auth.ts` lines 8-12:\n\n```typescript\nexport function refresh() {}\n```\n\n",
     );
-    expect(asBracketedPaste(text)).toBe(`\u001b[200~${text}\u001b[201~`);
-    expect(asBracketedPaste(text)).not.toContain("\r");
   });
 
   it("uses a longer fence when source contains backticks", () => {

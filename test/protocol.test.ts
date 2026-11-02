@@ -2,98 +2,35 @@ import { describe, expect, it } from "vitest";
 import { isHostMessage, isWebviewMessage } from "../src/shared/protocol";
 
 describe("isWebviewMessage", () => {
-  it("accepts a bounded terminal input message", () => {
-    expect(
-      isWebviewMessage({
-        version: 1,
-        type: "terminal.input",
-        tabId: "tab-1",
-        data: "hello",
-      }),
-    ).toBe(true);
+  it("accepts valid messages", () => {
+    expect(isWebviewMessage({ version: 1, type: "ready" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "prompt", text: "hi", images: [], mode: "send" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "prompt", text: "", images: [{ data: "AA", mimeType: "image/png" }], mode: "steer" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "chat.open", path: "/s/a.jsonl" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "thinking.set", level: "xhigh" })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "dialog.respond", response: { id: "d", confirmed: false } })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "dialog.respond", response: { id: "d", value: "" } })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "file.open", path: "src/a.ts", line: 3 })).toBe(true);
   });
 
-  it("rejects unknown versions", () => {
+  it("rejects malformed or unsafe messages", () => {
     expect(isWebviewMessage({ version: 2, type: "ready" })).toBe(false);
-  });
-
-  it("rejects oversized terminal input", () => {
-    expect(
-      isWebviewMessage({
-        version: 1,
-        type: "terminal.input",
-        tabId: "tab-1",
-        data: "x".repeat(1_048_577),
-      }),
-    ).toBe(false);
-  });
-
-  it("accepts only the bounded setup recovery actions", () => {
-    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "openFolder" })).toBe(true);
-    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "chooseExecutable" })).toBe(true);
-    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "openSettings" })).toBe(true);
-    expect(isWebviewMessage({ version: 1, type: "setup.action", action: "runShell" })).toBe(false);
-  });
-
-  it("accepts only boolean webview focus state", () => {
-    expect(isWebviewMessage({ version: 1, type: "view.focus", focused: true })).toBe(true);
-    expect(isWebviewMessage({ version: 1, type: "view.focus", focused: false })).toBe(true);
-    expect(isWebviewMessage({ version: 1, type: "view.focus", focused: "yes" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "prompt", text: "  ", images: [], mode: "send" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "prompt", text: "hi", images: [{ data: "AA", mimeType: "image/svg+xml" }], mode: "send" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "prompt", text: "hi", images: [], mode: "later" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "chat.open", path: "/etc/passwd" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "url.open", url: "javascript:alert(1)" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "thinking.set", level: "ultra" })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "dialog.respond", response: { id: "d" } })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "file.open", path: "a", line: -1 })).toBe(false);
+    expect(isWebviewMessage({ version: 1, type: "unknown" })).toBe(false);
   });
 });
 
 describe("isHostMessage", () => {
-  it("accepts a bounded terminal output message", () => {
-    expect(
-      isHostMessage({
-        version: 1,
-        type: "terminal.output",
-        tabId: "tab-1",
-        data: "Pi is ready",
-      }),
-    ).toBe(true);
-  });
-
-  it("rejects oversized output and malformed snapshots", () => {
-    expect(
-      isHostMessage({
-        version: 1,
-        type: "terminal.output",
-        tabId: "tab-1",
-        data: "x".repeat(262_145),
-      }),
-    ).toBe(false);
-    expect(
-      isHostMessage({
-        version: 1,
-        type: "state.replace",
-        snapshot: { sessions: "not-an-array" },
-      }),
-    ).toBe(false);
-  });
-
-  it("accepts actionable workspace and executable setup errors in snapshots", () => {
-    const base = {
-      sessions: [],
-      tabs: [],
-      paneVisible: true,
-      paneWidth: 248,
-      collapsedGroups: [],
-    };
-    expect(isHostMessage({
-      version: 1,
-      type: "state.replace",
-      snapshot: { ...base, setupError: { kind: "workspace" } },
-    })).toBe(true);
-    expect(isHostMessage({
-      version: 1,
-      type: "state.replace",
-      snapshot: { ...base, setupError: { kind: "executable", message: "Pi was not found." } },
-    })).toBe(true);
-    expect(isHostMessage({
-      version: 1,
-      type: "state.replace",
-      snapshot: { ...base, setupError: { kind: "executable", message: "x".repeat(8_193) } },
-    })).toBe(false);
+  it("checks the envelope", () => {
+    expect(isHostMessage({ version: 1, type: "pi.events", events: [] })).toBe(true);
+    expect(isHostMessage({ version: 1, type: "evil" })).toBe(false);
+    expect(isHostMessage(null)).toBe(false);
   });
 });

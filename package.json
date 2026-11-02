@@ -1,10 +1,15 @@
 {
   "name": "pi-agent-manager",
-  "displayName": "Pi Agent Manager",
-  "description": "Run and manage Pi coding-agent sessions in VS Code's Secondary Side Bar.",
-  "version": "0.1.0",
+  "displayName": "Pi Chat",
+  "description": "Chat with your local Pi coding agent from VS Code's side bar, Claude Code style.",
+  "version": "0.2.0",
   "publisher": "peilun-dai",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peilundai/pi-agent-manager.git"
+  },
+  "homepage": "https://github.com/peilundai/pi-agent-manager#readme",
   "engines": {
     "vscode": "^1.106.0"
   },
@@ -15,8 +20,9 @@
   "keywords": [
     "pi",
     "coding agent",
-    "agent manager",
-    "terminal"
+    "ai",
+    "chat",
+    "assistant"
   ],
   "galleryBanner": {
     "color": "#181818",
@@ -25,7 +31,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Pi Agent Manager launches a local executable and reads workspace-scoped Pi session files."
+      "description": "Pi Chat launches the local pi executable and reads workspace-scoped Pi session files."
     }
   },
   "extensionKind": [
@@ -34,52 +40,123 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      { "command": "piAgent.open", "title": "Pi: Open Agent Manager", "icon": "media/pi.svg" },
-      { "command": "piAgent.newSession", "title": "Pi: New Agent", "icon": "$(add)" },
-      { "command": "piAgent.sendSelection", "title": "Pi: Send Selection", "icon": "$(send)" }
+      {
+        "command": "piChat.open",
+        "title": "Open Pi Chat",
+        "category": "Pi",
+        "icon": "media/pi.svg"
+      },
+      {
+        "command": "piChat.newChat",
+        "title": "New Chat",
+        "category": "Pi",
+        "icon": "$(add)"
+      },
+      {
+        "command": "piChat.history",
+        "title": "Past Chats",
+        "category": "Pi",
+        "icon": "$(history)"
+      },
+      {
+        "command": "piChat.sendSelection",
+        "title": "Add Selection to Pi Chat",
+        "category": "Pi"
+      },
+      {
+        "command": "piChat.focusInput",
+        "title": "Focus Pi Chat Input",
+        "category": "Pi"
+      }
     ],
     "keybindings": [
-      { "command": "piAgent.newSession", "key": "ctrl+n", "mac": "cmd+n", "when": "piAgent.webviewFocused" },
-      { "command": "piAgent.sendSelection", "key": "ctrl+l", "mac": "cmd+l", "when": "editorTextFocus && resourceScheme =~ /^(file|untitled|vscode-remote)$/" }
+      {
+        "command": "piChat.sendSelection",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "piChat.focusInput",
+        "key": "ctrl+escape",
+        "mac": "cmd+escape"
+      },
+      {
+        "command": "piChat.newChat",
+        "key": "ctrl+n",
+        "mac": "cmd+n",
+        "when": "piChat.focused"
+      }
     ],
     "viewsContainers": {
-      "secondarySidebar": [{ "id": "piAgent", "title": "Pi", "icon": "media/pi.svg" }]
+      "secondarySidebar": [
+        {
+          "id": "piChat",
+          "title": "Pi",
+          "icon": "media/pi.svg"
+        }
+      ]
     },
     "views": {
-      "piAgent": [{ "type": "webview", "id": "piAgent.view", "name": "Agents", "icon": "media/pi.svg" }]
+      "piChat": [
+        {
+          "type": "webview",
+          "id": "piChat.view",
+          "name": "Pi",
+          "icon": "media/pi.svg"
+        }
+      ]
     },
     "menus": {
-      "editor/title": [{ "command": "piAgent.open", "group": "navigation@1" }]
+      "editor/title": [
+        {
+          "command": "piChat.open",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "piChat.sendSelection",
+          "group": "pi@1",
+          "when": "editorHasSelection"
+        }
+      ]
     },
     "configuration": {
-      "title": "Pi Agent Manager",
+      "title": "Pi Chat",
       "properties": {
-        "piAgent.command": { "type": "string", "default": "pi", "description": "Executable name or absolute path used to start Pi." },
-        "piAgent.closeBehavior": { "type": "string", "enum": ["detach", "stop"], "default": "detach", "description": "Whether closing a session tab detaches its UI or stops Pi." }
+        "piChat.command": {
+          "type": "string",
+          "default": "pi",
+          "description": "Executable name or absolute path of the Pi CLI."
+        },
+        "piChat.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments passed to `pi --mode rpc` (for example `--offline` or `--provider anthropic`). Session and mode flags are managed by the extension."
+        }
       }
     }
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit && eslint .",
-    "postinstall": "npm run prepare:native",
-    "prepare:native": "node scripts/prepare-node-pty.mjs",
-    "verify:package": "node scripts/verify-vsix.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npm run check && npm test && npm run build && node scripts/package-vsix.mjs"
+    "package": "npm run check && npm test && npm run build && node scripts/package-vsix.mjs",
+    "verify:package": "node scripts/verify-vsix.mjs"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.36",
-    "@xterm/addon-fit": "0.12.0-beta.292",
-    "@xterm/addon-search": "0.17.0-beta.292",
-    "@xterm/addon-unicode11": "0.10.0-beta.292",
-    "@xterm/addon-web-links": "0.13.0-beta.292",
-    "@xterm/addon-webgl": "0.20.0-beta.291",
-    "@xterm/xterm": "6.1.0-beta.292",
-    "node-pty": "1.1.0",
+    "highlight.js": "^11.12.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
@@ -100,6 +177,6 @@
     "jsdom": "^26.1.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
-    "yauzl": "^3.2.1"
+    "yauzl": "^3.4.0"
   }
 }

@@ -60,7 +60,3 @@ export function formatEditorSelection(context: EditorSelectionContext): string {
   const path = context.relativePath.replace(/`/g, "\\`");
   return `From \`${path}\` ${location}:\n\n${fence}${languageTag(context.languageId)}\n${text}\n${fence}\n\n`;
 }
-
-export function asBracketedPaste(text: string): string {
-  return `\u001b[200~${text}\u001b[201~`;
-}
