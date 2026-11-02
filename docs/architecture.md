@@ -44,5 +44,9 @@ Host messages are applied once per animation frame. Markdown is split into blank
 
 ## Testing
 
-- **Unit tests:** `npm test` covers the JSONL decoder, the RPC client (against `test/fixtures/fake-pi.mjs`), `ChatSession` (fake client), the reducer, tool formatting, protocol validation, sanitization, editor helpers, Markdown splitting, VSIX verification, and React component flows.
-- **Manual end-to-end check:** run the real `pi` CLI with a custom OpenAI-compatible provider in `models.json` pointing at a local mock server. Bridge `ChatSession` to the built webview in Playwright, then screenshot light and dark themes.
+| Suite | Command | What it covers |
+|---|---|---|
+| Unit + components | `npm test` | JSONL decoder; RPC client against `test/fixtures/fake-pi.mjs`; `ChatSession` with a fake client; `ChatViewProvider` and activation against `test/vscode-mock.ts`; reducer, tool formatting, protocol, sanitizer, editor helpers; React components (composer, pickers, Markdown, tool cards, dialogs) |
+| Coverage | `npm run test:coverage` | Same, with V8 thresholds in `vitest.config.ts` |
+| Real Pi E2E | `npm run test:e2e` | The pinned `@earendil-works/pi-coding-agent` CLI in RPC mode, using `test/e2e/support/` (mock OpenAI-compatible server, temporary HOME, confirm-before-bash extension). Checks the protocol contract, a full tool turn with a dialog, a declined tool, extension commands, abort, provider errors, resume/hydration parity, model switching and new chats |
+| Webview UI | `npm run test:ui` | Playwright drives the built `dist/` webview bridged to a real `ChatSession` (`test/ui/harness.ts`); screenshots in both themes |
