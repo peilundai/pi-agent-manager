@@ -20,3 +20,4 @@ playwright-report/**
 playwright.config.ts
 vitest.e2e.config.ts
 .claude/**
+release/**

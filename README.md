@@ -2,7 +2,19 @@
 
 [![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
 
-Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar. The look, feel and flow follow the Claude Code extension, in Pi's own colors.
+Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar: streaming answers, tool cards with diffs, and your past chats, drawn in Pi's own colors.
+
+> **Unofficial, preview.** Pi Agent Manager is a community extension. It is not affiliated with or endorsed by the Pi project or its authors. See [Disclaimer and acknowledgements](#disclaimer-and-acknowledgements).
+
+## Requirements
+
+- VS Code 1.106 or newer.
+- Pi installed, signed in and working in a terminal:
+
+  ```sh
+  npm install -g @earendil-works/pi-coding-agent
+  pi            # sign in / pick a provider once
+  ```
 
 <p align="center">
   <img src="docs/images/chat-dark.png" width="360" alt="Pi Agent Manager in a dark theme" />
@@ -47,15 +59,7 @@ The extension adds no accounts, keys or configuration of its own.
 |---|---|
 | <img src="docs/images/model-picker-dark.png" width="320" alt="Model picker" /> | <img src="docs/images/dialog-dark.png" width="320" alt="Dialog card" /> |
 
-## Requirements
-
-- VS Code 1.106 or newer.
-- Pi installed and working in a terminal:
-
-  ```sh
-  npm install -g @earendil-works/pi-coding-agent
-  pi            # sign in / pick a provider once
-  ```
+## Finding the pi executable
 
 If VS Code can't find `pi`, the view offers **Choose Executable…**. You can also set `piAgentManager.command` to an absolute path.
 
@@ -84,11 +88,17 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 | <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in the chat) | New chat |
 | <kbd>Esc</kbd> (while working) | Interrupt Pi |
 
+<kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> replaces VS Code's built-in **Expand Line Selection** while an editor has focus, as other chat extensions do. To keep the built-in shortcut, rebind **Pi Agent Manager: Add Selection to Chat** in **Keyboard Shortcuts**.
+
 ## Notes
 
 - Chats are scoped to the workspace folder of the active editor, or the first folder in a multi-root window.
 - Pi's [project trust](https://github.com/earendil-works/pi) applies as in the CLI. RPC mode cannot show the trust prompt, so trust a project once with `/trust` in the terminal, or pass `--approve` through `piAgentManager.extraArgs`.
 - Built-in TUI-only commands (for example `/settings`) are not available over RPC.
+
+## Privacy
+
+Pi Agent Manager collects no telemetry and makes no network requests of its own. Your prompts, files and images go only to your local `pi` process, which sends them to whichever model provider you configured in Pi.
 
 ## Development
 
@@ -111,10 +121,17 @@ The end-to-end suites need no API key. They point a custom OpenAI-compatible `mo
 - the real-Pi and Playwright suites
 - a packaged `.vsix` artifact
 
-Pushing a `vX.Y.Z` tag that matches `package.json` publishes a GitHub Release with the VSIX and its CHANGELOG notes. Dependabot keeps npm packages and actions current.
+Pushing a `vX.Y.Z` tag that matches `package.json` publishes the VSIX to the VS Code Marketplace and Open VSX and creates a GitHub Release with its CHANGELOG notes. See [docs/PUBLISHING.md](docs/PUBLISHING.md). Dependabot keeps npm packages and actions current.
 
 See [docs/architecture.md](docs/architecture.md) for how the extension talks to Pi.
 
+## Disclaimer and acknowledgements
+
+- Pi Agent Manager is an independent, unofficial client for the [Pi coding agent](https://github.com/earendil-works/pi). It is not affiliated with, endorsed by or sponsored by the Pi project or its authors. "Pi" refers to that third-party project.
+- The extension does not include or redistribute any Pi code. It starts the `pi` executable you installed yourself, so Pi's own license and terms apply to it.
+- The color palette is adapted from Pi's MIT-licensed themes (Copyright (c) Mario Zechner). Bundled third-party packages and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- The π icon and mascot are original artwork for this extension.
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

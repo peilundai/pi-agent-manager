@@ -1,33 +1,41 @@
 {
   "name": "pi-agent-manager",
   "displayName": "Pi Agent Manager",
-  "description": "Chat with your local Pi coding agent from VS Code's side bar, Claude Code style.",
+  "description": "Unofficial side-bar chat for the Pi coding agent. Runs your locally installed and configured pi CLI.",
   "version": "0.2.0",
   "publisher": "peilun-dai",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e1f22",
+    "theme": "dark"
+  },
+  "preview": true,
+  "pricing": "Free",
   "repository": {
     "type": "git",
     "url": "https://github.com/peilundai/pi-agent-manager.git"
   },
   "homepage": "https://github.com/peilundai/pi-agent-manager#readme",
+  "bugs": {
+    "url": "https://github.com/peilundai/pi-agent-manager/issues"
+  },
   "engines": {
     "vscode": "^1.106.0"
   },
   "categories": [
     "AI",
-    "Other"
+    "Chat"
   ],
   "keywords": [
     "pi",
+    "pi coding agent",
     "coding agent",
     "ai",
     "chat",
-    "assistant"
+    "agent",
+    "unofficial"
   ],
-  "galleryBanner": {
-    "color": "#181818",
-    "theme": "dark"
-  },
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
