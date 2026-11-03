@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    # Dependabot branches are tested through their pull requests; running both
+    # doubles the macOS jobs and exhausts the runner quota.
+    branches-ignore: ["dependabot/**"]
     tags-ignore: ["**"]
   pull_request:
     branches: [main]
@@ -25,8 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -43,11 +45,12 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22]
         include:
+          # Node 20 is end-of-life; also check the current LTS line.
           - os: ubuntu-latest
-            node: 20
+            node: 24
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -59,8 +62,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -69,7 +72,7 @@ jobs:
       - name: Write coverage summary
         if: always()
         run: node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
@@ -81,8 +84,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -95,7 +98,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Webview UI tests
         run: npm run test:ui
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ui-test-results
@@ -110,15 +113,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
       - run: npm run build
       - run: node scripts/package-vsix.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vsix
           path: "*.vsix"
