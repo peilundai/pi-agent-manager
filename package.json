@@ -80,6 +80,13 @@
         "category": "Pi Agent Manager"
       },
       {
+        "command": "piAgentManager.switchFolder",
+        "title": "Switch Workspace Folder",
+        "category": "Pi Agent Manager",
+        "icon": "$(folder)",
+        "enablement": "workspaceFolderCount > 1"
+      },
+      {
         "command": "piAgentManager.setEnvironmentSecret",
         "title": "Set Environment Secret…",
         "category": "Pi Agent Manager"
@@ -143,6 +150,12 @@
         {
           "command": "piAgentManager.open",
           "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "piAgentManager.switchFolder",
+          "when": "workspaceFolderCount > 1"
         }
       ],
       "editor/context": [

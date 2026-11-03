@@ -23,11 +23,16 @@ const session: SessionSummary = {
   status: "stopped",
 };
 
-function folder(path = "/work") {
-  return { name: "work", index: 0, uri: mock.Uri.file(path) } as unknown as WorkspaceFolder;
+function folder(path = "/work", name = "work", index = 0) {
+  return { name, index, uri: mock.Uri.file(path) } as unknown as WorkspaceFolder;
 }
 
-function setup(options: { workspace?: boolean; createClient?: () => Promise<FakeClient> } = {}) {
+function setup(
+  options: {
+    workspace?: boolean;
+    createClient?: (listener: ConstructorParameters<typeof FakeClient>[0]) => Promise<FakeClient>;
+  } = {},
+) {
   const posted: HostToWebviewMessage[] = [];
   let receive: (message: unknown) => void = () => undefined;
   const repository = {
@@ -36,13 +41,14 @@ function setup(options: { workspace?: boolean; createClient?: () => Promise<Fake
     delete: vi.fn(async () => undefined),
   };
   let client: FakeClient | undefined;
+  const clients: FakeClient[] = [];
   const provider = new ChatViewProvider({
     extensionUri: mock.Uri.file("/ext") as unknown as Uri,
     workspaceFolder: options.workspace === false ? undefined : folder(),
     repository,
     createClient: async (listener) => {
-      if (options.createClient) return options.createClient();
-      client = new FakeClient(listener);
+      client = options.createClient ? await options.createClient(listener) : new FakeClient(listener);
+      clients.push(client);
       return client;
     },
   });
@@ -67,7 +73,7 @@ function setup(options: { workspace?: boolean; createClient?: () => Promise<Fake
     await new Promise((resolve) => setTimeout(resolve, 10));
   };
   const ready = () => send({ version: 1, type: "ready" });
-  return { provider, posted, send, ready, repository, webview, client: () => client! };
+  return { provider, posted, send, ready, repository, webview, client: () => client!, clients };
 }
 
 beforeEach(() => resetVscodeMock());
@@ -109,9 +115,7 @@ describe("ChatViewProvider", () => {
 
   it("reports a missing Pi executable as a setup error", async () => {
     const { posted, ready } = setup({
-      createClient: async () => {
-        throw new PiCommandNotFoundError(["/usr/bin/pi"]);
-      },
+      createClient: () => Promise.reject(new PiCommandNotFoundError(["/usr/bin/pi"])),
     });
     await ready();
     expect(posted.at(-1)).toMatchObject({ type: "init", setupError: { kind: "executable" } });
@@ -292,5 +296,174 @@ describe("ChatViewProvider", () => {
     const { send } = setup();
     await send({ version: 1, type: "focus.changed", focused: true });
     expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", "piAgentManager.focused", true);
+  });
+});
+
+describe("ChatViewProvider multi-root folders", () => {
+  const work = folder("/work", "work", 0);
+  const other = folder("/other", "other", 1);
+  const editorIn = (target: WorkspaceFolder) => ({ document: { uri: mock.Uri.file(`${target.uri.fsPath}/a.ts`) } });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+  const inits = (posted: HostToWebviewMessage[]) => posted.filter((message) => message.type === "init");
+
+  beforeEach(() => {
+    mock.workspace.workspaceFolders = [work, other];
+    mock.workspace.getWorkspaceFolder.mockImplementation((uri: { fsPath: string }) =>
+      [work, other].find((candidate) => uri.fsPath.startsWith(`${candidate.uri.fsPath}/`)),
+    );
+  });
+
+  it("marks the init message as multi-root", async () => {
+    const { posted, ready } = setup();
+    await ready();
+    expect(posted[0]).toMatchObject({ type: "init", workspaceName: "work", multiRoot: true });
+  });
+
+  it("follows the active editor to another folder while the chat is empty", async () => {
+    const { provider, posted, ready, repository, clients } = setup();
+    await ready();
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    expect(inits(posted).at(-1)).toMatchObject({ workspaceName: "other", multiRoot: true });
+    expect(provider.workspaceFolder).toBe(other);
+    expect(repository.watch).toHaveBeenLastCalledWith("/other", expect.any(Function));
+    expect(repository.list).toHaveBeenLastCalledWith("/other");
+    expect(clients).toHaveLength(2);
+    expect(clients[0]?.running).toBe(false);
+    expect(clients[1]?.running).toBe(true);
+  });
+
+  it("keeps a chat with messages in its folder when the editor moves", async () => {
+    const { provider, posted, ready, clients } = setup({
+      createClient: async (listener) => new FakeClient(listener, { get_state: { sessionFile: "/s/one.jsonl", messageCount: 3 } }),
+    });
+    await ready();
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    expect(inits(posted).map((message) => message.workspaceName)).toEqual(["work"]);
+    expect(clients).toHaveLength(1);
+  });
+
+  it("keeps a running chat in its folder when the editor moves", async () => {
+    const { provider, ready, client, clients } = setup();
+    await ready();
+    client().listener.onEvent({ type: "agent_start" });
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    expect(clients).toHaveLength(1);
+  });
+
+  it("only changes scope, without starting Pi, before the view is ready", async () => {
+    const { provider, ready, repository, clients, posted } = setup();
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    expect(clients).toHaveLength(0);
+    await ready();
+    expect(posted[0]).toMatchObject({ type: "init", workspaceName: "other" });
+    expect(repository.list).toHaveBeenLastCalledWith("/other");
+    expect(clients).toHaveLength(1);
+  });
+
+  it("starts a new chat in the active editor's folder", async () => {
+    const { posted, ready, send, clients } = setup({
+      createClient: async (listener) => new FakeClient(listener, { get_state: { sessionFile: "/s/one.jsonl", messageCount: 3 } }),
+    });
+    await ready();
+    mock.window.activeTextEditor = editorIn(other);
+    await send({ version: 1, type: "chat.new" });
+    await settle();
+    expect(inits(posted).at(-1)).toMatchObject({ workspaceName: "other" });
+    expect(clients).toHaveLength(2);
+    expect(clients[0]?.requests.some((request) => request.type === "new_session")).toBe(false);
+  });
+
+  it("starts a new chat in place when the editor is in the same folder", async () => {
+    const { ready, send, clients } = setup();
+    await ready();
+    mock.window.activeTextEditor = editorIn(work);
+    await send({ version: 1, type: "chat.new" });
+    expect(clients).toHaveLength(1);
+    expect(clients[0]?.requests.some((request) => request.type === "new_session")).toBe(true);
+  });
+
+  it("switches folders from the picker", async () => {
+    const { posted, ready, send, clients } = setup();
+    await ready();
+    mock.window.showQuickPick.mockImplementation(async (items: Array<{ folder: WorkspaceFolder; description: string }>) => {
+      expect(items.map((item) => item.description)).toEqual(["current", ""]);
+      return items[1];
+    });
+    await send({ version: 1, type: "folder.pick" });
+    await settle();
+    expect(inits(posted).at(-1)).toMatchObject({ workspaceName: "other" });
+    expect(clients).toHaveLength(2);
+  });
+
+  it("asks before stopping a running chat to switch folders", async () => {
+    const { provider, ready, client, clients } = setup();
+    await ready();
+    client().listener.onEvent({ type: "agent_start" });
+    mock.window.showQuickPick.mockImplementation(async (items: unknown[]) => items[1]);
+    await provider.pickFolder();
+    expect(mock.window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining("still working"),
+      expect.objectContaining({ modal: true }),
+      "Stop and Switch",
+    );
+    expect(clients).toHaveLength(1);
+    mock.window.showWarningMessage.mockResolvedValue("Stop and Switch");
+    await provider.pickFolder();
+    expect(clients).toHaveLength(2);
+  });
+
+  it("moves to a remaining folder when the current one is removed", async () => {
+    const { provider, posted, ready, clients } = setup();
+    await ready();
+    mock.workspace.workspaceFolders = [other];
+    provider.workspaceFoldersChanged();
+    await settle();
+    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform });
+    expect(clients).toHaveLength(2);
+  });
+
+  it("asks for a folder when the last one is removed", async () => {
+    const { provider, posted, ready, clients } = setup();
+    await ready();
+    mock.workspace.workspaceFolders = [];
+    provider.workspaceFoldersChanged();
+    await settle();
+    expect(inits(posted).at(-1)).toMatchObject({ workspaceName: "", setupError: { kind: "workspace" } });
+    expect(clients[0]?.running).toBe(false);
+  });
+
+  it("does not cache a file search that finishes after the folder changed", async () => {
+    const { provider, posted, ready, send } = setup();
+    await ready();
+    let finish: (uris: unknown[]) => void = () => undefined;
+    mock.workspace.findFiles.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    await send({ version: 1, type: "files.search", requestId: 1, query: "" });
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    finish([mock.Uri.file("/work/old.ts")]);
+    await settle();
+    mock.workspace.findFiles.mockResolvedValueOnce([mock.Uri.file("/other/new.ts")]);
+    await send({ version: 1, type: "files.search", requestId: 2, query: "" });
+    expect(mock.workspace.findFiles).toHaveBeenCalledTimes(2);
+    expect(posted.filter((message) => message.type === "files.result").at(-1)).toMatchObject({ requestId: 2, files: ["new.ts"] });
+  });
+
+  it("ignores a session list that finishes after the folder changed", async () => {
+    const { provider, posted, ready, repository } = setup();
+    const stale = { ...session, id: "stale", path: "/s/stale.jsonl" };
+    let release: () => void = () => undefined;
+    repository.list.mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve([stale]))));
+    await ready();
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    release();
+    await settle();
+    const lists = posted.flatMap((message) => (message.type === "sessions" ? [message.sessions.map((item) => item.id)] : []));
+    expect(lists).not.toContainEqual(["stale"]);
+    expect(lists.at(-1)).toEqual(["one"]);
   });
 });

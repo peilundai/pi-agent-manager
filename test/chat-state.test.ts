@@ -148,4 +148,11 @@ describe("chat reducer: host messages", () => {
     expect(state.busy).toBe(false);
     expect(state.process).toEqual({ status: "exited", error: "crashed", stderr: "trace" });
   });
+
+  it("tracks the folder and whether the window is multi-root", () => {
+    let state = host(initialChatState, { version: 1, type: "init", workspaceName: "api", platform: "darwin", multiRoot: true });
+    expect(state).toMatchObject({ workspaceName: "api", multiRoot: true });
+    state = host(state, { version: 1, type: "init", workspaceName: "api", platform: "darwin" });
+    expect(state.multiRoot).toBe(false);
+  });
 });

@@ -18,7 +18,8 @@ Rewritten from scratch as a native chat UI for the Pi coding agent. First releas
   - `@` file mentions and image paste or drop.
   - Follow-up queue and steering, Esc to interrupt, prompt history.
 - Model and thinking-level picker, and a context-usage ring.
-- Searchable, date-grouped past chats with resume, rename and delete.
+- Searchable, date-grouped past chats with resume, rename and delete, scoped to the workspace folder.
+- Multi-root windows: an empty chat follows the active editor's folder, New Chat starts there, and a header button switches folders.
 - Pi 1.5 color palette for light, dark and high-contrast themes.
 - `Cmd/Ctrl+L` inserts the editor selection into the composer.
 - Works without manual setup when VS Code was not started from a terminal: Pi gets the variables your login shell exports (gateway keys, MCP tokens, `PATH`). Missing variables referenced by Pi's `models.json` or `mcp.json` are named, with a one-click fix that stores the value in VS Code's encrypted secret storage. New commands: Set/Remove Environment Secret, Reload Environment and Restart Pi, and Show Environment Diagnostics. New settings: `piAgentManager.loadShellEnvironment` and `piAgentManager.environment`.

@@ -43,9 +43,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("piAgentManager.history", () => provider.toggleHistory()),
     vscode.commands.registerCommand("piAgentManager.sendSelection", () => provider.sendSelection()),
     vscode.commands.registerCommand("piAgentManager.focusInput", () => provider.focusInput()),
+    vscode.commands.registerCommand("piAgentManager.switchFolder", () => provider.pickFolder()),
+    vscode.window.onDidChangeActiveTextEditor((editor) => provider.followEditor(editor)),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => provider.workspaceFoldersChanged()),
     ...registerEnvironmentCommands({
       environment,
-      cwd: () => workspaceFolder?.uri.fsPath,
+      // The folder can change in multi-root windows, so ask the provider each time.
+      cwd: () => provider.workspaceFolder?.uri.fsPath,
       restart: () => provider.restartPi(),
     }),
     log,

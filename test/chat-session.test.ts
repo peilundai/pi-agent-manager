@@ -119,6 +119,88 @@ describe("ChatSession", () => {
   });
 });
 
+describe("ChatSession pristine state", () => {
+  it("is pristine only while the chat is empty and idle", async () => {
+    const { session, client } = setup();
+    expect(session.isPristine).toBe(true);
+    await session.ensureStarted();
+    expect(session.isPristine).toBe(true);
+    client().listener.onEvent({ type: "agent_start" });
+    expect(session.isPristine).toBe(false);
+    client().listener.onEvent({ type: "agent_settled" });
+    // Settled, but the state read that reports messageCount has not answered yet.
+    expect(session.isPristine).toBe(false);
+  });
+
+  it("is not pristine once Pi reports messages, and is again after stop", async () => {
+    const { session } = setup({ get_state: { sessionFile: "/s/one.jsonl", messageCount: 2 } });
+    await session.ensureStarted();
+    expect(session.isPristine).toBe(false);
+    await session.stop();
+    expect(session.running).toBe(false);
+    expect(session.sessionFile).toBeUndefined();
+    expect(session.isPristine).toBe(true);
+  });
+
+  it("counts a prompt as activity before Pi reports agent_start", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    const { session, client } = setup();
+    await session.ensureStarted();
+    const original = client().request.bind(client());
+    client().request = <T,>(command: { type: string }) =>
+      command.type === "prompt" ? new Promise<T>((resolve) => (answer = resolve as (value: unknown) => void)) : original<T>(command);
+    const prompt = session.prompt("hi", [], "send");
+    await Promise.resolve();
+    expect(session.isPristine).toBe(false);
+    answer({});
+    await prompt;
+  });
+
+  it("counts a prompt submitted while Pi is still starting", async () => {
+    let finishStart: () => void = () => undefined;
+    const session = new ChatSession({
+      createClient: async (listener) => {
+        const client = new FakeClient(listener);
+        client.start = () =>
+          new Promise<void>((resolve) => {
+            finishStart = () => {
+              client.running = true;
+              resolve();
+            };
+          });
+        return client;
+      },
+      post: () => undefined,
+      onSessionsChanged: () => undefined,
+    });
+    const prompt = session.prompt("hi", [], "send");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(session.isPristine).toBe(false);
+    finishStart();
+    await prompt;
+  });
+
+  it("releases the prompt count when startup fails", async () => {
+    const session = new ChatSession({
+      createClient: () => Promise.reject(new Error("no pi")),
+      post: () => undefined,
+      onSessionsChanged: () => undefined,
+    });
+    await expect(session.prompt("hi", [], "send")).rejects.toThrow("no pi");
+    expect(session.isPristine).toBe(true);
+  });
+
+  it("stop cancels a startup in flight so the next start uses a new process", async () => {
+    const { session, client } = setup();
+    const starting = session.ensureStarted().catch((error: Error) => error);
+    await session.stop();
+    expect(await starting).toBeInstanceOf(Error);
+    await session.ensureStarted();
+    expect(session.running).toBe(true);
+    expect(client().running).toBe(true);
+  });
+});
+
 describe("ChatSession races", () => {
   it("stops a Pi process that finishes starting after dispose", async () => {
     let release: () => void = () => undefined;

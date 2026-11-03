@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -62,6 +62,31 @@ describe("PiSessionRepository", () => {
 
     expect(sessions).toHaveLength(1);
     expect(sessions[0]).toMatchObject({ id: "matching", title: "Fix login race", archived: true, status: "stopped" });
+  });
+
+  it("watches the same physical directory it lists when the workspace is a symlink", async () => {
+    const root = await realpath(await temporaryRoot());
+    const workspace = join(root, "project");
+    const link = join(root, "link");
+    await mkdir(workspace);
+    await symlink(workspace, link, "dir");
+    const agentDir = join(root, "agent");
+    const sessionDir = join(agentDir, "sessions", encodeWorkspaceDirectory(workspace));
+    await mkdir(sessionDir, { recursive: true });
+
+    const repository = new PiSessionRepository({ agentDir });
+    const changed = new Promise<void>((resolve) => {
+      const watcher = repository.watch(link, () => {
+        watcher.dispose();
+        resolve();
+      });
+    });
+    await writeFile(
+      join(sessionDir, "new.jsonl"),
+      JSON.stringify({ type: "session", version: 3, id: "new", cwd: workspace, timestamp: "2026-08-12T01:00:00.000Z" }),
+    );
+    await changed;
+    expect((await repository.list(link)).map((session) => session.id)).toEqual(["new"]);
   });
 
   it("follows the session location from the environment Pi runs with", async () => {

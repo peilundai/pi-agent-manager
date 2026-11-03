@@ -33,12 +33,15 @@ describe("extension activation", () => {
       "piAgentManager.history",
       "piAgentManager.sendSelection",
       "piAgentManager.focusInput",
+      "piAgentManager.switchFolder",
       "piAgentManager.setEnvironmentSecret",
       "piAgentManager.removeEnvironmentSecret",
       "piAgentManager.reloadEnvironment",
       "piAgentManager.showEnvironmentDiagnostics",
     ]);
-    expect(subscriptions).toHaveLength(12);
+    expect(subscriptions).toHaveLength(15);
+    expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
+    expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
     await expect(deactivate()).resolves.toBeUndefined();
   });
 

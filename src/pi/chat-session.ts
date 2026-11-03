@@ -42,6 +42,10 @@ export class ChatSession {
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private state: PiState = {};
   private busy = false;
+  /** Prompts sent but not yet answered; Pi may not have reported `agent_start` yet. */
+  private prompting = 0;
+  /** Set when a run starts and cleared by the next state read, which then reports `messageCount`. */
+  private ranSinceState = false;
   private disposed = false;
   private generation = 0;
   /**
@@ -68,6 +72,11 @@ export class ChatSession {
     return this.busy;
   }
 
+  /** True while the chat has no messages and nothing is running, so it can be replaced freely. */
+  get isPristine(): boolean {
+    return !this.busy && this.prompting === 0 && !this.ranSinceState && !this.state.messageCount;
+  }
+
   get sessionFile(): string | undefined {
     return this.state.sessionFile;
   }
@@ -75,10 +84,24 @@ export class ChatSession {
   /** Starts Pi if needed, optionally resuming a transcript, and posts a snapshot. */
   async ensureStarted(sessionPath?: string): Promise<RpcClientLike> {
     if (this.client?.running) return this.client;
-    this.starting ??= this.spawn(sessionPath).finally(() => {
-      this.starting = undefined;
-    });
+    if (!this.starting) {
+      const starting: Promise<RpcClientLike> = this.spawn(sessionPath).finally(() => {
+        if (this.starting === starting) this.starting = undefined;
+      });
+      this.starting = starting;
+    }
     return this.starting;
+  }
+
+  /**
+   * Stops Pi (and any startup in flight) and forgets the current chat. Used when the working
+   * directory changes, because a Pi process is bound to the directory it was spawned in.
+   */
+  async stop(): Promise<void> {
+    await this.stopProcess();
+    this.starting = undefined;
+    this.state = {};
+    this.ranSinceState = false;
   }
 
   async restart(sessionPath = this.state.sessionFile): Promise<void> {
@@ -87,17 +110,23 @@ export class ChatSession {
   }
 
   async prompt(text: string, images: ImageAttachment[], mode: PromptMode): Promise<void> {
-    const client = await this.ensureStarted();
-    const payloadImages = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
-    const command: Record<string, unknown> & { type: string } = { type: "prompt", message: text };
-    if (payloadImages.length) command.images = payloadImages;
-    if (this.busy || mode !== "send") command.streamingBehavior = mode === "steer" ? "steer" : "followUp";
+    // Count the prompt from the moment it is submitted, including while Pi is still starting.
+    this.prompting += 1;
     try {
-      const result = await client.request<{ disposition?: string }>(command, PROMPT_TIMEOUT_MS);
-      this.options.post({ version: 1, type: "prompt.result", disposition: result?.disposition ?? "started" });
-      if (result?.disposition === "handled") await this.refreshState();
-    } catch (error) {
-      this.options.post({ version: 1, type: "prompt.result", error: errorMessage(error) });
+      const client = await this.ensureStarted();
+      const payloadImages = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
+      const command: Record<string, unknown> & { type: string } = { type: "prompt", message: text };
+      if (payloadImages.length) command.images = payloadImages;
+      if (this.busy || mode !== "send") command.streamingBehavior = mode === "steer" ? "steer" : "followUp";
+      try {
+        const result = await client.request<{ disposition?: string }>(command, PROMPT_TIMEOUT_MS);
+        this.options.post({ version: 1, type: "prompt.result", disposition: result?.disposition ?? "started" });
+        if (result?.disposition === "handled") await this.refreshState();
+      } catch (error) {
+        this.options.post({ version: 1, type: "prompt.result", error: errorMessage(error) });
+      }
+    } finally {
+      this.prompting -= 1;
     }
   }
 
@@ -320,6 +349,7 @@ export class ChatSession {
     switch (event.type) {
       case "agent_start":
         this.busy = true;
+        this.ranSinceState = true;
         break;
       case "agent_settled":
         this.busy = false;
@@ -413,6 +443,7 @@ export class ChatSession {
       pendingMessageCount: state?.pendingMessageCount ?? 0,
     };
     this.busy = Boolean(state?.isStreaming) || this.busy;
+    this.ranSinceState = false;
     if (previous !== this.state.sessionFile) this.options.onActiveSessionChanged?.(this.state.sessionFile);
   }
 

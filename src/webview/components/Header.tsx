@@ -20,10 +20,13 @@ export function relativeTime(timestamp: number, now: number): string {
 export function SessionPicker({
   sessions,
   activePath,
+  folderName,
   onClose,
 }: {
   sessions: SessionSummary[];
   activePath: string | undefined;
+  /** Set in multi-root windows, where history is per folder. */
+  folderName?: string | undefined;
   onClose(): void;
 }) {
   const { post } = useChat();
@@ -85,7 +88,7 @@ export function SessionPicker({
         />
       </div>
       <div className="picker-list" role="listbox" aria-label="Sessions">
-        {flat.length === 0 && <div className="picker-empty">{query ? "No matching sessions." : "No past chats in this workspace yet."}</div>}
+        {flat.length === 0 && <div className="picker-empty">{query ? "No matching sessions." : `No past chats in ${folderName ? `“${folderName}”` : "this workspace"} yet.`}</div>}
         {groups.map((group) => (
           <div key={group.id} role="group" aria-label={group.label}>
             <div className="picker-group">{group.label}</div>
@@ -129,12 +132,15 @@ export function Header({
   title,
   historyOpen,
   canRename,
+  folderName,
   onToggleHistory,
   onNewChat,
 }: {
   title: string;
   historyOpen: boolean;
   canRename: boolean;
+  /** Set in multi-root windows: the folder Pi works in, shown as a switcher. */
+  folderName?: string | undefined;
   onToggleHistory(): void;
   onNewChat(): void;
 }) {
@@ -151,6 +157,18 @@ export function Header({
         {title}
       </button>
       <div className="header-actions">
+        {folderName && (
+          <button
+            type="button"
+            className="folder-chip"
+            title={`Pi works in “${folderName}”. Switch folder`}
+            aria-label={`Workspace folder: ${folderName}. Switch folder`}
+            onClick={() => post({ version: 1, type: "folder.pick" })}
+          >
+            <span className="codicon codicon-folder" aria-hidden="true" />
+            <span className="folder-chip-name">{folderName}</span>
+          </button>
+        )}
         <button
           type="button"
           className={`icon-button${historyOpen ? " active" : ""}`}

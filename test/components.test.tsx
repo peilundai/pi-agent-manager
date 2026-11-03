@@ -4,7 +4,7 @@ import type { WebviewToHostMessage } from "../src/shared/protocol";
 import type { ToolState } from "../src/webview/chat-state";
 import { Composer, type ComposerProps } from "../src/webview/components/Composer";
 import { ChatContext } from "../src/webview/components/context";
-import { relativeTime, SessionPicker } from "../src/webview/components/Header";
+import { Header, relativeTime, SessionPicker } from "../src/webview/components/Header";
 import { Markdown } from "../src/webview/components/Markdown";
 import { modelLabel, ModelPicker, supportedLevels, thinkingLabel } from "../src/webview/components/ModelPicker";
 import { ToolCard } from "../src/webview/components/ToolCard";
@@ -91,6 +91,26 @@ describe("SessionPicker", () => {
   it("shows an empty state", () => {
     withContext(<SessionPicker sessions={[]} activePath={undefined} onClose={vi.fn()} />);
     expect(screen.getByText("No past chats in this workspace yet.")).toBeInTheDocument();
+  });
+
+  it("names the folder in the empty state of a multi-root window", () => {
+    withContext(<SessionPicker sessions={[]} activePath={undefined} folderName="api" onClose={vi.fn()} />);
+    expect(screen.getByText("No past chats in “api” yet.")).toBeInTheDocument();
+  });
+});
+
+describe("Header", () => {
+  const props = { title: "Chat", historyOpen: false, canRename: false, onToggleHistory: vi.fn(), onNewChat: vi.fn() };
+
+  it("hides the folder switcher in a single-folder window", () => {
+    withContext(<Header {...props} />);
+    expect(screen.queryByRole("button", { name: /Workspace folder/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the folder and asks the host to switch it", () => {
+    const { posted } = withContext(<Header {...props} folderName="api" />);
+    fireEvent.click(screen.getByRole("button", { name: "Workspace folder: api. Switch folder" }));
+    expect(posted.at(-1)).toEqual({ version: 1, type: "folder.pick" });
   });
 });
 

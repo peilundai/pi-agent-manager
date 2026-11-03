@@ -16,7 +16,7 @@ Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. The extensio
 ## Pi RPC
 
 - `src/pi/rpc-client.ts` spawns Pi with `buildPiInvocation()` (which handles Windows `.cmd` shims) and `buildRpcArgs()`.
-  - The working directory is the workspace folder.
+  - The working directory is the chat's workspace folder. In a multi-root window, `ChatViewProvider` moves to the active editor's folder while the chat is empty (`ChatSession.isPristine`), on **New Chat**, or through the folder picker. Each move restarts Pi, because a Pi process is bound to its working directory.
   - `src/pi/jsonl.ts` splits stdout strictly on LF, not with `readline`, so U+2028/U+2029 inside JSON strings stay intact.
   - Requests carry an `id` and are matched to their `response`. Everything else is an event.
   - Closing stdin shuts Pi down gracefully. A process that is still alive after 2 s is killed.

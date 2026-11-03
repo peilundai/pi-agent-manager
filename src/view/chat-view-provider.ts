@@ -31,6 +31,10 @@ export interface ChatViewProviderOptions {
   createClient?: ChatSessionOptions["createClient"];
 }
 
+function sameFolder(left: vscode.WorkspaceFolder | undefined, right: vscode.WorkspaceFolder | undefined): boolean {
+  return left?.uri.toString() === right?.uri.toString();
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -70,11 +74,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private sessionsTimer: ReturnType<typeof setTimeout> | undefined;
   private sessions: SessionSummary[] = [];
   private watcher: { dispose(): void } | undefined;
-  private fileCache: { at: number; files: string[] } | undefined;
+  private fileCache: { at: number; cwd: string; files: string[] } | undefined;
   private setupError: SetupErrorState | undefined;
   private readonly session: ChatSession;
+  /** The folder Pi runs in. In multi-root windows it can change; see followEditor(). */
+  private folder: vscode.WorkspaceFolder | undefined;
+  /** Serializes folder switches so rapid editor changes cannot interleave Pi restarts. */
+  private switching: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: ChatViewProviderOptions) {
+    this.folder = options.workspaceFolder;
     this.setupError = options.workspaceFolder ? undefined : { kind: "workspace" };
     this.session = new ChatSession({
       createClient: options.createClient ?? ((listener) => this.createClient(listener)),
@@ -84,14 +93,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this.watchSessions();
   }
 
+  /** The workspace folder Pi currently runs in, if any. */
+  get workspaceFolder(): vscode.WorkspaceFolder | undefined {
+    return this.folder;
+  }
+
+  /** Watches the current folder's transcripts, wherever Pi's environment puts them. */
   private watchSessions(): void {
     this.watcher?.dispose();
-    const folder = this.options.workspaceFolder;
+    const folder = this.folder;
     this.watcher = folder ? this.options.repository.watch(folder.uri.fsPath, () => this.scheduleSessions()) : undefined;
   }
 
   private get cwd(): string | undefined {
-    return this.options.workspaceFolder?.uri.fsPath;
+    return this.folder?.uri.fsPath;
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -122,7 +137,65 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   async newChat(): Promise<void> {
     await this.reveal();
     if (this.setupError) return;
-    await this.session.newChat().catch((error) => this.notice("error", errorMessage(error)));
+    await this.startNewChat().catch((error) => this.notice("error", errorMessage(error)));
+    this.post({ version: 1, type: "composer.focus" });
+  }
+
+  /**
+   * Follows the active editor across workspace folders, like a terminal opened beside it would,
+   * but only while the chat is empty and idle: a conversation is never swapped out from under you.
+   */
+  followEditor(editor: Pick<vscode.TextEditor, "document"> | undefined): void {
+    const target = editor ? vscode.workspace.getWorkspaceFolder(editor.document.uri) : undefined;
+    if (!target || sameFolder(target, this.folder) || !this.session.isPristine) return;
+    void this.switchFolder(target);
+  }
+
+  /** Re-scopes the chat when folders are added, removed or renamed. */
+  workspaceFoldersChanged(): void {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    const current = folders.find((folder) => sameFolder(folder, this.folder));
+    if (current) {
+      // Still present; its name or index may have changed, and multi-root may have toggled.
+      this.folder = current;
+      this.postInit();
+      return;
+    }
+    const editorUri = vscode.window.activeTextEditor?.document.uri;
+    const target = (editorUri ? vscode.workspace.getWorkspaceFolder(editorUri) : undefined) ?? folders[0];
+    const previous = this.folder;
+    const hadChat = !this.session.isPristine;
+    void this.switchFolder(target).then(() => {
+      if (previous && target && hadChat) {
+        this.notice("info", `“${previous.name}” was removed from the workspace, so Pi moved to “${target.name}”.`);
+      }
+    });
+  }
+
+  /** Lets the user pick the folder Pi works in (multi-root windows). */
+  async pickFolder(): Promise<void> {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    if (folders.length < 2) return;
+    const picked = await vscode.window.showQuickPick(
+      folders.map((folder) => ({
+        label: folder.name,
+        description: sameFolder(folder, this.folder) ? "current" : "",
+        detail: folder.uri.fsPath,
+        folder,
+      })),
+      { title: "Pi Agent Manager: Workspace Folder", placeHolder: "Choose the folder Pi works in and lists chats for" },
+    );
+    if (!picked || sameFolder(picked.folder, this.folder)) return;
+    if (this.session.isBusy) {
+      const answer = await vscode.window.showWarningMessage(
+        `Pi is still working in “${this.folder?.name ?? "this folder"}”.`,
+        { modal: true, detail: `Stop it and start a new chat in “${picked.folder.name}”? The current chat stays in history.` },
+        "Stop and Switch",
+      );
+      if (answer !== "Stop and Switch") return;
+    }
+    await this.switchFolder(picked.folder);
+    await this.reveal();
     this.post({ version: 1, type: "composer.focus" });
   }
 
@@ -168,7 +241,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   /** Restarts Pi on the current chat so it picks up a changed environment. */
   async restartPi(): Promise<void> {
-    if (!this.options.workspaceFolder) return;
+    if (!this.folder) return;
     if (this.setupError) {
       await this.retrySetup();
       return;
@@ -180,13 +253,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     switch (message.type) {
       case "ready":
         this.ready = true;
-        this.post({
-          version: 1,
-          type: "init",
-          workspaceName: this.options.workspaceFolder?.name ?? "",
-          platform: process.platform,
-          ...(this.setupError ? { setupError: this.setupError } : {}),
-        });
+        this.postInit();
         this.flushOutbox();
         if (this.setupError) return;
         void this.refreshSessions();
@@ -204,7 +271,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         await this.session.abort();
         return;
       case "chat.new":
-        await this.session.newChat();
+        await this.startNewChat();
         this.post({ version: 1, type: "composer.focus" });
         return;
       case "chat.open":
@@ -222,6 +289,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         return;
       case "sessions.refresh":
         await this.refreshSessions();
+        return;
+      case "folder.pick":
+        await this.pickFolder();
         return;
       case "model.set":
         await this.session.setModel(message.provider, message.modelId);
@@ -271,7 +341,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     } catch (error) {
       if (error instanceof Error && error.name === "PiCommandNotFoundError") {
         this.setupError = { kind: "executable", message: error.message };
-        this.post({ version: 1, type: "init", workspaceName: this.options.workspaceFolder?.name ?? "", platform: process.platform, setupError: this.setupError });
+        this.postInit();
       }
     }
   }
@@ -297,6 +367,50 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd, env }, listener);
   }
 
+  /** New chats start in the active editor's folder, so "+" always means "here". */
+  private async startNewChat(): Promise<void> {
+    const editorUri = vscode.window.activeTextEditor?.document.uri;
+    const target = editorUri ? vscode.workspace.getWorkspaceFolder(editorUri) : undefined;
+    if (target && !sameFolder(target, this.folder)) {
+      await this.switchFolder(target);
+      return;
+    }
+    await this.session.newChat();
+  }
+
+  private switchFolder(folder: vscode.WorkspaceFolder | undefined): Promise<void> {
+    const run = async () => {
+      if (sameFolder(folder, this.folder)) return;
+      this.folder = folder;
+      this.fileCache = undefined;
+      this.sessions = [];
+      this.watchSessions();
+      if (!folder) this.setupError = { kind: "workspace" };
+      else if (this.setupError?.kind === "workspace") this.setupError = undefined;
+      this.postInit();
+      this.post({ version: 1, type: "sessions", sessions: [] });
+      // A Pi process is bound to its working directory, so a new folder needs a new process.
+      await this.session.stop();
+      // Pi starts once the view is ready; until then only the scope changes.
+      if (!folder || !this.ready || this.setupError) return;
+      void this.refreshSessions();
+      await this.startSession();
+    };
+    this.switching = this.switching.then(run, run);
+    return this.switching;
+  }
+
+  private postInit(): void {
+    this.post({
+      version: 1,
+      type: "init",
+      workspaceName: this.folder?.name ?? "",
+      platform: process.platform,
+      ...((vscode.workspace.workspaceFolders?.length ?? 0) > 1 ? { multiRoot: true } : {}),
+      ...(this.setupError ? { setupError: this.setupError } : {}),
+    });
+  }
+
   private scheduleSessions(): void {
     if (this.sessionsTimer) clearTimeout(this.sessionsTimer);
     this.sessionsTimer = setTimeout(() => {
@@ -309,8 +423,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const cwd = this.cwd;
     if (!cwd) return;
     try {
-      this.sessions = await this.options.repository.list(cwd);
-      this.post({ version: 1, type: "sessions", sessions: this.sessions });
+      const sessions = await this.options.repository.list(cwd);
+      if (cwd !== this.cwd) return; // The folder changed while listing; a newer refresh owns the list.
+      this.sessions = sessions;
+      this.post({ version: 1, type: "sessions", sessions });
     } catch (error) {
       this.notice("warning", `Could not read Pi sessions: ${errorMessage(error)}`);
     }
@@ -354,15 +470,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   private async workspaceFiles(): Promise<string[]> {
     const cwd = this.cwd;
-    if (!cwd || !this.options.workspaceFolder) return [];
-    if (this.fileCache && Date.now() - this.fileCache.at < FILE_CACHE_MS) return this.fileCache.files;
+    if (!cwd || !this.folder) return [];
+    const cached = this.fileCache;
+    if (cached?.cwd === cwd && Date.now() - cached.at < FILE_CACHE_MS) return cached.files;
     const uris = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(this.options.workspaceFolder, "**/*"),
+      new vscode.RelativePattern(this.folder, "**/*"),
       FILE_EXCLUDES,
       MAX_INDEXED_FILES,
     );
     const files = uris.map((uri) => relative(cwd, uri.fsPath).split("\\").join("/"));
-    this.fileCache = { at: Date.now(), files };
+    // A search that outlives a folder switch must not cache the old folder's files.
+    if (cwd === this.cwd) this.fileCache = { at: Date.now(), cwd, files };
     return files;
   }
 
@@ -372,7 +490,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       canSelectFiles: true,
       canSelectFolders: false,
       openLabel: "Attach",
-      ...(this.options.workspaceFolder ? { defaultUri: this.options.workspaceFolder.uri } : {}),
+      ...(this.folder ? { defaultUri: this.folder.uri } : {}),
     });
     if (!selected?.length) return;
     const images: ImageAttachment[] = [];
@@ -444,9 +562,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private async retrySetup(): Promise<void> {
-    if (!this.options.workspaceFolder) return;
+    if (!this.folder) return;
     this.setupError = undefined;
-    this.post({ version: 1, type: "init", workspaceName: this.options.workspaceFolder.name, platform: process.platform });
+    this.postInit();
     void this.refreshSessions();
     await this.startSession();
   }
