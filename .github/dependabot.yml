@@ -23,6 +23,13 @@ updates:
       - dependency-name: "@vitest/*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/vscode"
+      # typescript-eslint (type-aware lint) supports TypeScript < 6.1 only; revisit
+      # TypeScript 7 once typescript-eslint supports it.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Types track the Node runtime of the VS Code extension host (Node 22).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
