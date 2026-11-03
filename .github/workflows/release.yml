@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  # Lets vsce sign in to the VS Code Marketplace with Trusted Publishing (OIDC).
+  id-token: write
 
 concurrency:
   group: release
@@ -22,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # Each store is skipped when its token is not configured (see docs/PUBLISHING.md).
+      # The Marketplace uses Trusted Publishing unless VSCE_PAT is set. Open VSX
+      # is skipped when its token is not configured (see docs/PUBLISHING.md).
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
       OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
@@ -88,16 +91,19 @@ jobs:
           git push origin "refs/tags/${TAG}"
       # --skip-duplicate lets a re-run finish when one store already has this version.
       - name: Publish to the VS Code Marketplace
-        if: steps.plan.outputs.release == 'true' && env.VSCE_PAT != ''
-        run: npx vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT" --skip-duplicate
+        if: steps.plan.outputs.release == 'true'
+        run: |
+          if [ -n "$VSCE_PAT" ]; then
+            npx vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT" --skip-duplicate
+          else
+            npx vsce publish --packagePath "$VSIX" --oidc --skip-duplicate
+          fi
       - name: Publish to Open VSX
         if: steps.plan.outputs.release == 'true' && env.OVSX_PAT != ''
         run: npx ovsx publish "$VSIX" --pat "$OVSX_PAT" --skip-duplicate
       - name: Note skipped stores
-        if: steps.plan.outputs.release == 'true' && (env.VSCE_PAT == '' || env.OVSX_PAT == '')
-        run: |
-          [ -n "$VSCE_PAT" ] || echo "::warning::VSCE_PAT is not set; skipped the VS Code Marketplace."
-          [ -n "$OVSX_PAT" ] || echo "::warning::OVSX_PAT is not set; skipped Open VSX."
+        if: steps.plan.outputs.release == 'true' && env.OVSX_PAT == ''
+        run: echo "::warning::OVSX_PAT is not set; skipped Open VSX."
       - name: Extract release notes
         if: steps.plan.outputs.release == 'true'
         run: node scripts/release-notes.mjs "${VERSION}" > release-notes.md
