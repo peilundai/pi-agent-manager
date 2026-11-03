@@ -71,7 +71,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private sessionsTimer: ReturnType<typeof setTimeout> | undefined;
   private sessions: SessionSummary[] = [];
   private watcher: { dispose(): void } | undefined;
-  private fileCache: { at: number; files: string[] } | undefined;
+  private fileCache: { at: number; cwd: string; files: string[] } | undefined;
   private setupError: SetupErrorState | undefined;
   private readonly session: ChatSession;
   /** The folder Pi runs in. In multi-root windows it can change; see followEditor(). */
@@ -444,14 +444,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private async workspaceFiles(): Promise<string[]> {
     const cwd = this.cwd;
     if (!cwd || !this.folder) return [];
-    if (this.fileCache && Date.now() - this.fileCache.at < FILE_CACHE_MS) return this.fileCache.files;
+    const cached = this.fileCache;
+    if (cached?.cwd === cwd && Date.now() - cached.at < FILE_CACHE_MS) return cached.files;
     const uris = await vscode.workspace.findFiles(
       new vscode.RelativePattern(this.folder, "**/*"),
       FILE_EXCLUDES,
       MAX_INDEXED_FILES,
     );
     const files = uris.map((uri) => relative(cwd, uri.fsPath).split("\\").join("/"));
-    this.fileCache = { at: Date.now(), files };
+    // A search that outlives a folder switch must not cache the old folder's files.
+    if (cwd === this.cwd) this.fileCache = { at: Date.now(), cwd, files };
     return files;
   }
 

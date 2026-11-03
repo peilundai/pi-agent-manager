@@ -110,18 +110,21 @@ export class ChatSession {
   }
 
   async prompt(text: string, images: ImageAttachment[], mode: PromptMode): Promise<void> {
-    const client = await this.ensureStarted();
-    const payloadImages = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
-    const command: Record<string, unknown> & { type: string } = { type: "prompt", message: text };
-    if (payloadImages.length) command.images = payloadImages;
-    if (this.busy || mode !== "send") command.streamingBehavior = mode === "steer" ? "steer" : "followUp";
+    // Count the prompt from the moment it is submitted, including while Pi is still starting.
     this.prompting += 1;
     try {
-      const result = await client.request<{ disposition?: string }>(command, PROMPT_TIMEOUT_MS);
-      this.options.post({ version: 1, type: "prompt.result", disposition: result?.disposition ?? "started" });
-      if (result?.disposition === "handled") await this.refreshState();
-    } catch (error) {
-      this.options.post({ version: 1, type: "prompt.result", error: errorMessage(error) });
+      const client = await this.ensureStarted();
+      const payloadImages = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
+      const command: Record<string, unknown> & { type: string } = { type: "prompt", message: text };
+      if (payloadImages.length) command.images = payloadImages;
+      if (this.busy || mode !== "send") command.streamingBehavior = mode === "steer" ? "steer" : "followUp";
+      try {
+        const result = await client.request<{ disposition?: string }>(command, PROMPT_TIMEOUT_MS);
+        this.options.post({ version: 1, type: "prompt.result", disposition: result?.disposition ?? "started" });
+        if (result?.disposition === "handled") await this.refreshState();
+      } catch (error) {
+        this.options.post({ version: 1, type: "prompt.result", error: errorMessage(error) });
+      }
     } finally {
       this.prompting -= 1;
     }

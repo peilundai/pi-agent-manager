@@ -156,6 +156,40 @@ describe("ChatSession pristine state", () => {
     await prompt;
   });
 
+  it("counts a prompt submitted while Pi is still starting", async () => {
+    let finishStart: () => void = () => undefined;
+    const session = new ChatSession({
+      createClient: async (listener) => {
+        const client = new FakeClient(listener);
+        client.start = () =>
+          new Promise<void>((resolve) => {
+            finishStart = () => {
+              client.running = true;
+              resolve();
+            };
+          });
+        return client;
+      },
+      post: () => undefined,
+      onSessionsChanged: () => undefined,
+    });
+    const prompt = session.prompt("hi", [], "send");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(session.isPristine).toBe(false);
+    finishStart();
+    await prompt;
+  });
+
+  it("releases the prompt count when startup fails", async () => {
+    const session = new ChatSession({
+      createClient: () => Promise.reject(new Error("no pi")),
+      post: () => undefined,
+      onSessionsChanged: () => undefined,
+    });
+    await expect(session.prompt("hi", [], "send")).rejects.toThrow("no pi");
+    expect(session.isPristine).toBe(true);
+  });
+
   it("stop cancels a startup in flight so the next start uses a new process", async () => {
     const { session, client } = setup();
     const starting = session.ensureStarted().catch((error: Error) => error);

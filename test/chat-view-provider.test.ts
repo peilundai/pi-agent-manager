@@ -389,6 +389,22 @@ describe("ChatViewProvider multi-root folders", () => {
     expect(clients[0]?.running).toBe(false);
   });
 
+  it("does not cache a file search that finishes after the folder changed", async () => {
+    const { provider, posted, ready, send } = setup();
+    await ready();
+    let finish: (uris: unknown[]) => void = () => undefined;
+    mock.workspace.findFiles.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    await send({ version: 1, type: "files.search", requestId: 1, query: "" });
+    provider.followEditor(editorIn(other) as never);
+    await settle();
+    finish([mock.Uri.file("/work/old.ts")]);
+    await settle();
+    mock.workspace.findFiles.mockResolvedValueOnce([mock.Uri.file("/other/new.ts")]);
+    await send({ version: 1, type: "files.search", requestId: 2, query: "" });
+    expect(mock.workspace.findFiles).toHaveBeenCalledTimes(2);
+    expect(posted.filter((message) => message.type === "files.result").at(-1)).toMatchObject({ requestId: 2, files: ["new.ts"] });
+  });
+
   it("ignores a session list that finishes after the folder changed", async () => {
     const { provider, posted, ready, repository } = setup();
     const stale = { ...session, id: "stale", path: "/s/stale.jsonl" };
