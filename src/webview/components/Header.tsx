@@ -36,6 +36,7 @@ export function SessionPicker({
     [sessions, query, now],
   );
   const flat = useMemo(() => groups.flatMap((group) => group.sessions), [groups]);
+  const indexByPath = useMemo(() => new Map(flat.map((session, index) => [session.path, index])), [flat]);
 
   useEffect(() => {
     const onPointer = (event: PointerEvent) => {
@@ -47,14 +48,11 @@ export function SessionPicker({
     return () => document.removeEventListener("pointerdown", onPointer);
   }, [onClose]);
 
-  useEffect(() => setActive(0), [query]);
-
   const open = (session: SessionSummary) => {
     post({ version: 1, type: "chat.open", path: session.path });
     onClose();
   };
 
-  let position = -1;
   return (
     <div className="popover session-picker" ref={ref} role="dialog" aria-label="Past chats">
       <div className="picker-search">
@@ -64,7 +62,10 @@ export function SessionPicker({
           value={query}
           placeholder="Search sessions…"
           aria-label="Search sessions"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+          }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();
@@ -89,8 +90,7 @@ export function SessionPicker({
           <div key={group.id} role="group" aria-label={group.label}>
             <div className="picker-group">{group.label}</div>
             {group.sessions.map((session) => {
-              position += 1;
-              const index = position;
+              const index = indexByPath.get(session.path) ?? -1;
               const current = session.path === activePath;
               return (
                 <div

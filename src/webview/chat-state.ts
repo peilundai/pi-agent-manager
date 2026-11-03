@@ -561,13 +561,15 @@ function handleHost(state: ChatState, message: HostToWebviewMessage, now: number
       const exited = message.status === "exited";
       return { ...state, process, ...(exited ? { busy: false, busySince: undefined, activity: undefined } : {}) };
     }
-    case "snapshot":
-      return hydrate(state, message.snapshot);
+    case "snapshot": {
+      const next = hydrate(state, message.snapshot);
+      return next.busy && !next.busySince ? { ...next, busySince: now } : next;
+    }
     case "pi.events":
       return applyPiEvents(state, message.events, now);
     case "state": {
       const busy = state.busy || Boolean(message.state.isStreaming);
-      return { ...state, pi: message.state, busy };
+      return { ...state, pi: message.state, busy, ...(busy && !state.busySince ? { busySince: now } : {}) };
     }
     case "stats":
       return { ...state, stats: message.stats };
