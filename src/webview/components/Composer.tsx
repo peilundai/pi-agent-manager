@@ -113,7 +113,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [pickerOpen, setPickerOpen] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [dragging, setDragging] = useState(false);
-  const requestRef = useRef(0);
+  /** The @-mention file search whose results the menu may show. */
+  const [fileRequest, setFileRequest] = useState<{ id: number; query: string } | undefined>(undefined);
+  const requestCounter = useRef(0);
   const isMac = props.platform === "darwin";
 
   const resize = useCallback(() => {
@@ -155,16 +157,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const mention = menuDismissed ? undefined : mentionAt(text, caret);
   const slash = menuDismissed ? undefined : slashQuery(text, caret);
 
-  // Keep the latest `post` in a ref so a new callback identity does not re-issue the search
-  // (which would invalidate the results currently on screen).
-  const postRef = useRef(post);
-  postRef.current = post;
-  const mentionQuery = mention?.query;
-  useEffect(() => {
-    if (mentionQuery === undefined) return;
-    requestRef.current += 1;
-    postRef.current({ version: 1, type: "files.search", requestId: requestRef.current, query: mentionQuery });
-  }, [mentionQuery]);
+  /**
+   * Called from input events: when the caret sits in a new `@query`, ask the host for matching
+   * files. Only the latest request's results are shown, so stale responses are ignored.
+   */
+  const requestFiles = (nextText: string, nextCaret: number, dismissed: boolean) => {
+    const nextMention = dismissed ? undefined : mentionAt(nextText, nextCaret);
+    if (nextMention === undefined || nextMention.query === fileRequest?.query) return;
+    requestCounter.current += 1;
+    const id = requestCounter.current;
+    setFileRequest({ id, query: nextMention.query });
+    setMenuIndex(0);
+    post({ version: 1, type: "files.search", requestId: id, query: nextMention.query });
+  };
 
   const replaceRange = useCallback((start: number, end: number, value: string) => {
     setText((current) => current.slice(0, start) + value + current.slice(end));
@@ -203,7 +208,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         }));
       return [...local, ...remote];
     }
-    if (mention !== undefined && props.files.requestId === requestRef.current) {
+    if (mention !== undefined && fileRequest !== undefined && props.files.requestId === fileRequest.id) {
       // Nothing to complete when the typed path already is the only match.
       if (props.files.files.length === 1 && props.files.files[0] === mention.query) return [];
       return props.files.files.map((file) => ({
@@ -214,9 +219,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       }));
     }
     return [];
-  }, [slash, mention, props.commands, props.localCommands, props.files, caret, replaceRange]);
-
-  useEffect(() => setMenuIndex(0), [slash, mention?.query]);
+  }, [slash, mention, props.commands, props.localCommands, props.files, fileRequest, caret, replaceRange]);
+  const activeIndex = menu.length ? Math.min(menuIndex, menu.length - 1) : 0;
 
   const submit = (mode: PromptMode) => {
     const value = text.trim();
@@ -234,12 +238,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const delta = event.key === "ArrowDown" ? 1 : -1;
-        setMenuIndex((index) => (index + delta + menu.length) % menu.length);
+        setMenuIndex((activeIndex + delta + menu.length) % menu.length);
         return;
       }
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
-        menu[menuIndex]?.apply();
+        menu[activeIndex]?.apply();
         return;
       }
       if (event.key === "Escape") {
@@ -323,8 +327,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               key={item.key}
               type="button"
               role="option"
-              aria-selected={index === menuIndex}
-              className={`picker-item${index === menuIndex ? " active" : ""}`}
+              aria-selected={index === activeIndex}
+              className={`picker-item${index === activeIndex ? " active" : ""}`}
               onMouseEnter={() => setMenuIndex(index)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => item.apply()}
@@ -381,9 +385,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           setText(event.target.value);
           setCaret(event.target.selectionStart);
           setMenuDismissed(false);
+          setMenuIndex(0);
           setHistoryIndex(-1);
+          requestFiles(event.target.value, event.target.selectionStart, false);
         }}
-        onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+        onSelect={(event) => {
+          setCaret(event.currentTarget.selectionStart);
+          requestFiles(event.currentTarget.value, event.currentTarget.selectionStart, menuDismissed);
+        }}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
       />

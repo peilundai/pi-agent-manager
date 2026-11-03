@@ -70,8 +70,6 @@ export function ModelPicker({
     return () => document.removeEventListener("pointerdown", onPointer);
   }, [onClose]);
 
-  useEffect(() => setActive(0), [query]);
-
   return (
     <div className="popover model-picker" ref={ref} role="dialog" aria-label="Choose model">
       {levels.length > 1 && (
@@ -100,7 +98,10 @@ export function ModelPicker({
           value={query}
           placeholder="Search models…"
           aria-label="Search models"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+          }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();

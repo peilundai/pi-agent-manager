@@ -24,8 +24,11 @@ function useElapsed(since: number | undefined): number {
 }
 
 function StatusLine({ state }: { state: ChatState }) {
-  const elapsed = useElapsed(state.busy ? state.busySince ?? Date.now() : undefined);
-  const word = useMemo(() => WORKING_WORDS[Math.floor(Math.random() * WORKING_WORDS.length)], [state.busySince]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The reducer stamps busySince whenever a run starts, so render stays pure.
+  const since = state.busy ? state.busySince : undefined;
+  const elapsed = useElapsed(since);
+  // Vary the word per run, deterministically from when the run started.
+  const word = WORKING_WORDS[Math.floor((since ?? 0) / 1000) % WORKING_WORDS.length];
   if (!state.busy && !state.activity) return null;
   const frame = SPINNER_FRAMES[Math.floor(elapsed / 120) % SPINNER_FRAMES.length];
   const seconds = Math.floor(elapsed / 1000);
@@ -126,8 +129,10 @@ export function App({ transport }: { transport: WebviewTransport }) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [files, setFiles] = useState<{ requestId: number; files: string[] }>({ requestId: -1, files: [] });
-  const persisted = useRef(transport.getState());
-  const [history, setHistory] = useState<string[]>(() => persisted.current.history ?? []);
+  // Persisted webview state is read once; the ref is only touched from callbacks.
+  const [initialPersisted] = useState(() => transport.getState());
+  const persisted = useRef(initialPersisted);
+  const [history, setHistory] = useState<string[]>(() => initialPersisted.history ?? []);
   const composer = useRef<ComposerHandle>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -298,7 +303,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
                 commands={state.commands}
                 localCommands={localCommands}
                 stats={state.stats}
-                initialDraft={persisted.current.draft ?? ""}
+                initialDraft={initialPersisted.draft ?? ""}
                 history={history}
                 onDraftChange={onDraftChange}
                 onSubmit={submit}
