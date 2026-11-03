@@ -1360,9 +1360,106 @@ body.vscode-light .diff-del .diff-text {
   flex: 1;
 }
 
-.context-ring {
+.context-ring-wrap {
+  position: relative;
   display: inline-flex;
   margin-right: 4px;
+}
+
+.context-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.context-ring:hover,
+.context-ring[aria-expanded="true"] {
+  background: var(--pi-hairline);
+}
+
+.context-ring:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--pi-accent));
+  outline-offset: 1px;
+}
+
+.context-popover {
+  right: -4px;
+  bottom: calc(100% + 10px);
+  width: 220px;
+  padding: 10px 12px;
+  color: var(--pi-text);
+  font-size: 0.92em;
+  cursor: default;
+}
+
+.context-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.context-percent {
+  font-size: 1.5em;
+  font-weight: 600;
+}
+
+.context-sub {
+  color: var(--pi-muted);
+}
+
+.context-bar {
+  height: 4px;
+  margin: 8px 0 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--pi-hairline-strong);
+}
+
+.context-bar span {
+  display: block;
+  height: 100%;
+  background: var(--pi-accent);
+}
+
+.context-bar.high span {
+  background: var(--pi-warning);
+}
+
+.context-section {
+  margin-top: 12px;
+}
+
+.context-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+}
+
+.context-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.context-row dt {
+  color: var(--pi-muted);
+}
+
+.context-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-cost {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pi-hairline);
 }
 
 .ring-track {
