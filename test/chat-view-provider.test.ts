@@ -239,12 +239,12 @@ describe("ChatViewProvider", () => {
     await send({ version: 1, type: "setup.action", action: "chooseExecutable" });
     expect(mock.configuration.get("command")).toBe("/opt/pi/bin/pi");
     await send({ version: 1, type: "setup.action", action: "openSettings" });
-    expect(mock.commands.executeCommand).toHaveBeenCalledWith("workbench.action.openSettings", "piChat");
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith("workbench.action.openSettings", "piAgentManager");
   });
 
   it("tracks webview focus in a context key", async () => {
     const { send } = setup();
     await send({ version: 1, type: "focus.changed", focused: true });
-    expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", "piChat.focused", true);
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", "piAgentManager.focused", true);
   });
 });

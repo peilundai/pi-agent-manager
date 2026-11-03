@@ -1,17 +1,17 @@
-# Pi Chat for VS Code
+# Pi Agent Manager for VS Code
 
 [![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
 
 Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar. The look, feel and flow follow the Claude Code extension, in Pi's own colors.
 
 <p align="center">
-  <img src="docs/images/chat-dark.png" width="360" alt="Pi Chat in a dark theme" />
-  <img src="docs/images/chat-light.png" width="360" alt="Pi Chat in a light theme" />
+  <img src="docs/images/chat-dark.png" width="360" alt="Pi Agent Manager in a dark theme" />
+  <img src="docs/images/chat-light.png" width="360" alt="Pi Agent Manager in a light theme" />
 </p>
 
 ## Zero setup
 
-If `pi` already works in your terminal, Pi Chat works too. It runs your installed CLI in RPC mode (`pi --mode rpc`), so it uses your existing:
+If `pi` already works in your terminal, Pi Agent Manager works too. It runs your installed CLI in RPC mode (`pi --mode rpc`), so it uses your existing:
 
 - providers, API keys and logins,
 - default model and thinking level,
@@ -22,7 +22,7 @@ The extension adds no accounts, keys or configuration of its own.
 
 ## Features
 
-- **Chat in the Secondary Side Bar.** Click the π icon in an editor title bar, or run **Pi: Open Pi Chat**.
+- **Chat in the Secondary Side Bar.** Click the π icon in an editor title bar, or run **Pi Agent Manager: Open**.
 - **Streaming transcript.** Markdown with syntax highlighting, collapsible thinking, and a status dot per step.
 - **Tool cards** for `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` and custom tools:
   - one-line summaries (`⎿ Read 120 lines`),
@@ -57,11 +57,11 @@ The extension adds no accounts, keys or configuration of its own.
   pi            # sign in / pick a provider once
   ```
 
-If VS Code can't find `pi`, the view offers **Choose Executable…**. You can also set `piChat.command` to an absolute path.
+If VS Code can't find `pi`, the view offers **Choose Executable…**. You can also set `piAgentManager.command` to an absolute path.
 
 Pi is looked up in this order:
 
-1. The `piChat.command` setting.
+1. The `piAgentManager.command` setting.
 2. `PATH`.
 3. npm's global bin directory.
 4. Homebrew and `/usr/local/bin`.
@@ -72,8 +72,8 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 
 | Setting | Default | Description |
 |---|---|---|
-| `piChat.command` | `pi` | Executable name or absolute path of the Pi CLI. |
-| `piChat.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]` or `["--offline"]`. Mode and session flags are managed by the extension. |
+| `piAgentManager.command` | `pi` | Executable name or absolute path of the Pi CLI. |
+| `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]` or `["--offline"]`. Mode and session flags are managed by the extension. |
 
 ## Keyboard shortcuts
 
@@ -87,7 +87,7 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 ## Notes
 
 - Chats are scoped to the workspace folder of the active editor, or the first folder in a multi-root window.
-- Pi's [project trust](https://github.com/earendil-works/pi) applies as in the CLI. RPC mode cannot show the trust prompt, so trust a project once with `/trust` in the terminal, or pass `--approve` through `piChat.extraArgs`.
+- Pi's [project trust](https://github.com/earendil-works/pi) applies as in the CLI. RPC mode cannot show the trust prompt, so trust a project once with `/trust` in the terminal, or pass `--approve` through `piAgentManager.extraArgs`.
 - Built-in TUI-only commands (for example `/settings`) are not available over RPC.
 
 ## Development

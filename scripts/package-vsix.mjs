@@ -7,7 +7,7 @@ const execFile = promisify(execFileCallback);
 const require = createRequire(import.meta.url);
 const vsce = require.resolve("@vscode/vsce/vsce");
 
-// Pi Chat has no native dependencies, so one universal package serves every platform.
+// Pi Agent Manager has no native dependencies, so one universal package serves every platform.
 const { stdout, stderr } = await execFile(
   process.execPath,
   [vsce, "package", "--no-dependencies", "--out", ARTIFACT_NAME],

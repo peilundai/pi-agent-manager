@@ -1,6 +1,6 @@
 # Architecture
 
-Pi Chat is a webview view in VS Code's Secondary Side Bar. The extension host drives one `pi --mode rpc` child process. The webview is a React app that renders Pi's event stream as a chat.
+Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. The extension host drives one `pi --mode rpc` child process. The webview is a React app that renders Pi's event stream as a chat.
 
 ```
 ┌──────────────── Extension host (Node) ────────────────┐        ┌──────── Webview (React) ────────┐

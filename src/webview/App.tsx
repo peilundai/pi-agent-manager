@@ -82,7 +82,7 @@ function SetupView({ state, post }: { state: ChatState; post(message: WebviewToH
     <div className="setup">
       <PiMascot size={6} />
       <h2>Pi CLI not found</h2>
-      <p>Pi Chat uses your local Pi installation. Install it, run <code>pi</code> once in a terminal to sign in, then retry.</p>
+      <p>Pi Agent Manager uses your local Pi installation. Install it, run <code>pi</code> once in a terminal to sign in, then retry.</p>
       <pre className="setup-command">npm install -g @earendil-works/pi-coding-agent</pre>
       <p className="muted">{error.message}</p>
       <div className="setup-actions">

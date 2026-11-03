@@ -36,7 +36,7 @@ export function validateVsixManifest(xml) {
   const identity = xml.replace(/<!--[\s\S]*?-->/g, "").match(/<Identity(?=\s|\/>)([^>]*)>/);
   if (!identity) throw new Error("VSIX manifest is missing an Identity element.");
   if (/TargetPlatform\s*=/.test(identity[1])) {
-    throw new Error("Pi Chat must be packaged as a universal VSIX without a target platform.");
+    throw new Error("Pi Agent Manager must be packaged as a universal VSIX without a target platform.");
   }
 }
 

@@ -243,7 +243,7 @@ export class ChatSession {
   }
 
   private async spawn(sessionPath: string | undefined): Promise<RpcClientLike> {
-    if (this.disposed) throw new Error("Pi Chat has been disposed.");
+    if (this.disposed) throw new Error("Pi Agent Manager has been disposed.");
     this.generation += 1;
     const generation = this.generation;
     this.busy = false;
@@ -283,7 +283,7 @@ export class ChatSession {
     if (this.disposed || generation !== this.generation) {
       // Disposed or restarted while Pi was starting: do not leave an orphaned process.
       await client.stop();
-      throw new Error("Pi Chat startup was cancelled.");
+      throw new Error("Pi Agent Manager startup was cancelled.");
     }
     this.client = client;
     try {

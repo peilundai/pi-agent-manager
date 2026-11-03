@@ -1,6 +1,6 @@
 import { expect, test } from "./harness";
 
-test.describe("Pi Chat webview", () => {
+test.describe("Pi Agent Manager webview", () => {
   test("shows the empty state with the current model in both themes", async ({ chat }) => {
     const { page } = chat;
     await expect(page.locator(".model-pill .model-name")).toHaveText("Mock Sonnet");

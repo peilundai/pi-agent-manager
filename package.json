@@ -1,6 +1,6 @@
 {
   "name": "pi-agent-manager",
-  "displayName": "Pi Chat",
+  "displayName": "Pi Agent Manager",
   "description": "Chat with your local Pi coding agent from VS Code's side bar, Claude Code style.",
   "version": "0.2.0",
   "publisher": "peilun-dai",
@@ -31,7 +31,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Pi Chat launches the local pi executable and reads workspace-scoped Pi session files."
+      "description": "Pi Agent Manager launches the local pi executable and reads workspace-scoped Pi session files."
     }
   },
   "extensionKind": [
@@ -41,68 +41,68 @@
   "contributes": {
     "commands": [
       {
-        "command": "piChat.open",
-        "title": "Open Pi Chat",
-        "category": "Pi",
+        "command": "piAgentManager.open",
+        "title": "Open",
+        "category": "Pi Agent Manager",
         "icon": "media/pi.svg"
       },
       {
-        "command": "piChat.newChat",
+        "command": "piAgentManager.newChat",
         "title": "New Chat",
-        "category": "Pi",
+        "category": "Pi Agent Manager",
         "icon": "$(add)"
       },
       {
-        "command": "piChat.history",
+        "command": "piAgentManager.history",
         "title": "Past Chats",
-        "category": "Pi",
+        "category": "Pi Agent Manager",
         "icon": "$(history)"
       },
       {
-        "command": "piChat.sendSelection",
-        "title": "Add Selection to Pi Chat",
-        "category": "Pi"
+        "command": "piAgentManager.sendSelection",
+        "title": "Add Selection to Chat",
+        "category": "Pi Agent Manager"
       },
       {
-        "command": "piChat.focusInput",
-        "title": "Focus Pi Chat Input",
-        "category": "Pi"
+        "command": "piAgentManager.focusInput",
+        "title": "Focus Chat Input",
+        "category": "Pi Agent Manager"
       }
     ],
     "keybindings": [
       {
-        "command": "piChat.sendSelection",
+        "command": "piAgentManager.sendSelection",
         "key": "ctrl+l",
         "mac": "cmd+l",
         "when": "editorTextFocus"
       },
       {
-        "command": "piChat.focusInput",
+        "command": "piAgentManager.focusInput",
         "key": "ctrl+escape",
         "mac": "cmd+escape"
       },
       {
-        "command": "piChat.newChat",
+        "command": "piAgentManager.newChat",
         "key": "ctrl+n",
         "mac": "cmd+n",
-        "when": "piChat.focused"
+        "when": "piAgentManager.focused"
       }
     ],
     "viewsContainers": {
       "secondarySidebar": [
         {
-          "id": "piChat",
-          "title": "Pi",
+          "id": "piAgentManager",
+          "title": "Pi Agent Manager",
           "icon": "media/pi.svg"
         }
       ]
     },
     "views": {
-      "piChat": [
+      "piAgentManager": [
         {
           "type": "webview",
-          "id": "piChat.view",
-          "name": "Pi",
+          "id": "piAgentManager.view",
+          "name": "Chat",
           "icon": "media/pi.svg"
         }
       ]
@@ -110,27 +110,27 @@
     "menus": {
       "editor/title": [
         {
-          "command": "piChat.open",
+          "command": "piAgentManager.open",
           "group": "navigation@1"
         }
       ],
       "editor/context": [
         {
-          "command": "piChat.sendSelection",
+          "command": "piAgentManager.sendSelection",
           "group": "pi@1",
           "when": "editorHasSelection"
         }
       ]
     },
     "configuration": {
-      "title": "Pi Chat",
+      "title": "Pi Agent Manager",
       "properties": {
-        "piChat.command": {
+        "piAgentManager.command": {
           "type": "string",
           "default": "pi",
           "description": "Executable name or absolute path of the Pi CLI."
         },
-        "piChat.extraArgs": {
+        "piAgentManager.extraArgs": {
           "type": "array",
           "items": {
             "type": "string"

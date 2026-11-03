@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Pi Chat (formerly Pi Agent Manager) are documented here.
+All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
 ## 0.2.0 — 2026-11-02
 
