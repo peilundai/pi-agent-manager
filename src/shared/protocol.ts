@@ -54,7 +54,7 @@ export interface ChatSnapshot {
   stats?: PiSessionStats;
 }
 
-/** Which tool cards start expanded: edits and writes only, every tool, or none. */
+/** Which tool cards start expanded: edits only, every tool, or none. */
 export type ToolExpansion = "edits" | "all" | "none";
 
 export const TOOL_EXPANSIONS: readonly ToolExpansion[] = ["edits", "all", "none"];

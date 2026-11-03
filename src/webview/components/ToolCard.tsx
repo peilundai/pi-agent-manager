@@ -55,7 +55,7 @@ export const ToolCard = memo(function ToolCard({ tool }: { tool: ToolState }) {
   const description = describeTool(tool);
   const summary = summarizeTool(tool);
   const stats = tool.status === "success" || tool.status === "running" ? diffStats(tool) : undefined;
-  const autoOpen = toolExpansion === "all" || (toolExpansion === "edits" && (tool.name === "edit" || tool.name === "write"));
+  const autoOpen = toolExpansion === "all" || (toolExpansion === "edits" && tool.name === "edit");
   const [open, setOpen] = useState<boolean | undefined>(undefined);
   const expanded = open ?? (autoOpen && tool.status !== "streaming");
   const live = tool.status === "running" || tool.status === "streaming";

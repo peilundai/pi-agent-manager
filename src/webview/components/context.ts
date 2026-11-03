@@ -3,7 +3,7 @@ import type { ToolExpansion, WebviewToHostMessage } from "../../shared/protocol"
 
 export interface ChatContextValue {
   post(message: WebviewToHostMessage): void;
-  /** Which tool cards start expanded; defaults to edits and writes. */
+  /** Which tool cards start expanded; defaults to edits only. */
   toolExpansion?: ToolExpansion;
 }
 

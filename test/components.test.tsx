@@ -184,10 +184,13 @@ describe("ToolCard", () => {
 
   it("shows write content as added lines and errors in red", () => {
     const { rerender } = withContext(<ToolCard tool={{ ...base, name: "write", args: { path: "b.txt", content: "one\ntwo\n" } }} />);
+    expect(screen.getByText("Wrote 2 lines")).toBeInTheDocument();
+    expect(screen.queryByText("two")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     expect(screen.getByText("two")).toBeInTheDocument();
     rerender(
       <ChatContext.Provider value={{ post: () => undefined }}>
-        <ToolCard tool={{ ...base, status: "error", output: "exit 1: boom" }} />
+        <ToolCard key="error" tool={{ ...base, status: "error", output: "exit 1: boom" }} />
       </ChatContext.Provider>,
     );
     expect(screen.getByText("exit 1: boom")).toHaveClass("tool-summary", "error");
