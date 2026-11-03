@@ -106,7 +106,7 @@ The end-to-end suites need no API key. They point a custom OpenAI-compatible `mo
 
 **CI** (`.github/workflows/ci.yml`):
 - typecheck and lint
-- unit tests on Ubuntu, macOS and Windows (Node 22, plus Node 20 on Ubuntu)
+- unit tests on Ubuntu, macOS and Windows (Node 22, plus Node 24 on Ubuntu)
 - coverage with thresholds
 - the real-Pi and Playwright suites
 - a packaged `.vsix` artifact
