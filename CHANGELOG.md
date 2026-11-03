@@ -2,7 +2,7 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
-## 0.2.0 — Unreleased (first Marketplace preview)
+## 0.2.0 — 2026-11-03 (first Marketplace preview)
 
 Rewritten from scratch as a native chat UI for the Pi coding agent. First release published to the VS Code Marketplace and Open VSX, as an unofficial preview.
 
