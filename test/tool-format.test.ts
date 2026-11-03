@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolState } from "../src/webview/chat-state";
-import { describeTool, editArgsDiff, languageForPath, parsePiDiff, summarizeTool } from "../src/webview/tool-format";
+import { describeTool, diffStats, editArgsDiff, languageForPath, parsePiDiff, summarizeTool } from "../src/webview/tool-format";
 
 const tool = (overrides: Partial<ToolState>): ToolState => ({ id: "t", name: "read", args: {}, status: "success", output: "", ...overrides });
 
@@ -27,6 +27,13 @@ describe("tool formatting", () => {
       { kind: "add", line: 2, text: "new" },
       { kind: "skip", text: "…" },
     ]);
+  });
+
+  it("counts added and removed lines for edits and writes", () => {
+    expect(diffStats(tool({ name: "edit", details: { diff: " 1 a\n-2 b\n+2 c\n+3 d" } }))).toEqual({ added: 2, removed: 1 });
+    expect(diffStats(tool({ name: "edit", args: { oldText: "x\ny", newText: "z" } }))).toEqual({ added: 1, removed: 2 });
+    expect(diffStats(tool({ name: "write", args: { content: "one\ntwo\n" } }))).toEqual({ added: 2, removed: 0 });
+    expect(diffStats(tool({ name: "bash" }))).toBeUndefined();
   });
 
   it("falls back to edit arguments", () => {

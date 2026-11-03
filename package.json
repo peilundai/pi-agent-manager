@@ -188,6 +188,21 @@
           "minimum": 0,
           "markdownDescription": "Maximum width, in pixels, of the chat transcript and composer. When the view is wider, they stay centered at this width. Set to `0` to always fill the view."
         },
+        "piAgentManager.expandToolCards": {
+          "type": "string",
+          "enum": [
+            "edits",
+            "all",
+            "none"
+          ],
+          "enumDescriptions": [
+            "Expand edits to show their diff; fold other tools, including writes.",
+            "Expand every tool card.",
+            "Fold every tool card, showing only its header and summary."
+          ],
+          "default": "edits",
+          "markdownDescription": "Which tool cards in the chat start expanded. Click a card's header to expand or fold it."
+        },
         "piAgentManager.loadShellEnvironment": {
           "type": "boolean",
           "default": true,

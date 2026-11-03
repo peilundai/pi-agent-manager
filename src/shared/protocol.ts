@@ -54,6 +54,11 @@ export interface ChatSnapshot {
   stats?: PiSessionStats;
 }
 
+/** Which tool cards start expanded: edits only, every tool, or none. */
+export type ToolExpansion = "edits" | "all" | "none";
+
+export const TOOL_EXPANSIONS: readonly ToolExpansion[] = ["edits", "all", "none"];
+
 export type HostToWebviewMessage =
   | {
       version: 1;
@@ -65,6 +70,8 @@ export type HostToWebviewMessage =
       /** Maximum width in pixels of the transcript and composer; 0 fills the view. */
       maxContentWidth?: number;
       setupError?: SetupErrorState;
+      /** From the `piAgentManager.expandToolCards` setting. */
+      toolExpansion?: ToolExpansion;
     }
   | { version: 1; type: "process"; status: ProcessStatus; error?: string; stderr?: string }
   | { version: 1; type: "snapshot"; snapshot: ChatSnapshot }

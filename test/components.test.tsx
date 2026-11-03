@@ -150,22 +150,47 @@ describe("ToolCard", () => {
     expect(screen.getByText(/all good/)).toBeInTheDocument();
   });
 
+  it("follows the tool card expansion setting", () => {
+    const edit: ToolState = { ...base, name: "edit", args: { path: "a.ts", oldText: "old", newText: "new" }, output: "" };
+    const { rerender } = render(
+      <ChatContext.Provider value={{ post: () => undefined, toolExpansion: "all" }}>
+        <ToolCard tool={base} />
+      </ChatContext.Provider>,
+    );
+    expect(screen.getByText("$ npm test")).toBeInTheDocument();
+    rerender(
+      <ChatContext.Provider value={{ post: () => undefined, toolExpansion: "none" }}>
+        <ToolCard key="edit" tool={edit} />
+      </ChatContext.Provider>,
+    );
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+    expect(screen.queryByText("old")).not.toBeInTheDocument();
+    expect(screen.getByText("Added 1 line, removed 1 line")).toBeInTheDocument();
+  });
+
   it("opens edits by default with a diff fallback from arguments", () => {
     const { posted } = withContext(
       <ToolCard tool={{ ...base, name: "edit", args: { path: "src/a.ts", edits: [{ oldText: "old", newText: "new" }] }, output: "" }} />,
     );
     expect(screen.getByText("old")).toBeInTheDocument();
     expect(screen.getByText("new")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 added, 1 removed")).toHaveTextContent("+1-1");
+    fireEvent.click(screen.getByRole("button", { expanded: true }));
+    expect(screen.getByText("+1")).toHaveClass("tool-stat-add");
+    expect(screen.getByText("-1")).toHaveClass("tool-stat-del");
     fireEvent.click(screen.getByText("src/a.ts"));
     expect(posted.at(-1)).toEqual({ version: 1, type: "file.open", path: "src/a.ts" });
   });
 
   it("shows write content as added lines and errors in red", () => {
     const { rerender } = withContext(<ToolCard tool={{ ...base, name: "write", args: { path: "b.txt", content: "one\ntwo\n" } }} />);
+    expect(screen.getByText("Wrote 2 lines")).toBeInTheDocument();
+    expect(screen.queryByText("two")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     expect(screen.getByText("two")).toBeInTheDocument();
     rerender(
       <ChatContext.Provider value={{ post: () => undefined }}>
-        <ToolCard tool={{ ...base, status: "error", output: "exit 1: boom" }} />
+        <ToolCard key="error" tool={{ ...base, status: "error", output: "exit 1: boom" }} />
       </ChatContext.Provider>,
     );
     expect(screen.getByText("exit 1: boom")).toHaveClass("tool-summary", "error");

@@ -10,7 +10,14 @@ import { PiRpcClient } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
 import type { PiEnvironment } from "./pi-environment";
 import type { SessionSummary, SetupErrorState } from "../shared/model";
-import { isWebviewMessage, type HostToWebviewMessage, type ImageAttachment, type WebviewToHostMessage } from "../shared/protocol";
+import {
+  isWebviewMessage,
+  TOOL_EXPANSIONS,
+  type HostToWebviewMessage,
+  type ImageAttachment,
+  type ToolExpansion,
+  type WebviewToHostMessage,
+} from "../shared/protocol";
 
 const SESSIONS_DEBOUNCE_MS = 200;
 const FILE_CACHE_MS = 30_000;
@@ -72,6 +79,11 @@ export function webviewHtml(webview: Pick<vscode.Webview, "cspSource" | "asWebvi
     <script nonce="${nonce}" src="${script}"></script>
   </body>
 </html>`;
+}
+
+function toolExpansionSetting(): ToolExpansion {
+  const value = vscode.workspace.getConfiguration("piAgentManager").get<unknown>("expandToolCards", "edits");
+  return TOOL_EXPANSIONS.includes(value as ToolExpansion) ? (value as ToolExpansion) : "edits";
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -162,7 +174,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   /** Re-scopes the chat when folders are added, removed or renamed. */
   /** Layout settings only need a fresh init; Pi keeps running. */
   configurationChanged(event: Pick<vscode.ConfigurationChangeEvent, "affectsConfiguration">): void {
-    if (this.ready && event.affectsConfiguration("piAgentManager.maxContentWidth")) this.postInit();
+    if (!this.ready) return;
+    if (
+      event.affectsConfiguration("piAgentManager.maxContentWidth") ||
+      event.affectsConfiguration("piAgentManager.expandToolCards")
+    ) {
+      this.postInit();
+    }
   }
 
   workspaceFoldersChanged(): void {
@@ -422,6 +440,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       ...((vscode.workspace.workspaceFolders?.length ?? 0) > 1 ? { multiRoot: true } : {}),
       maxContentWidth: maxContentWidth(),
       ...(this.setupError ? { setupError: this.setupError } : {}),
+      toolExpansion: toolExpansionSetting(),
     });
   }
 

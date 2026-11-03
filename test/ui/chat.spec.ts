@@ -26,6 +26,7 @@ test.describe("Pi Agent Manager webview", () => {
     await expect(page.locator(".tool-header").filter({ hasText: "Read" })).toContainText("src/greet.ts");
     await expect(page.locator(".diff-add")).toContainText("return `Hello, ${name}!`;");
     await expect(page.locator(".diff-del")).toContainText('return "hello " + name;');
+    await expect(page.locator(".tool-header").filter({ hasText: "Edit" }).locator(".tool-stats")).toHaveText("+1-1");
     await chat.screenshot("dialog-dark");
     await dialog.getByRole("button", { name: "Yes" }).click();
 

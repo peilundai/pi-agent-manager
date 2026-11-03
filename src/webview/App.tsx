@@ -140,7 +140,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
   const frame = useRef<number | undefined>(undefined);
 
   const post = useCallback((message: WebviewToHostMessage) => transport.post(message), [transport]);
-  const context = useMemo(() => ({ post }), [post]);
+  const context = useMemo(() => ({ post, toolExpansion: state.toolExpansion }), [post, state.toolExpansion]);
 
   useEffect(() => {
     const flush = () => {
