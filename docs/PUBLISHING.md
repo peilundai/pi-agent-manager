@@ -10,13 +10,13 @@ Releases are published by `.github/workflows/release.yml`. It runs on every push
 
 A store whose token is missing is skipped with a warning, so you can turn the stores on one at a time.
 
-Extension ID: **`peilun-dai.pi-agent-manager`**. The ID can never change after the first publish.
+Extension ID: **`peilundai.pi-agent-manager`**. The ID can never change after the first publish.
 
 ## One-time setup
 
 ### VS Code Marketplace
 
-1. Sign in at <https://marketplace.visualstudio.com/manage> with a Microsoft account and create the publisher **`peilun-dai`**. The ID must match `publisher` in `package.json`.
+1. Sign in at <https://marketplace.visualstudio.com/manage> with a Microsoft account and create the publisher **`peilundai`**. The ID must match `publisher` in `package.json`.
 2. In Azure DevOps (<https://dev.azure.com>, any organization), open **User settings → Personal access tokens** and create a token:
    - Organization: **All accessible organizations**
    - Scopes: **Custom defined → Marketplace → Manage**
@@ -24,7 +24,7 @@ Extension ID: **`peilun-dai.pi-agent-manager`**. The ID can never change after t
 3. Optional check from a terminal:
 
    ```sh
-   npx vsce verify-pat peilun-dai -p <token>
+   npx vsce verify-pat peilundai -p <token>
    ```
 
 4. In GitHub, open **Settings → Secrets and variables → Actions** and add a repository secret named `VSCE_PAT` containing the token.
@@ -38,7 +38,7 @@ Open VSX serves Cursor, VSCodium, Windsurf, Gitpod and other VS Code–compatibl
 3. Create the namespace once:
 
    ```sh
-   npx ovsx create-namespace peilun-dai -p <token>
+   npx ovsx create-namespace peilundai -p <token>
    ```
 
    Optionally, request namespace verification for the "verified publisher" badge.
@@ -75,5 +75,5 @@ A tag that the workflow creates itself doesn't start a second run, because GitHu
 
 ## If something goes wrong
 
-- **Unpublish or remove a version:** `npx vsce unpublish peilun-dai.pi-agent-manager` removes the whole extension, so prefer publishing a fixed patch version. On Open VSX, ask the namespace owner or the Open VSX team to remove a version.
+- **Unpublish or remove a version:** `npx vsce unpublish peilundai.pi-agent-manager` removes the whole extension, so prefer publishing a fixed patch version. On Open VSX, ask the namespace owner or the Open VSX team to remove a version.
 - **Expired token:** renew the token and update the repository secret. Re-run the failed workflow from the Actions tab; the tag doesn't need to change. Re-runs are safe after a partial publish: both publish steps use `--skip-duplicate`, so a store that already has the version is skipped.
