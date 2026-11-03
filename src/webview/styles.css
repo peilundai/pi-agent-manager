@@ -347,6 +347,9 @@ pre,
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* piAgentManager.maxContentWidth: keep lines readable in a wide view. */
+  max-width: var(--content-max-width, none);
+  margin-inline: auto;
   padding: 14px 14px 8px;
 }
 
@@ -1240,6 +1243,9 @@ body.vscode-high-contrast-light .diff-del {
 
 .bottom {
   position: relative;
+  width: 100%;
+  max-width: var(--content-max-width, none);
+  margin-inline: auto;
   padding: 0 12px 12px;
 }
 

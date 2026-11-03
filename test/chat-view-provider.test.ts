@@ -110,7 +110,7 @@ describe("ChatViewProvider", () => {
   it("asks for a folder when none is open", async () => {
     const { posted, ready } = setup({ workspace: false });
     await ready();
-    expect(posted).toEqual([{ version: 1, type: "init", workspaceName: "", platform: process.platform, setupError: { kind: "workspace" } }]);
+    expect(posted).toEqual([{ version: 1, type: "init", workspaceName: "", platform: process.platform, maxContentWidth: 800, setupError: { kind: "workspace" } }]);
   });
 
   it("reports a missing Pi executable as a setup error", async () => {
@@ -422,8 +422,28 @@ describe("ChatViewProvider multi-root folders", () => {
     mock.workspace.workspaceFolders = [other];
     provider.workspaceFoldersChanged();
     await settle();
-    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform });
+    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform, maxContentWidth: 800 });
     expect(clients).toHaveLength(2);
+  });
+
+  it("re-sends the content width when the setting changes", async () => {
+    const { provider, posted, ready, clients } = setup();
+    provider.configurationChanged({ affectsConfiguration: () => true });
+    expect(inits(posted)).toHaveLength(0);
+    await ready();
+    const before = inits(posted).length;
+    mock.configuration.set("maxContentWidth", 960);
+    provider.configurationChanged({ affectsConfiguration: (section) => section === "piAgentManager.command" });
+    expect(inits(posted)).toHaveLength(before);
+    provider.configurationChanged({ affectsConfiguration: (section) => section === "piAgentManager.maxContentWidth" });
+    expect(inits(posted).at(-1)).toMatchObject({ maxContentWidth: 960 });
+    mock.configuration.set("maxContentWidth", -5);
+    provider.configurationChanged({ affectsConfiguration: () => true });
+    expect(inits(posted).at(-1)).toMatchObject({ maxContentWidth: 800 });
+    mock.configuration.set("maxContentWidth", 0);
+    provider.configurationChanged({ affectsConfiguration: () => true });
+    expect(inits(posted).at(-1)).toMatchObject({ maxContentWidth: 0 });
+    expect(clients).toHaveLength(1);
   });
 
   it("asks for a folder when the last one is removed", async () => {
