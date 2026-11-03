@@ -16,7 +16,7 @@ Every commit message, and every pull request title, follows [Conventional Commit
 - **Scopes** are optional, for example `deps`, `deps-dev`, `webview`, `rpc`, `release`.
 - Mark breaking changes with `!` after the type or scope, or with a `BREAKING CHANGE:` footer.
 - Keep the summary at 72 characters or fewer, written as a command ("add", not "added").
-- **PR titles must follow the same format.** Pull requests are squash-merged, so the PR title becomes the commit message on `main`. GitHub appends ` (#123)`.
+- **PR titles must follow the same format.** Pull requests are squash-merged, so the PR title becomes the commit message on `main`. GitHub appends ` (#123)`. The `PR title` workflow (`.github/workflows/pr-title.yml`) fails pull requests whose title does not comply.
 - Examples:
   - `feat(webview): show a context-usage ring in the composer`
   - `fix: keep the latest draft when the composer remounts`
