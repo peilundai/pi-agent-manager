@@ -256,7 +256,7 @@ describe("ChatViewProvider", () => {
 describe("ChatViewProvider multi-root folders", () => {
   const work = folder("/work", "work", 0);
   const other = folder("/other", "other", 1);
-  const editorIn = (target: WorkspaceFolder) => ({ document: { uri: mock.Uri.file(join(target.uri.fsPath, "a.ts")) } });
+  const editorIn = (target: WorkspaceFolder) => ({ document: { uri: mock.Uri.file(`${target.uri.fsPath}/a.ts`) } });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
   const inits = (posted: HostToWebviewMessage[]) => posted.filter((message) => message.type === "init");
 
