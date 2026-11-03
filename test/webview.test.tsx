@@ -129,6 +129,16 @@ describe("App", () => {
     expect(posted.at(-1)).toEqual({ version: 1, type: "setup.action", action: "retry" });
   });
 
+  it("keeps the latest draft when the composer remounts after a setup error", async () => {
+    const { send } = setup();
+    await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin" }, snapshot);
+    fireEvent.change(screen.getByLabelText("Message Pi"), { target: { value: "half-written prompt" } });
+    await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin", setupError: { kind: "executable", message: "x" } });
+    expect(screen.queryByLabelText("Message Pi")).not.toBeInTheDocument();
+    await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin" });
+    expect(screen.getByLabelText("Message Pi")).toHaveValue("half-written prompt");
+  });
+
   it("offers a restart when Pi exits", async () => {
     const { posted, send } = setup();
     await send(snapshot, { version: 1, type: "process", status: "exited", error: "Pi exited with code 1.", stderr: "fatal" });

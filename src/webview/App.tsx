@@ -202,6 +202,8 @@ export function App({ transport }: { transport: WebviewTransport }) {
     },
     [transport],
   );
+  // The composer remounts after a setup error is retried; give it the latest draft, not the first one.
+  const loadDraft = useCallback(() => persisted.current.draft ?? "", []);
 
   const submit = useCallback(
     (text: string, images: ImageAttachment[], mode: PromptMode) => {
@@ -303,7 +305,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
                 commands={state.commands}
                 localCommands={localCommands}
                 stats={state.stats}
-                initialDraft={initialPersisted.draft ?? ""}
+                loadDraft={loadDraft}
                 history={history}
                 onDraftChange={onDraftChange}
                 onSubmit={submit}

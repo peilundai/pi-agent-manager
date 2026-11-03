@@ -215,7 +215,7 @@ describe("Composer", () => {
       commands: [],
       localCommands: [],
       stats: { contextUsage: { percent: 85, tokens: 170_000, contextWindow: 200_000 }, cost: 1.234 },
-      initialDraft: "",
+      loadDraft: () => "",
       history: ["first prompt", "second prompt"],
       onDraftChange: vi.fn(),
       onSubmit: vi.fn(),
@@ -251,6 +251,17 @@ describe("Composer", () => {
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Tab" });
     expect(input.value).toBe("look at @src/apple.ts ");
+  });
+
+  it("searches again when the same @ mention is re-entered", () => {
+    const { input, posted } = renderComposer();
+    const searches = () => posted.filter((message) => message.type === "files.search");
+    fireEvent.change(input, { target: { value: "@", selectionStart: 1 } });
+    expect(searches()).toHaveLength(1);
+    fireEvent.change(input, { target: { value: "", selectionStart: 0 } });
+    fireEvent.change(input, { target: { value: "@", selectionStart: 1 } });
+    expect(searches()).toHaveLength(2);
+    expect(searches()[1]).toMatchObject({ query: "" });
   });
 
   it("attaches pasted images and submits them", async () => {

@@ -94,7 +94,8 @@ export interface ComposerProps {
   commands: PiCommand[];
   localCommands: LocalCommand[];
   stats: PiSessionStats | undefined;
-  initialDraft: string;
+  /** Returns the latest saved draft; read once when the composer mounts. */
+  loadDraft(): string;
   history: string[];
   onDraftChange(text: string): void;
   onSubmit(text: string, images: ImageAttachment[], mode: PromptMode): void;
@@ -105,7 +106,7 @@ export interface ComposerProps {
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(props, ref) {
   const { post } = useChat();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState(props.initialDraft);
+  const [text, setText] = useState(() => props.loadDraft());
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [caret, setCaret] = useState(0);
   const [menuIndex, setMenuIndex] = useState(0);
@@ -163,7 +164,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
    */
   const requestFiles = (nextText: string, nextCaret: number, dismissed: boolean) => {
     const nextMention = dismissed ? undefined : mentionAt(nextText, nextCaret);
-    if (nextMention === undefined || nextMention.query === fileRequest?.query) return;
+    if (nextMention === undefined) {
+      // Leaving the mention ends that search, so re-entering it fetches fresh results.
+      if (fileRequest !== undefined) setFileRequest(undefined);
+      return;
+    }
+    if (nextMention.query === fileRequest?.query) return;
     requestCounter.current += 1;
     const id = requestCounter.current;
     setFileRequest({ id, query: nextMention.query });
