@@ -18,10 +18,6 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: react-dom
         update-types: ["version-update:semver-major"]
-      - dependency-name: vitest
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@vitest/*"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "@types/vscode"
       # typescript-eslint (type-aware lint) supports TypeScript < 6.1 only; revisit
       # TypeScript 7 once typescript-eslint supports it.
