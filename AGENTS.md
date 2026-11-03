@@ -22,7 +22,8 @@ Every commit message, and every pull request title, follows [Conventional Commit
   - `fix: keep the latest draft when the composer remounts`
   - `build(deps-dev): upgrade vitest to 5.1`
   - `chore(release): 0.2.0`
-- **No AI co-authors or attribution.** Never add Claude Code, or any other AI agent or assistant, as a co-author (for example a `Co-Authored-By:` trailer) in commits, and never add "Generated with …" lines or similar footers to commit messages, PR titles or PR descriptions. `.claude/settings.json` turns these off for Claude Code; other agents must leave them out too.
+- **No AI co-authors or attribution.** Never add Claude Code, or any other AI agent or assistant, as a co-author (for example a `Co-Authored-By:` trailer) in commits, and never add "Generated with …" lines, session links or similar footers anywhere in the project: commit messages, PR titles and descriptions, PR and issue comments, review comments and replies, issues, release notes, or files in the repository. `.claude/settings.json` turns these off for Claude Code; other agents must leave them out too.
+- **Commit as the human author.** Commits must be authored by the person who owns the change, not by an agent identity such as `Claude <noreply@anthropic.com>`. When GitHub squash-merges, it adds a `Co-authored-by:` line for every other commit author, so an agent-authored commit brings the trailer back.
 
 ## Branches and pull requests
 
