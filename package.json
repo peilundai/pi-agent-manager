@@ -2,7 +2,7 @@
   "name": "pi-agent-manager",
   "displayName": "Pi Agent Manager",
   "description": "Unofficial side-bar chat for the Pi coding agent. Runs your locally installed and configured pi CLI.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "peilun-dai",
   "license": "MIT",
   "icon": "media/icon.png",

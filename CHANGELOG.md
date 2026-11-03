@@ -2,11 +2,17 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
-## Unreleased
+## 0.2.1 — 2026-11-03
 
 ### Added
 
 - `piAgentManager.maxContentWidth` setting (default `800`): the transcript and composer stop growing past this width and stay centered when the view is wider. `0` fills the view.
+- Edit and write tool cards show added and removed line counts (`+N -M`) next to the file path, so the size of a change stays visible when the card is folded.
+- `piAgentManager.expandToolCards` setting (`edits`, `all` or `none`; default `edits`): chooses which tool cards start expanded. Changes apply to open chats, and cards you already toggled keep their state.
+
+### Changed
+
+- Write tool cards now start folded, showing their line count and summary; click the header to see the content. Edit diffs still open by default.
 
 ## 0.2.0 — 2026-11-03 (first Marketplace preview)
 
