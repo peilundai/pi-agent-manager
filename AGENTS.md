@@ -22,7 +22,7 @@ Every commit message, and every pull request title, follows [Conventional Commit
   - `fix: keep the latest draft when the composer remounts`
   - `build(deps-dev): upgrade vitest to 5.1`
   - `chore(release): 0.2.0`
-- No AI attribution trailers or footers in commits or PR descriptions; `.claude/settings.json` disables them.
+- **No AI co-authors or attribution.** Never add Claude Code, or any other AI agent or assistant, as a co-author (for example a `Co-Authored-By:` trailer) in commits, and never add "Generated with …" lines or similar footers to commit messages, PR titles or PR descriptions. `.claude/settings.json` turns these off for Claude Code; other agents must leave them out too.
 
 ## Branches and pull requests
 
