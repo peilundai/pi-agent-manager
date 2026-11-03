@@ -52,6 +52,15 @@ describe("App", () => {
     expect(screen.getByText("Medium")).toBeInTheDocument();
   });
 
+  it("caps the transcript and composer at the configured width", async () => {
+    const { send } = setup();
+    await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin", maxContentWidth: 640 }, snapshot);
+    const app = document.querySelector<HTMLElement>(".app");
+    expect(app?.style.getPropertyValue("--content-max-width")).toBe("640px");
+    await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin", maxContentWidth: 0 });
+    expect(app?.style.getPropertyValue("--content-max-width")).toBe("none");
+  });
+
   it("sends a prompt on Enter and shows it optimistically", async () => {
     const { posted, send } = setup();
     await send(snapshot);

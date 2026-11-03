@@ -67,6 +67,8 @@ export type HostToWebviewMessage =
       platform: string;
       /** The window has several folders; the chat is scoped to `workspaceName` and can switch. */
       multiRoot?: boolean;
+      /** Maximum width in pixels of the transcript and composer; 0 fills the view. */
+      maxContentWidth?: number;
       setupError?: SetupErrorState;
       /** From the `piAgentManager.expandToolCards` setting. */
       toolExpansion?: ToolExpansion;

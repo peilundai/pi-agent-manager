@@ -91,6 +91,7 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 | `piAgentManager.command` | `pi` | Executable name or absolute path of the Pi CLI. |
 | `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]` or `["--offline"]`. Mode and session flags are managed by the extension. |
 | `piAgentManager.loadShellEnvironment` | `true` | Add the variables your login shell sets up (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |
+| `piAgentManager.maxContentWidth` | `800` | Maximum width in pixels of the transcript and composer; they stay centered when the view is wider. `0` fills the view. |
 | `piAgentManager.environment` | `{}` | Extra variables for Pi, such as a gateway base URL. Put keys in **Set Environment Secret…** instead. |
 | `piAgentManager.expandToolCards` | `edits` | Which tool cards start expanded: `edits` (edit diffs only), `all`, or `none`. Click a card header to toggle it. |
 

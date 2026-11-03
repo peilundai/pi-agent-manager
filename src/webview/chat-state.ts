@@ -43,6 +43,8 @@ export interface ChatState {
   /** Several folders are open, so the folder is shown and can be switched. */
   multiRoot: boolean;
   platform: string;
+  /** Maximum width in pixels of the transcript and composer; 0 fills the view. */
+  maxContentWidth: number;
   setupError?: SetupErrorState;
   toolExpansion: ToolExpansion;
   process: { status: ProcessStatus | "idle"; error?: string; stderr?: string };
@@ -66,6 +68,7 @@ export const initialChatState: ChatState = {
   workspaceName: "",
   multiRoot: false,
   platform: "",
+  maxContentWidth: 800,
   toolExpansion: "edits",
   process: { status: "idle" },
   pi: {},
@@ -559,6 +562,7 @@ function handleHost(state: ChatState, message: HostToWebviewMessage, now: number
         workspaceName: message.workspaceName,
         multiRoot: Boolean(message.multiRoot),
         platform: message.platform,
+        maxContentWidth: message.maxContentWidth ?? state.maxContentWidth,
         toolExpansion: message.toolExpansion ?? "edits",
       };
       if (message.setupError) next.setupError = message.setupError;

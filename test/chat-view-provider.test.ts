@@ -110,20 +110,19 @@ describe("ChatViewProvider", () => {
   it("asks for a folder when none is open", async () => {
     const { posted, ready } = setup({ workspace: false });
     await ready();
-    expect(posted).toEqual([{ version: 1, type: "init", workspaceName: "", platform: process.platform, setupError: { kind: "workspace" }, toolExpansion: "edits" }]);
+    expect(posted).toEqual([{ version: 1, type: "init", workspaceName: "", platform: process.platform, maxContentWidth: 800, setupError: { kind: "workspace" }, toolExpansion: "edits" }]);
   });
 
   it("sends the tool card expansion setting and resends it when it changes", async () => {
     mock.configuration.set("expandToolCards", "all");
-    const { posted, ready } = setup();
+    const { provider, posted, ready } = setup();
     await ready();
     expect(posted[0]).toMatchObject({ type: "init", toolExpansion: "all" });
-    const listener = mock.workspace.onDidChangeConfiguration.mock.calls.at(-1)?.[0] as (event: { affectsConfiguration(key: string): boolean }) => void;
     mock.configuration.set("expandToolCards", "bogus");
-    listener({ affectsConfiguration: (key) => key === "piAgentManager.expandToolCards" });
+    provider.configurationChanged({ affectsConfiguration: (key) => key === "piAgentManager.expandToolCards" });
     expect(posted.at(-1)).toMatchObject({ type: "init", toolExpansion: "edits" });
     const count = posted.length;
-    listener({ affectsConfiguration: () => false });
+    provider.configurationChanged({ affectsConfiguration: () => false });
     expect(posted).toHaveLength(count);
   });
 
@@ -436,8 +435,28 @@ describe("ChatViewProvider multi-root folders", () => {
     mock.workspace.workspaceFolders = [other];
     provider.workspaceFoldersChanged();
     await settle();
-    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform, toolExpansion: "edits" });
+    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform, maxContentWidth: 800, toolExpansion: "edits" });
     expect(clients).toHaveLength(2);
+  });
+
+  it("re-sends the content width when the setting changes", async () => {
+    const { provider, posted, ready, clients } = setup();
+    provider.configurationChanged({ affectsConfiguration: () => true });
+    expect(inits(posted)).toHaveLength(0);
+    await ready();
+    const before = inits(posted).length;
+    mock.configuration.set("maxContentWidth", 960);
+    provider.configurationChanged({ affectsConfiguration: (section) => section === "piAgentManager.command" });
+    expect(inits(posted)).toHaveLength(before);
+    provider.configurationChanged({ affectsConfiguration: (section) => section === "piAgentManager.maxContentWidth" });
+    expect(inits(posted).at(-1)).toMatchObject({ maxContentWidth: 960 });
+    mock.configuration.set("maxContentWidth", -5);
+    provider.configurationChanged({ affectsConfiguration: () => true });
+    expect(inits(posted).at(-1)).toMatchObject({ maxContentWidth: 800 });
+    mock.configuration.set("maxContentWidth", 0);
+    provider.configurationChanged({ affectsConfiguration: () => true });
+    expect(inits(posted).at(-1)).toMatchObject({ maxContentWidth: 0 });
+    expect(clients).toHaveLength(1);
   });
 
   it("asks for a folder when the last one is removed", async () => {
