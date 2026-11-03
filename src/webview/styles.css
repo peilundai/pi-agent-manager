@@ -409,7 +409,7 @@ pre,
   text-decoration: underline;
 }
 
-/* Assistant timeline: a dot per block, like Claude Code. */
+/* Assistant timeline: a status dot per block. */
 
 .assistant-message {
   display: flex;

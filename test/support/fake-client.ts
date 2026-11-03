@@ -1,7 +1,7 @@
 import type { RpcClientLike } from "../../src/pi/chat-session";
 import type { RpcClientListener } from "../../src/pi/rpc-client";
 
-/** In-memory `RpcClientLike` with canned responses for the RPC commands Pi Chat uses. */
+/** In-memory `RpcClientLike` with canned responses for the RPC commands Pi Agent Manager uses. */
 export class FakeClient implements RpcClientLike {
   running = false;
   readonly requests: Array<Record<string, unknown>> = [];

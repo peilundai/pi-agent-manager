@@ -1,6 +1,8 @@
 /*
- * Pi color tokens, taken from pi-coding-agent 1.5 `theme/dark.json` and `theme/light.json`
+ * Pi color tokens, adapted from pi-coding-agent 1.5 `theme/dark.json` and `theme/light.json`
  * (okhsl values converted to sRGB). Surfaces follow the VS Code theme so the view blends in.
+ * Pi coding agent: https://github.com/earendil-works/pi, MIT License, Copyright (c) Mario Zechner.
+ * See THIRD_PARTY_NOTICES.md.
  */
 :root,
 body.vscode-dark {

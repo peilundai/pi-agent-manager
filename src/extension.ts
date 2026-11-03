@@ -3,7 +3,7 @@ import { resolveWorkspaceFolder } from "./editor/editor-context";
 import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
 import { ChatViewProvider, VIEW_ID } from "./view/chat-view-provider";
 
-const ARCHIVED_SESSIONS_KEY = "piChat.archivedSessions";
+const ARCHIVED_SESSIONS_KEY = "piAgentManager.archivedSessions";
 
 let activeProvider: ChatViewProvider | undefined;
 
@@ -33,11 +33,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(VIEW_ID, provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    vscode.commands.registerCommand("piChat.open", () => provider.focusInput()),
-    vscode.commands.registerCommand("piChat.newChat", () => provider.newChat()),
-    vscode.commands.registerCommand("piChat.history", () => provider.toggleHistory()),
-    vscode.commands.registerCommand("piChat.sendSelection", () => provider.sendSelection()),
-    vscode.commands.registerCommand("piChat.focusInput", () => provider.focusInput()),
+    vscode.commands.registerCommand("piAgentManager.open", () => provider.focusInput()),
+    vscode.commands.registerCommand("piAgentManager.newChat", () => provider.newChat()),
+    vscode.commands.registerCommand("piAgentManager.history", () => provider.toggleHistory()),
+    vscode.commands.registerCommand("piAgentManager.sendSelection", () => provider.sendSelection()),
+    vscode.commands.registerCommand("piAgentManager.focusInput", () => provider.focusInput()),
   );
 }
 

@@ -71,7 +71,7 @@ function assistantText(items: ChatItem[]): string {
 }
 
 describe("Pi RPC contract", () => {
-  it("answers the state, model and command queries with the shapes Pi Chat expects", async () => {
+  it("answers the state, model and command queries with the shapes Pi Agent Manager expects", async () => {
     const h = track(harness());
     await h.session.ensureStarted();
     const snapshot = h.posted.find((message): message is Extract<HostToWebviewMessage, { type: "snapshot" }> => message.type === "snapshot");

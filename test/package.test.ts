@@ -8,6 +8,8 @@ const required = [
   "extension/dist/webview.css",
   "extension/dist/codicon.ttf",
   "extension/media/pi.svg",
+  "extension/media/icon.png",
+  "extension/THIRD_PARTY_NOTICES.md",
   "extension/package.json",
   "extension/readme.md",
   "extension/changelog.md",

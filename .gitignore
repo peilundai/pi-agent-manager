@@ -6,3 +6,4 @@ coverage/
 *.vsix
 test-results/
 playwright-report/
+release/

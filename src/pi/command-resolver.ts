@@ -206,7 +206,7 @@ export function buildRpcArgs(options: RpcArgsOptions = {}): string[] {
   for (const value of extra) {
     const flag = value.split("=", 1)[0] ?? value;
     if (RESERVED_FLAGS.has(flag)) {
-      throw new Error(`The Pi argument “${flag}” is managed by the extension and cannot be set in piChat.extraArgs.`);
+      throw new Error(`The Pi argument “${flag}” is managed by the extension and cannot be set in piAgentManager.extraArgs.`);
     }
   }
   const args = ["--mode", "rpc", ...extra];

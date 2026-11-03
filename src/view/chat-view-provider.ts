@@ -17,8 +17,8 @@ const MAX_INDEXED_FILES = 20_000;
 const MAX_ATTACH_IMAGE_BYTES = 10 * 1024 * 1024;
 const FILE_EXCLUDES = "**/{node_modules,.git,dist,out,build,.next,coverage,.venv,__pycache__}/**";
 
-export const VIEW_ID = "piChat.view";
-export const CONTAINER_COMMAND = "workbench.view.extension.piChat";
+export const VIEW_ID = "piAgentManager.view";
+export const CONTAINER_COMMAND = "workbench.view.extension.piAgentManager";
 
 export interface ChatViewProviderOptions {
   extensionUri: vscode.Uri;
@@ -132,7 +132,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   async sendSelection(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-      void vscode.window.showInformationMessage("Open a file and select code to add it to Pi Chat.");
+      void vscode.window.showInformationMessage("Open a file and select code to add it to Pi Agent Manager.");
       return;
     }
     const document = editor.document;
@@ -239,7 +239,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         await this.session.restart().catch(() => undefined);
         return;
       case "focus.changed":
-        await vscode.commands.executeCommand("setContext", "piChat.focused", message.focused);
+        await vscode.commands.executeCommand("setContext", "piAgentManager.focused", message.focused);
         return;
       case "setup.action":
         await this.setupAction(message.action);
@@ -262,7 +262,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private async createClient(listener: ConstructorParameters<typeof PiRpcClient>[1]): Promise<PiRpcClient> {
     const cwd = this.cwd;
     if (!cwd) throw new Error("Open a folder to chat with Pi.");
-    const config = vscode.workspace.getConfiguration("piChat");
+    const config = vscode.workspace.getConfiguration("piAgentManager");
     const command = await resolvePiCommand({ configured: config.get<string>("command", "pi") });
     const extraArgs = config.get<unknown>("extraArgs", []);
     const args = buildRpcArgs({
@@ -398,7 +398,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         await vscode.commands.executeCommand("workbench.action.files.openFolder");
         return;
       case "openSettings":
-        await vscode.commands.executeCommand("workbench.action.openSettings", "piChat");
+        await vscode.commands.executeCommand("workbench.action.openSettings", "piAgentManager");
         return;
       case "chooseExecutable": {
         const selected = await vscode.window.showOpenDialog({
@@ -409,7 +409,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
         const executable = selected?.[0];
         if (!executable) return;
-        await vscode.workspace.getConfiguration("piChat").update("command", executable.fsPath, vscode.ConfigurationTarget.Global);
+        await vscode.workspace.getConfiguration("piAgentManager").update("command", executable.fsPath, vscode.ConfigurationTarget.Global);
         await this.retrySetup();
         return;
       }

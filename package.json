@@ -1,37 +1,45 @@
 {
   "name": "pi-agent-manager",
-  "displayName": "Pi Chat",
-  "description": "Chat with your local Pi coding agent from VS Code's side bar, Claude Code style.",
+  "displayName": "Pi Agent Manager",
+  "description": "Unofficial side-bar chat for the Pi coding agent. Runs your locally installed and configured pi CLI.",
   "version": "0.2.0",
   "publisher": "peilun-dai",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e1f22",
+    "theme": "dark"
+  },
+  "preview": true,
+  "pricing": "Free",
   "repository": {
     "type": "git",
     "url": "https://github.com/peilundai/pi-agent-manager.git"
   },
   "homepage": "https://github.com/peilundai/pi-agent-manager#readme",
+  "bugs": {
+    "url": "https://github.com/peilundai/pi-agent-manager/issues"
+  },
   "engines": {
     "vscode": "^1.106.0"
   },
   "categories": [
     "AI",
-    "Other"
+    "Chat"
   ],
   "keywords": [
     "pi",
+    "pi coding agent",
     "coding agent",
     "ai",
     "chat",
-    "assistant"
+    "agent",
+    "unofficial"
   ],
-  "galleryBanner": {
-    "color": "#181818",
-    "theme": "dark"
-  },
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Pi Chat launches the local pi executable and reads workspace-scoped Pi session files."
+      "description": "Pi Agent Manager launches the local pi executable and reads workspace-scoped Pi session files."
     }
   },
   "extensionKind": [
@@ -41,68 +49,68 @@
   "contributes": {
     "commands": [
       {
-        "command": "piChat.open",
-        "title": "Open Pi Chat",
-        "category": "Pi",
+        "command": "piAgentManager.open",
+        "title": "Open",
+        "category": "Pi Agent Manager",
         "icon": "media/pi.svg"
       },
       {
-        "command": "piChat.newChat",
+        "command": "piAgentManager.newChat",
         "title": "New Chat",
-        "category": "Pi",
+        "category": "Pi Agent Manager",
         "icon": "$(add)"
       },
       {
-        "command": "piChat.history",
+        "command": "piAgentManager.history",
         "title": "Past Chats",
-        "category": "Pi",
+        "category": "Pi Agent Manager",
         "icon": "$(history)"
       },
       {
-        "command": "piChat.sendSelection",
-        "title": "Add Selection to Pi Chat",
-        "category": "Pi"
+        "command": "piAgentManager.sendSelection",
+        "title": "Add Selection to Chat",
+        "category": "Pi Agent Manager"
       },
       {
-        "command": "piChat.focusInput",
-        "title": "Focus Pi Chat Input",
-        "category": "Pi"
+        "command": "piAgentManager.focusInput",
+        "title": "Focus Chat Input",
+        "category": "Pi Agent Manager"
       }
     ],
     "keybindings": [
       {
-        "command": "piChat.sendSelection",
+        "command": "piAgentManager.sendSelection",
         "key": "ctrl+l",
         "mac": "cmd+l",
         "when": "editorTextFocus"
       },
       {
-        "command": "piChat.focusInput",
+        "command": "piAgentManager.focusInput",
         "key": "ctrl+escape",
         "mac": "cmd+escape"
       },
       {
-        "command": "piChat.newChat",
+        "command": "piAgentManager.newChat",
         "key": "ctrl+n",
         "mac": "cmd+n",
-        "when": "piChat.focused"
+        "when": "piAgentManager.focused"
       }
     ],
     "viewsContainers": {
       "secondarySidebar": [
         {
-          "id": "piChat",
-          "title": "Pi",
+          "id": "piAgentManager",
+          "title": "Pi Agent Manager",
           "icon": "media/pi.svg"
         }
       ]
     },
     "views": {
-      "piChat": [
+      "piAgentManager": [
         {
           "type": "webview",
-          "id": "piChat.view",
-          "name": "Pi",
+          "id": "piAgentManager.view",
+          "name": "Chat",
           "icon": "media/pi.svg"
         }
       ]
@@ -110,27 +118,27 @@
     "menus": {
       "editor/title": [
         {
-          "command": "piChat.open",
+          "command": "piAgentManager.open",
           "group": "navigation@1"
         }
       ],
       "editor/context": [
         {
-          "command": "piChat.sendSelection",
+          "command": "piAgentManager.sendSelection",
           "group": "pi@1",
           "when": "editorHasSelection"
         }
       ]
     },
     "configuration": {
-      "title": "Pi Chat",
+      "title": "Pi Agent Manager",
       "properties": {
-        "piChat.command": {
+        "piAgentManager.command": {
           "type": "string",
           "default": "pi",
           "description": "Executable name or absolute path of the Pi CLI."
         },
-        "piChat.extraArgs": {
+        "piAgentManager.extraArgs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -151,7 +159,8 @@
     "test:ui": "npm run build && playwright test",
     "test:all": "npm run test:coverage && npm run test:e2e && npm run test:ui",
     "package": "npm run check && npm test && npm run build && node scripts/package-vsix.mjs",
-    "verify:package": "node scripts/verify-vsix.mjs"
+    "verify:package": "node scripts/verify-vsix.mjs",
+    "notices": "node scripts/third-party-notices.mjs"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.45",
@@ -175,15 +184,16 @@
     "@types/vscode": "^1.106.0",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
-    "@vitest/coverage-v8": "3.2.7",
+    "@vitest/coverage-v8": "^5.1.0",
     "@vscode/vsce": "^4.1.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^16.3.0",
     "jsdom": "^30.1.3",
+    "ovsx": "^1.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.4",
+    "vitest": "^5.1.0",
     "yauzl": "^3.4.0"
   }
 }

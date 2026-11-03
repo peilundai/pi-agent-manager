@@ -1,0 +1,28 @@
+name: PR title
+
+# Pull requests are squash-merged, so the PR title becomes the commit message on main.
+# Enforce Conventional Commits (see AGENTS.md).
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-title:
+    name: Conventional Commits title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check the pull request title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\([a-z0-9._/-]+\))?!?: [^ ].{0,71}$'
+          if printf '%s' "$TITLE" | grep -Eq "$pattern"; then
+            echo "OK: $TITLE"
+          else
+            echo "::error::PR title must follow Conventional Commits, e.g. 'feat(webview): add X' or 'fix: handle Y' (type: feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert; summary <= 72 chars). Got: $TITLE"
+            exit 1
+          fi

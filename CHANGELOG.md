@@ -1,13 +1,14 @@
 # Changelog
 
-All notable changes to Pi Chat (formerly Pi Agent Manager) are documented here.
+All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
-## 0.2.0 — 2026-11-02
+## 0.2.0 — Unreleased (first Marketplace preview)
 
-Rewritten from scratch as a native chat UI modeled on the Claude Code extension.
+Rewritten from scratch as a native chat UI for the Pi coding agent. First release published to the VS Code Marketplace and Open VSX, as an unofficial preview.
 
 ### Added
 
+- Marketplace listing: π icon, preview flag, unofficial disclaimer, privacy note and third-party notices (including Pi's MIT-licensed palette).
 - Chat view in the Secondary Side Bar driving the local `pi --mode rpc` process. It reuses the CLI's providers, models, skills, extensions and sessions with no extra setup.
 - Streaming Markdown with syntax highlighting, collapsible thinking, and a timeline dot per step.
 - Tool cards with one-line summaries, inline diffs for `edit`/`write`, command output and clickable paths.
