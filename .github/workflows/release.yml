@@ -103,7 +103,9 @@ jobs:
         run: npx ovsx publish "$VSIX" --pat "$OVSX_PAT" --skip-duplicate
       - name: Note skipped stores
         if: steps.plan.outputs.release == 'true' && env.OVSX_PAT == ''
-        run: echo "::warning::OVSX_PAT is not set; skipped Open VSX."
+        run: |
+          echo "::warning::OVSX_PAT is not set; skipped Open VSX."
+          echo "Open VSX was skipped because the OVSX_PAT secret is not set. See docs/PUBLISHING.md." >> "$GITHUB_STEP_SUMMARY"
       - name: Extract release notes
         if: steps.plan.outputs.release == 'true'
         run: node scripts/release-notes.mjs "${VERSION}" > release-notes.md

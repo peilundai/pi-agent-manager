@@ -12,6 +12,21 @@ Open VSX is skipped with a warning while `OVSX_PAT` is missing. The Marketplace 
 
 Extension ID: **`peilundai.pi-agent-manager`**. The ID can never change after the first publish.
 
+## Status and what's left
+
+| Store | State |
+| --- | --- |
+| VS Code Marketplace | Live as `peilundai.pi-agent-manager` since 0.2.2, published with Trusted Publishing. |
+| Open VSX | Workflow ready. Waiting on the owner-only steps below; 0.2.2 was skipped with a warning. |
+
+Only the repository owner can do these, because they need your Open VSX and GitHub accounts:
+
+- [ ] Sign in at <https://open-vsx.org> with GitHub, link an Eclipse account and sign the publisher agreement ([step 1](#open-vsx)).
+- [ ] Create an Open VSX access token ([step 2](#open-vsx)).
+- [ ] Create the `peilundai` namespace with that token ([step 3](#open-vsx)).
+- [ ] Add the token as the repository secret `OVSX_PAT` at <https://github.com/peilundai/pi-agent-manager/settings/secrets/actions> ([step 4](#open-vsx)).
+- [ ] Publish the current version to Open VSX ([step 5](#open-vsx)). Later releases go there automatically.
+
 ## One-time setup
 
 ### VS Code Marketplace
@@ -33,16 +48,21 @@ The workflow has `id-token: write` permission and runs `vsce publish --oidc`. Gi
 
 Open VSX serves Cursor, VSCodium, Windsurf, Gitpod and other VS Code–compatible editors.
 
-1. Sign in at <https://open-vsx.org> with GitHub and accept the Eclipse Foundation publisher agreement in your profile.
-2. Create an access token under **Settings → Access Tokens**.
-3. Create the namespace once:
+1. Sign in at <https://open-vsx.org> with GitHub. In your profile settings, log in with an Eclipse Foundation account (create one at <https://accounts.eclipse.org> if needed; its GitHub username field must be `peilundai`) and sign the **Publisher Agreement**. Publishing fails until the agreement is signed.
+2. Create an access token at <https://open-vsx.org/user-settings/tokens>, for example named `pi-agent-manager release`. Copy it now; it's shown once.
+3. Create the namespace once. It must match `publisher` in `package.json`:
 
    ```sh
    npx ovsx create-namespace peilundai -p <token>
    ```
 
-   Optionally, request namespace verification for the "verified publisher" badge.
-4. Add a repository secret named `OVSX_PAT` containing the token.
+   Optionally, [claim the namespace](https://github.com/EclipseFdn/open-vsx.org/issues/new/choose) to get the "verified publisher" badge.
+4. Add a repository secret named `OVSX_PAT` containing the token: **Settings → Secrets and variables → Actions → New repository secret**.
+5. Publish the version that is already released, since its release run skipped Open VSX. Either:
+   - open the [latest Release run](https://github.com/peilundai/pi-agent-manager/actions/workflows/release.yml) for that version and click **Re-run all jobs** (re-runs read the new secret; the Marketplace step skips the duplicate), or
+   - download the `.vsix` from the [GitHub Release](https://github.com/peilundai/pi-agent-manager/releases/latest) and run `npx ovsx publish pi-agent-manager-<version>.vsix -p <token>`.
+
+   Check the listing at <https://open-vsx.org/extension/peilundai/pi-agent-manager>. GitHub only allows re-runs for 30 days, so use the local command after that.
 
 ## Before every release
 

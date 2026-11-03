@@ -4,7 +4,7 @@ All notable changes to Pi Agent Manager are documented here. (During development
 
 ## 0.2.2 — 2026-11-03 (first Marketplace preview)
 
-First release published to the VS Code Marketplace and Open VSX, as an unofficial preview. 0.2.0 and 0.2.1 were released on GitHub only.
+First release published to the VS Code Marketplace, as an unofficial preview. Open VSX publishing is set up but waits for its access token, so this version reaches Open VSX later. 0.2.0 and 0.2.1 were released on GitHub only.
 
 ### Changed
 
