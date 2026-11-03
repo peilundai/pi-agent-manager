@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -65,7 +65,8 @@ describe("PiSessionRepository", () => {
   });
 
   it("follows the session location from the environment Pi runs with", async () => {
-    const root = await temporaryRoot();
+    // The workspace exists here, so list() compares real paths (macOS tmp is under /private).
+    const root = await realpath(await temporaryRoot());
     const workspace = join(root, "project");
     const shellSessions = join(root, "shell-sessions");
     await mkdir(workspace, { recursive: true });
