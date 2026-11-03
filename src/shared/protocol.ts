@@ -33,6 +33,7 @@ export type WebviewToHostMessage =
   | { version: 1; type: "chat.rename" }
   | { version: 1; type: "chat.delete"; path: string }
   | { version: 1; type: "sessions.refresh" }
+  | { version: 1; type: "folder.pick" }
   | { version: 1; type: "model.set"; provider: string; modelId: string }
   | { version: 1; type: "thinking.set"; level: ThinkingLevel }
   | { version: 1; type: "dialog.respond"; response: DialogResponse }
@@ -54,7 +55,15 @@ export interface ChatSnapshot {
 }
 
 export type HostToWebviewMessage =
-  | { version: 1; type: "init"; workspaceName: string; platform: string; setupError?: SetupErrorState }
+  | {
+      version: 1;
+      type: "init";
+      workspaceName: string;
+      platform: string;
+      /** The window has several folders; the chat is scoped to `workspaceName` and can switch. */
+      multiRoot?: boolean;
+      setupError?: SetupErrorState;
+    }
   | { version: 1; type: "process"; status: ProcessStatus; error?: string; stderr?: string }
   | { version: 1; type: "snapshot"; snapshot: ChatSnapshot }
   | { version: 1; type: "pi.events"; events: PiEvent[] }
@@ -105,6 +114,7 @@ export function isWebviewMessage(value: unknown): value is WebviewToHostMessage 
     case "chat.new":
     case "chat.rename":
     case "sessions.refresh":
+    case "folder.pick":
     case "attach.pick":
     case "compact":
     case "restart":

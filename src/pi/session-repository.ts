@@ -1,4 +1,4 @@
-import { watch as watchDirectory, type FSWatcher } from "node:fs";
+import { realpathSync, watch as watchDirectory, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { readdir, realpath, rm, stat } from "node:fs/promises";
@@ -39,6 +39,15 @@ function expandHome(path: string): string {
   if (path === "~") return homedir();
   if (path.startsWith("~/") || path.startsWith("~\\")) return join(homedir(), path.slice(2));
   return resolve(path);
+}
+
+/** Pi names its session directory after its physical working directory, so resolve symlinks first. */
+function workspacePath(cwd: string): string {
+  try {
+    return realpathSync(cwd);
+  } catch {
+    return resolve(cwd);
+  }
 }
 
 function samePath(left: string, right: string, platform: NodeJS.Platform): boolean {
@@ -120,7 +129,7 @@ export class PiSessionRepository {
 
   watch(cwd: string, onChange: () => void): Disposable {
     const watchers: FSWatcher[] = [];
-    for (const directory of this.directories(resolve(cwd))) {
+    for (const directory of this.directories(workspacePath(cwd))) {
       try {
         watchers.push(watchDirectory(directory, { persistent: false }, onChange));
       } catch {

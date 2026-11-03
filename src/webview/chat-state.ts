@@ -40,6 +40,8 @@ export type ChatItem =
 
 export interface ChatState {
   workspaceName: string;
+  /** Several folders are open, so the folder is shown and can be switched. */
+  multiRoot: boolean;
   platform: string;
   setupError?: SetupErrorState;
   process: { status: ProcessStatus | "idle"; error?: string; stderr?: string };
@@ -61,6 +63,7 @@ export interface ChatState {
 
 export const initialChatState: ChatState = {
   workspaceName: "",
+  multiRoot: false,
   platform: "",
   process: { status: "idle" },
   pi: {},
@@ -549,7 +552,12 @@ function pushNotice(state: ChatState, level: "info" | "warning" | "error", text:
 function handleHost(state: ChatState, message: HostToWebviewMessage, now: number): ChatState {
   switch (message.type) {
     case "init": {
-      const next: ChatState = { ...state, workspaceName: message.workspaceName, platform: message.platform };
+      const next: ChatState = {
+        ...state,
+        workspaceName: message.workspaceName,
+        multiRoot: Boolean(message.multiRoot),
+        platform: message.platform,
+      };
       if (message.setupError) next.setupError = message.setupError;
       else delete next.setupError;
       return next;

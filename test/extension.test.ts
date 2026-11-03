@@ -26,8 +26,11 @@ describe("extension activation", () => {
       "piAgentManager.history",
       "piAgentManager.sendSelection",
       "piAgentManager.focusInput",
+      "piAgentManager.switchFolder",
     ]);
-    expect(subscriptions).toHaveLength(7);
+    expect(subscriptions).toHaveLength(10);
+    expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
+    expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
     await expect(deactivate()).resolves.toBeUndefined();
   });
 

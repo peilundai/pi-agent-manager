@@ -92,7 +92,8 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 
 ## Notes
 
-- Chats are scoped to the workspace folder of the active editor, or the first folder in a multi-root window.
+- Chats and history are scoped to one workspace folder: only chats Pi ran in that exact folder are listed.
+- In a multi-root window, the chat follows the active editor's folder while it is empty, and **New Chat** starts in the active editor's folder. A chat with messages stays in its folder. Use the folder button in the chat header, or **Pi Agent Manager: Switch Workspace Folder**, to switch explicitly.
 - Pi's [project trust](https://github.com/earendil-works/pi) applies as in the CLI. RPC mode cannot show the trust prompt, so trust a project once with `/trust` in the terminal, or pass `--approve` through `piAgentManager.extraArgs`.
 - Built-in TUI-only commands (for example `/settings`) are not available over RPC.
 

@@ -18,7 +18,8 @@ Rewritten from scratch as a native chat UI for the Pi coding agent. First releas
   - `@` file mentions and image paste or drop.
   - Follow-up queue and steering, Esc to interrupt, prompt history.
 - Model and thinking-level picker, and a context-usage ring.
-- Searchable, date-grouped past chats with resume, rename and delete.
+- Searchable, date-grouped past chats with resume, rename and delete, scoped to the workspace folder.
+- Multi-root windows: an empty chat follows the active editor's folder, New Chat starts there, and a header button switches folders.
 - Pi 1.5 color palette for light, dark and high-contrast themes.
 - `Cmd/Ctrl+L` inserts the editor selection into the composer.
 

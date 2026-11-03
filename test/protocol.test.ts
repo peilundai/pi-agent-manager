@@ -11,6 +11,7 @@ describe("isWebviewMessage", () => {
     expect(isWebviewMessage({ version: 1, type: "dialog.respond", response: { id: "d", confirmed: false } })).toBe(true);
     expect(isWebviewMessage({ version: 1, type: "dialog.respond", response: { id: "d", value: "" } })).toBe(true);
     expect(isWebviewMessage({ version: 1, type: "file.open", path: "src/a.ts", line: 3 })).toBe(true);
+    expect(isWebviewMessage({ version: 1, type: "folder.pick" })).toBe(true);
   });
 
   it("rejects malformed or unsafe messages", () => {

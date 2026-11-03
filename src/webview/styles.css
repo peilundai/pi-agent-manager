@@ -85,6 +85,7 @@ pre,
 
 .header-actions {
   display: flex;
+  min-width: 0;
   gap: 2px;
 }
 
@@ -106,6 +107,38 @@ pre,
 .icon-button.active {
   background: var(--pi-hover);
   color: var(--pi-text);
+}
+
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 140px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pi-muted);
+  font-size: 0.92em;
+  cursor: pointer;
+}
+
+.folder-chip:hover {
+  background: var(--pi-hover);
+  color: var(--pi-text);
+}
+
+.folder-chip .codicon {
+  flex: none;
+  font-size: 14px;
+}
+
+.folder-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-button.small {

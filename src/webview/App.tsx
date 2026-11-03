@@ -255,13 +255,21 @@ export function App({ transport }: { transport: WebviewTransport }) {
           title={title}
           historyOpen={historyOpen}
           canRename={Boolean(state.pi.sessionFile) && state.items.length > 0}
+          folderName={state.multiRoot ? state.workspaceName : undefined}
           onToggleHistory={() => {
             if (!historyOpen) post({ version: 1, type: "sessions.refresh" });
             setHistoryOpen(!historyOpen);
           }}
           onNewChat={newChat}
         />
-        {historyOpen && <SessionPicker sessions={state.sessions} activePath={state.pi.sessionFile} onClose={() => setHistoryOpen(false)} />}
+        {historyOpen && (
+          <SessionPicker
+            sessions={state.sessions}
+            activePath={state.pi.sessionFile}
+            folderName={state.multiRoot ? state.workspaceName : undefined}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
         {state.setupError ? (
           <SetupView state={state} post={post} />
         ) : (

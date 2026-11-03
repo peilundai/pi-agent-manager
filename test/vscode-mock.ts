@@ -63,6 +63,8 @@ function disposable() {
 
 export const window = {
   activeTextEditor: undefined as unknown,
+  onDidChangeActiveTextEditor: vi.fn(),
+  showQuickPick: vi.fn(),
   registerWebviewViewProvider: vi.fn(),
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
@@ -73,6 +75,7 @@ export const window = {
 
 export const workspace = {
   workspaceFolders: undefined as unknown,
+  onDidChangeWorkspaceFolders: vi.fn(),
   getWorkspaceFolder: vi.fn(),
   getConfiguration: vi.fn(),
   asRelativePath: vi.fn(),
@@ -93,6 +96,8 @@ export const env = {
 export function resetVscodeMock(): void {
   configuration.clear();
   window.activeTextEditor = undefined;
+  window.onDidChangeActiveTextEditor.mockReset().mockImplementation(disposable);
+  window.showQuickPick.mockReset().mockResolvedValue(undefined);
   window.registerWebviewViewProvider.mockReset().mockImplementation(disposable);
   window.showInformationMessage.mockReset().mockResolvedValue(undefined);
   window.showWarningMessage.mockReset().mockResolvedValue(undefined);
@@ -100,6 +105,7 @@ export function resetVscodeMock(): void {
   window.showOpenDialog.mockReset().mockResolvedValue(undefined);
   window.showTextDocument.mockReset().mockResolvedValue(undefined);
   workspace.workspaceFolders = undefined;
+  workspace.onDidChangeWorkspaceFolders.mockReset().mockImplementation(disposable);
   workspace.getWorkspaceFolder.mockReset().mockReturnValue(undefined);
   workspace.getConfiguration.mockReset().mockImplementation(() => ({
     get: (key: string, fallback?: unknown) => (configuration.has(key) ? configuration.get(key) : fallback),

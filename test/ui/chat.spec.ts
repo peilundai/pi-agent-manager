@@ -108,4 +108,19 @@ test.describe("Pi Agent Manager webview", () => {
     await expect(page.locator(".message-error")).toHaveText("Interrupted");
     await expect(page.locator(".status-line")).toHaveCount(0);
   });
+
+  test("shows a folder switcher in multi-root windows", async ({ chat }) => {
+    const { page } = chat;
+    await expect(page.locator(".model-pill .model-name")).toHaveText("Mock Sonnet");
+    await expect(page.locator(".folder-chip")).toHaveCount(0);
+    await page.evaluate(() =>
+      window.postMessage({ version: 1, type: "init", workspaceName: "greeter-service", platform: "darwin", multiRoot: true }, "*"),
+    );
+    const chip = page.getByRole("button", { name: "Workspace folder: greeter-service. Switch folder" });
+    await expect(chip).toBeVisible();
+    await expect(page.locator(".header-title")).toBeVisible();
+    await chat.screenshot("multi-root-dark");
+    await chip.click();
+    expect(chat.received.at(-1)).toEqual({ version: 1, type: "folder.pick" });
+  });
 });
