@@ -36,7 +36,7 @@ Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. The extensio
 3. `piAgentManager.environment` (machine-scoped setting).
 4. Secrets in VS Code `SecretStorage` under `piAgentManager.env.<NAME>`.
 
-The merged environment is also used to find the `pi` executable. `src/pi/config-references.ts` lists the variables that `models.json` and `mcp.json` reference (`$NAME`, `${NAME}`, `{ "env": "NAME" }`, `*EnvVar` keys, and legacy all-caps `apiKey` names). `PiEnvironment.checkMissing()` warns once per missing name. Secret values are never logged or posted to the webview.
+The probe never reads the shell's stderr, because startup files can trace exported secrets there (`set -x`). The merged environment is also used to find the `pi` executable and to locate session transcripts (`PiSessionRepository.useEnvironment`). If `PI_CODING_AGENT_DIR` or `PI_CODING_AGENT_SESSION_DIR` moves them, the history watcher is recreated. `src/pi/config-references.ts` lists the variables that `models.json` and `mcp.json` reference (`$NAME`, `${NAME}`, `{ "env": "NAME" }`, `*EnvVar` keys, and legacy all-caps `apiKey` names). `PiEnvironment.checkMissing()` warns once per missing name. Secret values are never logged or posted to the webview.
 
 ## Webview state
 

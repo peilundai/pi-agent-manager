@@ -14,23 +14,21 @@ import {
 class FakeChild extends EventEmitter implements ProbeProcess {
   readonly pid = undefined;
   readonly stdout = new EventEmitter();
-  readonly stderr = new EventEmitter();
   readonly kill = vi.fn(() => true);
 }
 
 /** A spawn stub whose child prints `output(marker)` and exits with `code`. */
-function fakeSpawn(output: (marker: string) => string, options: { code?: number | null; stderr?: string; hang?: boolean } = {}) {
-  const calls: Array<{ file: string; args: string[]; env: NodeJS.ProcessEnv }> = [];
+function fakeSpawn(output: (marker: string) => string, options: { code?: number | null; hang?: boolean } = {}) {
+  const calls: Array<{ file: string; args: string[]; env: NodeJS.ProcessEnv; stdio: readonly string[] }> = [];
   const children: FakeChild[] = [];
   const spawn: ProbeSpawn = (file, args, spawnOptions) => {
-    calls.push({ file, args, env: spawnOptions.env });
+    calls.push({ file, args, env: spawnOptions.env, stdio: spawnOptions.stdio });
     const child = new FakeChild();
     children.push(child);
     if (!options.hang) {
       setTimeout(() => {
         const marker = spawnOptions.env.PI_AGENT_MANAGER_ENV_MARKER ?? "";
         child.stdout.emit("data", Buffer.from(output(marker)));
-        if (options.stderr) child.stderr.emit("data", options.stderr);
         child.emit("close", options.code ?? 0, null);
       }, 0);
     }
@@ -85,11 +83,12 @@ describe("resolveShellEnvironment", () => {
     expect(calls[0]?.env).toMatchObject({ HOME: "/u", ELECTRON_RUN_AS_NODE: "1", VSCODE_RESOLVING_ENVIRONMENT: "1" });
   });
 
-  it("reports a shell that exits without printing its environment", async () => {
-    const { spawn } = fakeSpawn(() => "", { code: 1, stderr: "zsh: command not found: nvm\n" });
+  it("reports a shell that exits without printing its environment, without quoting its output", async () => {
+    const { spawn, calls } = fakeSpawn(() => "+ export GATEWAY_KEY=sk-secret\n", { code: 1 });
     const result = await resolveShellEnvironment({ platform: "linux", env: { SHELL: "/bin/zsh" }, spawn });
-    expect(result).toMatchObject({ status: "failed", error: expect.stringContaining("exited with code 1") });
-    expect(result.status === "failed" && result.error).toContain("command not found: nvm");
+    expect(result).toEqual({ status: "failed", shell: "/bin/zsh", error: "/bin/zsh exited with code 1 without printing its environment.", durationMs: expect.any(Number) });
+    // stderr, where `set -x` traces exported values, is never read.
+    expect(calls[0]?.stdio).toEqual(["ignore", "pipe", "ignore"]);
   });
 
   it("reports spawn failures", async () => {

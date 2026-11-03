@@ -24,7 +24,7 @@ export const CONTAINER_COMMAND = "workbench.view.extension.piAgentManager";
 export interface ChatViewProviderOptions {
   extensionUri: vscode.Uri;
   workspaceFolder: vscode.WorkspaceFolder | undefined;
-  repository: Pick<PiSessionRepository, "list" | "watch" | "delete">;
+  repository: Pick<PiSessionRepository, "list" | "watch" | "delete"> & Partial<Pick<PiSessionRepository, "useEnvironment">>;
   /** Builds Pi's environment (login shell, settings, secrets); defaults to VS Code's own. */
   environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
   /** Test seam: replaces spawning the real `pi --mode rpc` process. */
@@ -81,9 +81,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       post: (message) => this.post(message),
       onSessionsChanged: () => this.scheduleSessions(),
     });
-    if (options.workspaceFolder) {
-      this.watcher = options.repository.watch(options.workspaceFolder.uri.fsPath, () => this.scheduleSessions());
-    }
+    this.watchSessions();
+  }
+
+  private watchSessions(): void {
+    this.watcher?.dispose();
+    const folder = this.options.workspaceFolder;
+    this.watcher = folder ? this.options.repository.watch(folder.uri.fsPath, () => this.scheduleSessions()) : undefined;
   }
 
   private get cwd(): string | undefined {
@@ -285,6 +289,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const invocation = buildPiInvocation(command.path, args);
     const env: NodeJS.ProcessEnv = { ...environment, ...invocation.env, PATH: augmentPath(command.path, environment) };
     void this.options.environment?.checkMissing(cwd, env).catch(() => undefined);
+    if (this.options.repository.useEnvironment?.(environment)) {
+      // Pi will write transcripts where its environment says; list and watch the same place.
+      this.watchSessions();
+      this.scheduleSessions();
+    }
     return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd, env }, listener);
   }
 

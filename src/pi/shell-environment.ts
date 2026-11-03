@@ -41,7 +41,6 @@ export type ShellEnvironmentResult =
 export interface ProbeProcess {
   readonly pid?: number | undefined;
   readonly stdout: { on(event: "data", listener: (chunk: Buffer | string) => void): unknown } | null;
-  readonly stderr: { on(event: "data", listener: (chunk: Buffer | string) => void): unknown } | null;
   on(event: "error", listener: (error: Error) => void): unknown;
   on(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
   kill(signal?: NodeJS.Signals): boolean;
@@ -50,7 +49,7 @@ export interface ProbeProcess {
 export type ProbeSpawn = (
   file: string,
   args: string[],
-  options: { env: NodeJS.ProcessEnv; detached: boolean; stdio: ["ignore", "pipe", "pipe"]; windowsHide: boolean },
+  options: { env: NodeJS.ProcessEnv; detached: boolean; stdio: ["ignore", "pipe", "ignore"]; windowsHide: boolean },
 ) => ProbeProcess;
 
 export interface ShellEnvironmentOptions {
@@ -153,7 +152,8 @@ export async function resolveShellEnvironment(options: ShellEnvironmentOptions =
           [MARKER_VARIABLE]: marker,
         },
         detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
+        // Startup files can trace exported secrets to stderr (`set -x`), so it is never read.
+        stdio: ["ignore", "pipe", "ignore"],
         windowsHide: true,
       });
     } catch (error) {
@@ -162,7 +162,6 @@ export async function resolveShellEnvironment(options: ShellEnvironmentOptions =
     }
 
     let stdout = "";
-    let stderr = "";
     let settled = false;
     const finish = (result: ShellEnvironmentResult) => {
       if (settled) return;
@@ -182,9 +181,6 @@ export async function resolveShellEnvironment(options: ShellEnvironmentOptions =
         finish(failed(`${shell} printed more than ${MAX_OUTPUT_BYTES} bytes.`));
       }
     });
-    child.stderr?.on("data", (chunk) => {
-      stderr = (stderr + chunk.toString()).slice(-2_000);
-    });
     child.on("error", (error) => finish(failed(error.message)));
     child.on("close", (code, signal) => {
       const env = parseShellEnvironment(stdout, marker);
@@ -193,8 +189,8 @@ export async function resolveShellEnvironment(options: ShellEnvironmentOptions =
         return;
       }
       const reason = signal ? `was stopped by ${signal}` : `exited with code ${String(code)}`;
-      const detail = stderr.trim().split("\n").slice(-3).join(" ").trim();
-      finish(failed(`${shell} ${reason} without printing its environment.${detail ? ` ${detail}` : ""}`));
+      // Shell output is not quoted: it may contain secret values.
+      finish(failed(`${shell} ${reason} without printing its environment.`));
     });
   });
 }
