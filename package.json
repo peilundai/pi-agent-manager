@@ -151,7 +151,8 @@
     "test:ui": "npm run build && playwright test",
     "test:all": "npm run test:coverage && npm run test:e2e && npm run test:ui",
     "package": "npm run check && npm test && npm run build && node scripts/package-vsix.mjs",
-    "verify:package": "node scripts/verify-vsix.mjs"
+    "verify:package": "node scripts/verify-vsix.mjs",
+    "notices": "node scripts/third-party-notices.mjs"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.45",
