@@ -191,6 +191,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^16.3.0",
     "jsdom": "^30.1.3",
+    "ovsx": "^1.3.0",
     "typescript": "^6.0.3",
     "vitest": "^3.2.4",
     "yauzl": "^3.4.0"

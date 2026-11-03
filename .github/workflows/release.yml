@@ -9,9 +9,13 @@ permissions:
 
 jobs:
   release:
-    name: Build and publish GitHub release
+    name: Build, test and publish
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Each store is skipped when its token is not configured (see docs/PUBLISHING.md).
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -31,10 +35,23 @@ jobs:
       - run: npm run test:e2e
       - run: npm run build
       - run: node scripts/package-vsix.mjs
+      - name: Locate VSIX
+        run: echo "VSIX=$(node -p "const p=require('./package.json'); p.name + '-' + p.version + '.vsix'")" >> "$GITHUB_ENV"
+      - name: Publish to the VS Code Marketplace
+        if: env.VSCE_PAT != ''
+        run: npx vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT"
+      - name: Publish to Open VSX
+        if: env.OVSX_PAT != ''
+        run: npx ovsx publish "$VSIX" --pat "$OVSX_PAT"
+      - name: Note skipped stores
+        if: env.VSCE_PAT == '' || env.OVSX_PAT == ''
+        run: |
+          [ -n "$VSCE_PAT" ] || echo "::warning::VSCE_PAT is not set; skipped the VS Code Marketplace."
+          [ -n "$OVSX_PAT" ] || echo "::warning::OVSX_PAT is not set; skipped Open VSX."
       - name: Extract release notes
         run: node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > release-notes.md
       - uses: softprops/action-gh-release@v3
         with:
           body_path: release-notes.md
-          files: "*.vsix"
+          files: ${{ env.VSIX }}
           fail_on_unmatched_files: true
