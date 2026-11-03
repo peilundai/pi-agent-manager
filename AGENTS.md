@@ -45,6 +45,6 @@ When dependencies change, run `npm run notices` to regenerate `THIRD_PARTY_NOTIC
 
 ## Project notes
 
-- Extension ID `peilun-dai.pi-agent-manager`, display name **Pi Agent Manager**. Command, setting, view and context-key identifiers use the `piAgentManager.` prefix.
+- Extension ID `peilundai.pi-agent-manager`, display name **Pi Agent Manager**. Command, setting, view and context-key identifiers use the `piAgentManager.` prefix.
 - This is an unofficial client for the Pi coding agent (MIT, © Mario Zechner). Don't bundle Pi code or use Pi's logo, and keep the attribution in `THIRD_PARTY_NOTICES.md` and `src/webview/theme.css`.
 - Architecture: `docs/architecture.md`. Releasing: `docs/PUBLISHING.md`.
