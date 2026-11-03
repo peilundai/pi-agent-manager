@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { isHostMessage, type HostToWebviewMessage, type ImageAttachment, type PromptMode, type WebviewToHostMessage } from "../shared/protocol";
 import { chatReducer, initialChatState, type ChatState } from "./chat-state";
 import { Composer, type ComposerHandle, type LocalCommand } from "./components/Composer";
@@ -250,7 +250,10 @@ export function App({ transport }: { transport: WebviewTransport }) {
 
   return (
     <ChatContext.Provider value={context}>
-      <div className="app">
+      <div
+        className="app"
+        style={{ "--content-max-width": state.maxContentWidth > 0 ? `${state.maxContentWidth}px` : "none" } as CSSProperties}
+      >
         <Header
           title={title}
           historyOpen={historyOpen}

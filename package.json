@@ -182,6 +182,12 @@
           "default": [],
           "description": "Extra arguments passed to `pi --mode rpc` (for example `--offline` or `--provider anthropic`). Session and mode flags are managed by the extension."
         },
+        "piAgentManager.maxContentWidth": {
+          "type": "number",
+          "default": 800,
+          "minimum": 0,
+          "markdownDescription": "Maximum width, in pixels, of the chat transcript and composer. When the view is wider, they stay centered at this width. Set to `0` to always fill the view."
+        },
         "piAgentManager.loadShellEnvironment": {
           "type": "boolean",
           "default": true,

@@ -39,6 +39,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export const DEFAULT_MAX_CONTENT_WIDTH = 800;
+
+/** The configured content width in pixels, or 0 for no limit. Invalid values fall back to the default. */
+export function maxContentWidth(): number {
+  const value = vscode.workspace.getConfiguration("piAgentManager").get<unknown>("maxContentWidth", DEFAULT_MAX_CONTENT_WIDTH);
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : DEFAULT_MAX_CONTENT_WIDTH;
+}
+
 export function webviewHtml(webview: Pick<vscode.Webview, "cspSource" | "asWebviewUri">, distUri: vscode.Uri): string {
   const nonce = randomBytes(18).toString("base64url");
   const script = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "webview.js")).toString();
@@ -152,6 +160,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   /** Re-scopes the chat when folders are added, removed or renamed. */
+  /** Layout settings only need a fresh init; Pi keeps running. */
+  configurationChanged(event: Pick<vscode.ConfigurationChangeEvent, "affectsConfiguration">): void {
+    if (this.ready && event.affectsConfiguration("piAgentManager.maxContentWidth")) this.postInit();
+  }
+
   workspaceFoldersChanged(): void {
     const folders = vscode.workspace.workspaceFolders ?? [];
     const current = folders.find((folder) => sameFolder(folder, this.folder));
@@ -407,6 +420,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       workspaceName: this.folder?.name ?? "",
       platform: process.platform,
       ...((vscode.workspace.workspaceFolders?.length ?? 0) > 1 ? { multiRoot: true } : {}),
+      maxContentWidth: maxContentWidth(),
       ...(this.setupError ? { setupError: this.setupError } : {}),
     });
   }
