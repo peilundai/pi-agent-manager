@@ -64,12 +64,13 @@ function disposable() {
 export const window = {
   activeTextEditor: undefined as unknown,
   onDidChangeActiveTextEditor: vi.fn(),
-  showQuickPick: vi.fn(),
   registerWebviewViewProvider: vi.fn(),
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
   showInputBox: vi.fn(),
+  showQuickPick: vi.fn(),
   showOpenDialog: vi.fn(),
+  createOutputChannel: vi.fn(),
   showTextDocument: vi.fn(),
 };
 
@@ -97,11 +98,17 @@ export function resetVscodeMock(): void {
   configuration.clear();
   window.activeTextEditor = undefined;
   window.onDidChangeActiveTextEditor.mockReset().mockImplementation(disposable);
-  window.showQuickPick.mockReset().mockResolvedValue(undefined);
   window.registerWebviewViewProvider.mockReset().mockImplementation(disposable);
   window.showInformationMessage.mockReset().mockResolvedValue(undefined);
   window.showWarningMessage.mockReset().mockResolvedValue(undefined);
   window.showInputBox.mockReset().mockResolvedValue(undefined);
+  window.showQuickPick.mockReset().mockResolvedValue(undefined);
+  window.createOutputChannel.mockReset().mockImplementation(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    show: vi.fn(),
+    dispose: vi.fn(),
+  }));
   window.showOpenDialog.mockReset().mockResolvedValue(undefined);
   window.showTextDocument.mockReset().mockResolvedValue(undefined);
   workspace.workspaceFolders = undefined;

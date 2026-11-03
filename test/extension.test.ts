@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import * as vscode from "vscode";
 import { activate, deactivate } from "../src/extension";
-import { resetVscodeMock } from "./vscode-mock";
+import { configuration, resetVscodeMock } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 
 const mock = vscode as unknown as typeof VscodeMock;
 
-beforeEach(() => resetVscodeMock());
+const secrets = { keys: async () => [], get: async () => undefined, store: async () => undefined, delete: async () => undefined };
+
+beforeEach(() => {
+  resetVscodeMock();
+  // Unit tests must not start the developer's real login shell.
+  configuration.set("loadShellEnvironment", false);
+});
 
 describe("extension activation", () => {
   it("registers the chat view and commands", async () => {
@@ -16,6 +22,7 @@ describe("extension activation", () => {
       extensionUri: mock.Uri.file("/ext"),
       subscriptions,
       workspaceState: { get: () => undefined, update: async () => undefined },
+      secrets,
     } as never);
     expect(mock.window.registerWebviewViewProvider).toHaveBeenCalledWith("piAgentManager.view", expect.anything(), {
       webviewOptions: { retainContextWhenHidden: true },
@@ -27,8 +34,12 @@ describe("extension activation", () => {
       "piAgentManager.sendSelection",
       "piAgentManager.focusInput",
       "piAgentManager.switchFolder",
+      "piAgentManager.setEnvironmentSecret",
+      "piAgentManager.removeEnvironmentSecret",
+      "piAgentManager.reloadEnvironment",
+      "piAgentManager.showEnvironmentDiagnostics",
     ]);
-    expect(subscriptions).toHaveLength(10);
+    expect(subscriptions).toHaveLength(15);
     expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
     await expect(deactivate()).resolves.toBeUndefined();
@@ -38,7 +49,7 @@ describe("extension activation", () => {
     const manifest = (await import("../package.json")).default as {
       contributes: { commands: Array<{ command: string }>; views: Record<string, Array<{ id: string }>> };
     };
-    activate({ extensionUri: mock.Uri.file("/ext"), subscriptions: [], workspaceState: { get: () => undefined, update: async () => undefined } } as never);
+    activate({ extensionUri: mock.Uri.file("/ext"), subscriptions: [], workspaceState: { get: () => undefined, update: async () => undefined }, secrets } as never);
     const registered = mock.commands.registerCommand.mock.calls.map((call) => call[0]).sort();
     expect(manifest.contributes.commands.map((command) => command.command).sort()).toEqual(registered);
     expect(manifest.contributes.views.piAgentManager?.[0]?.id).toBe("piAgentManager.view");

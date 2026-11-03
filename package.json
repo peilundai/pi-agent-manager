@@ -82,6 +82,26 @@
         "category": "Pi Agent Manager",
         "icon": "$(folder)",
         "enablement": "workspaceFolderCount > 1"
+      },
+      {
+        "command": "piAgentManager.setEnvironmentSecret",
+        "title": "Set Environment Secret…",
+        "category": "Pi Agent Manager"
+      },
+      {
+        "command": "piAgentManager.removeEnvironmentSecret",
+        "title": "Remove Environment Secret…",
+        "category": "Pi Agent Manager"
+      },
+      {
+        "command": "piAgentManager.reloadEnvironment",
+        "title": "Reload Environment and Restart Pi",
+        "category": "Pi Agent Manager"
+      },
+      {
+        "command": "piAgentManager.showEnvironmentDiagnostics",
+        "title": "Show Environment Diagnostics",
+        "category": "Pi Agent Manager"
       }
     ],
     "keybindings": [
@@ -158,6 +178,21 @@
           },
           "default": [],
           "description": "Extra arguments passed to `pi --mode rpc` (for example `--offline` or `--provider anthropic`). Session and mode flags are managed by the extension."
+        },
+        "piAgentManager.loadShellEnvironment": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "Start Pi with the variables your login shell sets up (API keys, company gateway settings, MCP tokens, `PATH`), even when VS Code was not started from a terminal. Variables VS Code already has are kept. Not used on Windows."
+        },
+        "piAgentManager.environment": {
+          "type": "object",
+          "default": {},
+          "scope": "machine",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "markdownDescription": "Extra environment variables for Pi, such as a gateway base URL. Do not put API keys here; use **Pi Agent Manager: Set Environment Secret…**, which stores them encrypted."
         }
       }
     }

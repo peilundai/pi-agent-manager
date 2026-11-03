@@ -8,6 +8,7 @@ import { ChatSession, type ChatSessionOptions } from "../pi/chat-session";
 import { augmentPath, buildPiInvocation, buildRpcArgs, resolvePiCommand } from "../pi/command-resolver";
 import { PiRpcClient } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
+import type { PiEnvironment } from "./pi-environment";
 import type { SessionSummary, SetupErrorState } from "../shared/model";
 import { isWebviewMessage, type HostToWebviewMessage, type ImageAttachment, type WebviewToHostMessage } from "../shared/protocol";
 
@@ -23,7 +24,9 @@ export const CONTAINER_COMMAND = "workbench.view.extension.piAgentManager";
 export interface ChatViewProviderOptions {
   extensionUri: vscode.Uri;
   workspaceFolder: vscode.WorkspaceFolder | undefined;
-  repository: Pick<PiSessionRepository, "list" | "watch" | "delete">;
+  repository: Pick<PiSessionRepository, "list" | "watch" | "delete"> & Partial<Pick<PiSessionRepository, "useEnvironment">>;
+  /** Builds Pi's environment (login shell, settings, secrets); defaults to VS Code's own. */
+  environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
   /** Test seam: replaces spawning the real `pi --mode rpc` process. */
   createClient?: ChatSessionOptions["createClient"];
 }
@@ -87,7 +90,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       post: (message) => this.post(message),
       onSessionsChanged: () => this.scheduleSessions(),
     });
-    this.watchFolder();
+    this.watchSessions();
+  }
+
+  /** The workspace folder Pi currently runs in, if any. */
+  get workspaceFolder(): vscode.WorkspaceFolder | undefined {
+    return this.folder;
+  }
+
+  /** Watches the current folder's transcripts, wherever Pi's environment puts them. */
+  private watchSessions(): void {
+    this.watcher?.dispose();
+    const folder = this.folder;
+    this.watcher = folder ? this.options.repository.watch(folder.uri.fsPath, () => this.scheduleSessions()) : undefined;
   }
 
   private get cwd(): string | undefined {
@@ -224,6 +239,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     await this.session.dispose();
   }
 
+  /** Restarts Pi on the current chat so it picks up a changed environment. */
+  async restartPi(): Promise<void> {
+    if (!this.folder) return;
+    if (this.setupError) {
+      await this.retrySetup();
+      return;
+    }
+    await this.session.restart().catch((error) => this.notice("error", errorMessage(error)));
+  }
+
   private async receive(message: WebviewToHostMessage): Promise<void> {
     switch (message.type) {
       case "ready":
@@ -325,13 +350,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const cwd = this.cwd;
     if (!cwd) throw new Error("Open a folder to chat with Pi.");
     const config = vscode.workspace.getConfiguration("piAgentManager");
-    const command = await resolvePiCommand({ configured: config.get<string>("command", "pi") });
+    const environment = this.options.environment ? await this.options.environment.resolve() : process.env;
+    const command = await resolvePiCommand({ configured: config.get<string>("command", "pi"), env: environment });
     const extraArgs = config.get<unknown>("extraArgs", []);
     const args = buildRpcArgs({
       extraArgs: Array.isArray(extraArgs) ? extraArgs.filter((value): value is string => typeof value === "string") : [],
     });
     const invocation = buildPiInvocation(command.path, args);
-    const env: NodeJS.ProcessEnv = { ...process.env, ...invocation.env, PATH: augmentPath(command.path) };
+    const env: NodeJS.ProcessEnv = { ...environment, ...invocation.env, PATH: augmentPath(command.path, environment) };
+    void this.options.environment?.checkMissing(cwd, env).catch(() => undefined);
+    if (this.options.repository.useEnvironment?.(environment)) {
+      // Pi will write transcripts where its environment says; list and watch the same place.
+      this.watchSessions();
+      this.scheduleSessions();
+    }
     return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd, env }, listener);
   }
 
@@ -352,7 +384,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       this.folder = folder;
       this.fileCache = undefined;
       this.sessions = [];
-      this.watchFolder();
+      this.watchSessions();
       if (!folder) this.setupError = { kind: "workspace" };
       else if (this.setupError?.kind === "workspace") this.setupError = undefined;
       this.postInit();
@@ -366,11 +398,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     };
     this.switching = this.switching.then(run, run);
     return this.switching;
-  }
-
-  private watchFolder(): void {
-    this.watcher?.dispose();
-    this.watcher = this.folder ? this.options.repository.watch(this.folder.uri.fsPath, () => this.scheduleSessions()) : undefined;
   }
 
   private postInit(): void {

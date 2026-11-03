@@ -38,6 +38,14 @@ test.describe("Pi Agent Manager webview", () => {
     await expect(page.locator(".markdown .hljs-keyword").first()).toBeVisible();
     await expect.poll(() => chat.pi.readGreet()).toContain("Hello, ${name}!");
     await chat.screenshot("done-dark");
+
+    await page.getByRole("button", { name: /^Context \d+% used/ }).click();
+    const usage = page.getByRole("dialog", { name: "Context usage" });
+    await expect(usage).toContainText("Context window");
+    await chat.screenshot("context-usage-dark");
+    await page.keyboard.press("Escape");
+    await expect(usage).toHaveCount(0);
+
     await chat.setTheme("light");
     await chat.screenshot("done-light");
   });

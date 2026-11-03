@@ -61,13 +61,29 @@ export function encodeWorkspaceDirectory(cwd: string): string {
 }
 
 export class PiSessionRepository {
-  private readonly options: SessionRepositoryOptions;
+  private options: SessionRepositoryOptions;
   private readonly archiveStore: ArchiveStore;
   private readonly cache = new Map<string, CachedSession>();
 
   constructor(options: SessionRepositoryOptions = {}) {
     this.options = options;
     this.archiveStore = options.archiveStore ?? emptyArchiveStore;
+  }
+
+  /**
+   * Reads session locations from the environment Pi is started with, which can set
+   * `PI_CODING_AGENT_DIR` or `PI_CODING_AGENT_SESSION_DIR` that VS Code itself lacks.
+   * Returns true when the session directories moved, so callers can re-watch them.
+   */
+  useEnvironment(env: NodeJS.ProcessEnv): boolean {
+    const before = this.locationKey();
+    this.options = { ...this.options, env };
+    return this.locationKey() !== before;
+  }
+
+  private locationKey(): string {
+    const env = this.options.env ?? process.env;
+    return `${env.PI_CODING_AGENT_SESSION_DIR ?? ""}\0${env.PI_CODING_AGENT_DIR ?? ""}`;
   }
 
   async list(cwd: string): Promise<SessionSummary[]> {

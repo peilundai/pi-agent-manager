@@ -32,6 +32,18 @@ If `pi` already works in your terminal, Pi Agent Manager works too. It runs your
 
 The extension adds no accounts, keys or configuration of its own.
 
+## API keys, company gateways and MCP tokens
+
+Pi often reads keys from environment variables: `"apiKey": "${GATEWAY_API_KEY}"` for a custom provider or company gateway in `models.json`, or `"Authorization": "Bearer ${DOCS_TOKEN}"` for an MCP server in `mcp.json`. A VS Code window opened from the Dock, a desktop launcher or an automatic update restart does not run your shell startup files, so those variables can be missing even though `pi` works in your terminal.
+
+Pi Agent Manager handles this for you:
+
+1. **Login-shell environment.** When it starts Pi, the extension asks your login shell (`$SHELL -i -l -c`, run once per window) for the variables it sets up. It adds the ones VS Code doesn't have, plus missing `PATH` entries, so Pi sees what a terminal sees. Variables VS Code already has are left as they are. If the shell fails or takes longer than 10 s, Pi starts with VS Code's environment and the reason is logged to the **Pi Agent Manager** output channel.
+2. **Missing-variable check.** The extension reads Pi's `models.json` and `mcp.json` (user and project). If a variable they reference is still unset, it names the variable and offers **Set Secret…**, instead of leaving you with an authentication error from the gateway.
+3. **Secrets in VS Code.** **Pi Agent Manager: Set Environment Secret…** stores a value in VS Code's encrypted secret storage and passes it only to Pi. Use it for keys you don't export from your shell. **Remove Environment Secret…** deletes one.
+
+Other commands: **Reload Environment and Restart Pi** (after you edit your shell files) and **Show Environment Diagnostics**, which lists each variable Pi's config needs and where it comes from. Values are never shown or logged.
+
 ## Features
 
 - **Chat in the Secondary Side Bar.** Click the π icon in an editor title bar, or run **Pi Agent Manager: Open**.
@@ -78,6 +90,8 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 |---|---|---|
 | `piAgentManager.command` | `pi` | Executable name or absolute path of the Pi CLI. |
 | `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]` or `["--offline"]`. Mode and session flags are managed by the extension. |
+| `piAgentManager.loadShellEnvironment` | `true` | Add the variables your login shell sets up (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |
+| `piAgentManager.environment` | `{}` | Extra variables for Pi, such as a gateway base URL. Put keys in **Set Environment Secret…** instead. |
 
 ## Keyboard shortcuts
 
