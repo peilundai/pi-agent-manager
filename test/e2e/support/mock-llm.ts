@@ -10,6 +10,8 @@ import type { AddressInfo } from "node:net";
  * - contains "slow":  a long, slow answer (for abort tests)
  * - contains "fail":  an HTTP 500 error
  * - otherwise:        thinking → read → edit → bash → final markdown
+ *
+ * With `apiKey`, it acts like a company gateway: requests without that bearer key get a 401.
  */
 export interface MockLlm {
   url: string;
@@ -111,7 +113,9 @@ function respond(req: IncomingMessage, res: ServerResponse, body: string, reques
   stream(res, words(FINAL_ANSWER).map((content) => ({ content })), "stop", delayMs);
 }
 
-export async function startMockLlm(options: { delayMs?: number } = {}): Promise<MockLlm> {
+export const GATEWAY_REJECTION = "Invalid API Key format: Must start with pre-defined prefix";
+
+export async function startMockLlm(options: { delayMs?: number; apiKey?: string } = {}): Promise<MockLlm> {
   const requests: MockLlm["requests"] = [];
   const delayMs = options.delayMs ?? 5;
   const server: Server = createServer((req, res) => {
@@ -119,7 +123,14 @@ export async function startMockLlm(options: { delayMs?: number } = {}): Promise<
     req.on("data", (chunk) => {
       body += chunk;
     });
-    req.on("end", () => respond(req, res, body, requests, delayMs));
+    req.on("end", () => {
+      if (options.apiKey && req.headers.authorization !== `Bearer ${options.apiKey}`) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: GATEWAY_REJECTION, type: "AccessDeniedException" } }));
+        return;
+      }
+      respond(req, res, body, requests, delayMs);
+    });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;

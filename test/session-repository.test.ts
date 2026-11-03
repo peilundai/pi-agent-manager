@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -62,6 +62,24 @@ describe("PiSessionRepository", () => {
 
     expect(sessions).toHaveLength(1);
     expect(sessions[0]).toMatchObject({ id: "matching", title: "Fix login race", archived: true, status: "stopped" });
+  });
+
+  it("follows the session location from the environment Pi runs with", async () => {
+    // The workspace exists here, so list() compares real paths (macOS tmp is under /private).
+    const root = await realpath(await temporaryRoot());
+    const workspace = join(root, "project");
+    const shellSessions = join(root, "shell-sessions");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(shellSessions, { recursive: true });
+    await writeFile(
+      join(shellSessions, "a.jsonl"),
+      JSON.stringify({ type: "session", version: 3, id: "a", cwd: workspace, timestamp: "2026-08-12T01:00:00.000Z" }) + "\n",
+    );
+    const repository = new PiSessionRepository({ env: { PI_CODING_AGENT_DIR: join(root, "agent") } });
+    expect(await repository.list(workspace)).toEqual([]);
+    expect(repository.useEnvironment({ PI_CODING_AGENT_DIR: join(root, "agent"), PI_CODING_AGENT_SESSION_DIR: shellSessions })).toBe(true);
+    expect((await repository.list(workspace)).map((session) => session.id)).toEqual(["a"]);
+    expect(repository.useEnvironment({ PI_CODING_AGENT_DIR: join(root, "agent"), PI_CODING_AGENT_SESSION_DIR: shellSessions, OTHER: "x" })).toBe(false);
   });
 
   it("persists sorted archive identifiers", async () => {

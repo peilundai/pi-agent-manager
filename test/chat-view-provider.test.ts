@@ -117,6 +117,52 @@ describe("ChatViewProvider", () => {
     expect(posted.at(-1)).toMatchObject({ type: "init", setupError: { kind: "executable" } });
   });
 
+  it("restarts Pi so a changed environment takes effect", async () => {
+    let starts = 0;
+    let failFirst = true;
+    const { provider, posted, ready } = setup({
+      createClient: async () => {
+        starts += 1;
+        if (failFirst) {
+          failFirst = false;
+          throw new PiCommandNotFoundError(["/usr/bin/pi"]);
+        }
+        return new FakeClient({ onEvent: () => undefined, onExit: () => undefined });
+      },
+    });
+    await ready();
+    expect(posted.at(-1)).toMatchObject({ setupError: { kind: "executable" } });
+    // A setup error is retried, for example after the login-shell PATH was loaded.
+    await provider.restartPi();
+    expect(starts).toBe(2);
+    expect(posted.some((message) => message.type === "snapshot")).toBe(true);
+    await provider.restartPi();
+    expect(starts).toBe(3);
+
+    const noFolder = setup({ workspace: false });
+    await noFolder.provider.restartPi();
+    expect(noFolder.posted).toEqual([]);
+  });
+
+  it("re-watches sessions when Pi's environment moves the session directory", async () => {
+    const repository = {
+      list: vi.fn(async () => [session]),
+      watch: vi.fn(() => ({ dispose: vi.fn() })),
+      delete: vi.fn(async () => undefined),
+      useEnvironment: vi.fn(() => true),
+    };
+    const environment = { resolve: vi.fn(async () => ({ PATH: "/usr/bin", PI_CODING_AGENT_SESSION_DIR: "/elsewhere" })), checkMissing: vi.fn(async () => undefined) };
+    // Any existing absolute executable stands in for pi; the client is created but not started.
+    mock.workspace.getConfiguration.mockReturnValue({ get: () => process.execPath, update: vi.fn() });
+    const provider = new ChatViewProvider({ extensionUri: mock.Uri.file("/ext") as unknown as Uri, workspaceFolder: folder(), repository, environment });
+    const create = (provider as unknown as { createClient(listener: unknown): Promise<unknown> }).createClient.bind(provider);
+    await create({ onEvent: () => undefined, onExit: () => undefined });
+    expect(environment.checkMissing).toHaveBeenCalledWith("/work", expect.objectContaining({ PI_CODING_AGENT_SESSION_DIR: "/elsewhere" }));
+    expect(repository.useEnvironment).toHaveBeenCalledWith(expect.objectContaining({ PI_CODING_AGENT_SESSION_DIR: "/elsewhere" }));
+    expect(repository.watch).toHaveBeenCalledTimes(2);
+    provider.dispose();
+  });
+
   it("forwards prompts and dialog answers to Pi", async () => {
     const { send, ready, client } = setup();
     await ready();
