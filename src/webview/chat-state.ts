@@ -1,5 +1,5 @@
 import type { SessionSummary, SetupErrorState } from "../shared/model";
-import type { ChatSnapshot, HostToWebviewMessage, ImageAttachment, ProcessStatus } from "../shared/protocol";
+import type { ChatSnapshot, HostToWebviewMessage, ImageAttachment, ProcessStatus, ToolExpansion } from "../shared/protocol";
 import type { PiCommand, PiContent, PiEvent, PiMessage, PiModel, PiSessionStats, PiState, ThinkingLevel } from "../pi/rpc-types";
 
 export type ToolStatus = "streaming" | "running" | "success" | "error" | "interrupted";
@@ -44,6 +44,7 @@ export interface ChatState {
   multiRoot: boolean;
   platform: string;
   setupError?: SetupErrorState;
+  toolExpansion: ToolExpansion;
   process: { status: ProcessStatus | "idle"; error?: string; stderr?: string };
   pi: PiState;
   models: PiModel[];
@@ -65,6 +66,7 @@ export const initialChatState: ChatState = {
   workspaceName: "",
   multiRoot: false,
   platform: "",
+  toolExpansion: "edits",
   process: { status: "idle" },
   pi: {},
   models: [],
@@ -557,6 +559,7 @@ function handleHost(state: ChatState, message: HostToWebviewMessage, now: number
         workspaceName: message.workspaceName,
         multiRoot: Boolean(message.multiRoot),
         platform: message.platform,
+        toolExpansion: message.toolExpansion ?? "edits",
       };
       if (message.setupError) next.setupError = message.setupError;
       else delete next.setupError;

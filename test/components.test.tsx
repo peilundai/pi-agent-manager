@@ -150,6 +150,24 @@ describe("ToolCard", () => {
     expect(screen.getByText(/all good/)).toBeInTheDocument();
   });
 
+  it("follows the tool card expansion setting", () => {
+    const edit: ToolState = { ...base, name: "edit", args: { path: "a.ts", oldText: "old", newText: "new" }, output: "" };
+    const { rerender } = render(
+      <ChatContext.Provider value={{ post: () => undefined, toolExpansion: "all" }}>
+        <ToolCard tool={base} />
+      </ChatContext.Provider>,
+    );
+    expect(screen.getByText("$ npm test")).toBeInTheDocument();
+    rerender(
+      <ChatContext.Provider value={{ post: () => undefined, toolExpansion: "none" }}>
+        <ToolCard key="edit" tool={edit} />
+      </ChatContext.Provider>,
+    );
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+    expect(screen.queryByText("old")).not.toBeInTheDocument();
+    expect(screen.getByText("Added 1 line, removed 1 line")).toBeInTheDocument();
+  });
+
   it("opens edits by default with a diff fallback from arguments", () => {
     const { posted } = withContext(
       <ToolCard tool={{ ...base, name: "edit", args: { path: "src/a.ts", edits: [{ oldText: "old", newText: "new" }] }, output: "" }} />,

@@ -77,6 +77,7 @@ export const window = {
 export const workspace = {
   workspaceFolders: undefined as unknown,
   onDidChangeWorkspaceFolders: vi.fn(),
+  onDidChangeConfiguration: vi.fn(),
   getWorkspaceFolder: vi.fn(),
   getConfiguration: vi.fn(),
   asRelativePath: vi.fn(),
@@ -113,6 +114,7 @@ export function resetVscodeMock(): void {
   window.showTextDocument.mockReset().mockResolvedValue(undefined);
   workspace.workspaceFolders = undefined;
   workspace.onDidChangeWorkspaceFolders.mockReset().mockImplementation(disposable);
+  workspace.onDidChangeConfiguration.mockReset().mockImplementation(disposable);
   workspace.getWorkspaceFolder.mockReset().mockReturnValue(undefined);
   workspace.getConfiguration.mockReset().mockImplementation(() => ({
     get: (key: string, fallback?: unknown) => (configuration.has(key) ? configuration.get(key) : fallback),

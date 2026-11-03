@@ -10,7 +10,14 @@ import { PiRpcClient } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
 import type { PiEnvironment } from "./pi-environment";
 import type { SessionSummary, SetupErrorState } from "../shared/model";
-import { isWebviewMessage, type HostToWebviewMessage, type ImageAttachment, type WebviewToHostMessage } from "../shared/protocol";
+import {
+  isWebviewMessage,
+  TOOL_EXPANSIONS,
+  type HostToWebviewMessage,
+  type ImageAttachment,
+  type ToolExpansion,
+  type WebviewToHostMessage,
+} from "../shared/protocol";
 
 const SESSIONS_DEBOUNCE_MS = 200;
 const FILE_CACHE_MS = 30_000;
@@ -66,6 +73,11 @@ export function webviewHtml(webview: Pick<vscode.Webview, "cspSource" | "asWebvi
 </html>`;
 }
 
+function toolExpansionSetting(): ToolExpansion {
+  const value = vscode.workspace.getConfiguration("piAgentManager").get<unknown>("expandToolCards", "edits");
+  return TOOL_EXPANSIONS.includes(value as ToolExpansion) ? (value as ToolExpansion) : "edits";
+}
+
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view: vscode.WebviewView | undefined;
   private ready = false;
@@ -91,6 +103,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       onSessionsChanged: () => this.scheduleSessions(),
     });
     this.watchSessions();
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("piAgentManager.expandToolCards")) this.postInit();
+      }),
+    );
   }
 
   /** The workspace folder Pi currently runs in, if any. */
@@ -408,6 +425,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       platform: process.platform,
       ...((vscode.workspace.workspaceFolders?.length ?? 0) > 1 ? { multiRoot: true } : {}),
       ...(this.setupError ? { setupError: this.setupError } : {}),
+      toolExpansion: toolExpansionSetting(),
     });
   }
 

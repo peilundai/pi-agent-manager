@@ -110,7 +110,21 @@ describe("ChatViewProvider", () => {
   it("asks for a folder when none is open", async () => {
     const { posted, ready } = setup({ workspace: false });
     await ready();
-    expect(posted).toEqual([{ version: 1, type: "init", workspaceName: "", platform: process.platform, setupError: { kind: "workspace" } }]);
+    expect(posted).toEqual([{ version: 1, type: "init", workspaceName: "", platform: process.platform, setupError: { kind: "workspace" }, toolExpansion: "edits" }]);
+  });
+
+  it("sends the tool card expansion setting and resends it when it changes", async () => {
+    mock.configuration.set("expandToolCards", "all");
+    const { posted, ready } = setup();
+    await ready();
+    expect(posted[0]).toMatchObject({ type: "init", toolExpansion: "all" });
+    const listener = mock.workspace.onDidChangeConfiguration.mock.calls.at(-1)?.[0] as (event: { affectsConfiguration(key: string): boolean }) => void;
+    mock.configuration.set("expandToolCards", "bogus");
+    listener({ affectsConfiguration: (key) => key === "piAgentManager.expandToolCards" });
+    expect(posted.at(-1)).toMatchObject({ type: "init", toolExpansion: "edits" });
+    const count = posted.length;
+    listener({ affectsConfiguration: () => false });
+    expect(posted).toHaveLength(count);
   });
 
   it("reports a missing Pi executable as a setup error", async () => {
@@ -422,7 +436,7 @@ describe("ChatViewProvider multi-root folders", () => {
     mock.workspace.workspaceFolders = [other];
     provider.workspaceFoldersChanged();
     await settle();
-    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform });
+    expect(inits(posted).at(-1)).toEqual({ version: 1, type: "init", workspaceName: "other", platform: process.platform, toolExpansion: "edits" });
     expect(clients).toHaveLength(2);
   });
 

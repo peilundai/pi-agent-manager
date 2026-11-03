@@ -1,8 +1,10 @@
 import { createContext, useContext } from "react";
-import type { WebviewToHostMessage } from "../../shared/protocol";
+import type { ToolExpansion, WebviewToHostMessage } from "../../shared/protocol";
 
 export interface ChatContextValue {
   post(message: WebviewToHostMessage): void;
+  /** Which tool cards start expanded; defaults to edits and writes. */
+  toolExpansion?: ToolExpansion;
 }
 
 export const ChatContext = createContext<ChatContextValue>({ post: () => undefined });
