@@ -8,6 +8,7 @@ import { ChatSession, type ChatSessionOptions } from "../pi/chat-session";
 import { augmentPath, buildPiInvocation, buildRpcArgs, resolvePiCommand } from "../pi/command-resolver";
 import { PiRpcClient } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
+import type { PiEnvironment } from "./pi-environment";
 import type { SessionSummary, SetupErrorState } from "../shared/model";
 import { isWebviewMessage, type HostToWebviewMessage, type ImageAttachment, type WebviewToHostMessage } from "../shared/protocol";
 
@@ -24,6 +25,8 @@ export interface ChatViewProviderOptions {
   extensionUri: vscode.Uri;
   workspaceFolder: vscode.WorkspaceFolder | undefined;
   repository: Pick<PiSessionRepository, "list" | "watch" | "delete">;
+  /** Builds Pi's environment (login shell, settings, secrets); defaults to VS Code's own. */
+  environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
   /** Test seam: replaces spawning the real `pi --mode rpc` process. */
   createClient?: ChatSessionOptions["createClient"];
 }
@@ -159,6 +162,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     await this.session.dispose();
   }
 
+  /** Restarts Pi on the current chat so it picks up a changed environment. */
+  async restartPi(): Promise<void> {
+    if (!this.options.workspaceFolder) return;
+    if (this.setupError) {
+      await this.retrySetup();
+      return;
+    }
+    await this.session.restart().catch((error) => this.notice("error", errorMessage(error)));
+  }
+
   private async receive(message: WebviewToHostMessage): Promise<void> {
     switch (message.type) {
       case "ready":
@@ -263,13 +276,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const cwd = this.cwd;
     if (!cwd) throw new Error("Open a folder to chat with Pi.");
     const config = vscode.workspace.getConfiguration("piAgentManager");
-    const command = await resolvePiCommand({ configured: config.get<string>("command", "pi") });
+    const environment = this.options.environment ? await this.options.environment.resolve() : process.env;
+    const command = await resolvePiCommand({ configured: config.get<string>("command", "pi"), env: environment });
     const extraArgs = config.get<unknown>("extraArgs", []);
     const args = buildRpcArgs({
       extraArgs: Array.isArray(extraArgs) ? extraArgs.filter((value): value is string => typeof value === "string") : [],
     });
     const invocation = buildPiInvocation(command.path, args);
-    const env: NodeJS.ProcessEnv = { ...process.env, ...invocation.env, PATH: augmentPath(command.path) };
+    const env: NodeJS.ProcessEnv = { ...environment, ...invocation.env, PATH: augmentPath(command.path, environment) };
+    void this.options.environment?.checkMissing(cwd, env).catch(() => undefined);
     return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd, env }, listener);
   }
 

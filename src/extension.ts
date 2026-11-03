@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { resolveWorkspaceFolder } from "./editor/editor-context";
 import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
 import { ChatViewProvider, VIEW_ID } from "./view/chat-view-provider";
+import { PiEnvironment, registerEnvironmentCommands } from "./view/pi-environment";
 
 const ARCHIVED_SESSIONS_KEY = "piAgentManager.archivedSessions";
 
@@ -22,9 +23,13 @@ class MementoArchiveStore implements ArchiveStore {
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceFolder = resolveWorkspaceFolder(vscode.workspace, vscode.window.activeTextEditor);
+  const log = vscode.window.createOutputChannel("Pi Agent Manager", { log: true });
+  const environment = new PiEnvironment({ secrets: context.secrets, log });
+  environment.preload();
   const provider = new ChatViewProvider({
     extensionUri: context.extensionUri,
     workspaceFolder,
+    environment,
     repository: new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) }),
   });
   activeProvider = provider;
@@ -38,6 +43,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("piAgentManager.history", () => provider.toggleHistory()),
     vscode.commands.registerCommand("piAgentManager.sendSelection", () => provider.sendSelection()),
     vscode.commands.registerCommand("piAgentManager.focusInput", () => provider.focusInput()),
+    ...registerEnvironmentCommands({
+      environment,
+      cwd: () => workspaceFolder?.uri.fsPath,
+      restart: () => provider.restartPi(),
+    }),
+    log,
   );
 }
 

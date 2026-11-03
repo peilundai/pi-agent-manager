@@ -27,6 +27,17 @@ Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. The extensio
   - **Events:** sanitized by `src/pi/sanitize.ts` (drops `agent_end`/`turn_end` payloads and system messages, bounds string sizes), then batched every 16 ms.
   - **End of a run:** `agent_settled`, not `agent_end`, because retries, compaction and queued messages can follow `agent_end`.
 
+## Pi's environment
+
+`src/view/pi-environment.ts` builds the environment Pi is spawned with. Later sources win:
+
+1. VS Code's own `process.env`.
+2. The login-shell environment from `src/pi/shell-environment.ts`. It runs `$SHELL -i -l -c` once per window, with a Node probe (the Electron helper with `ELECTRON_RUN_AS_NODE=1`) that prints `JSON.stringify(process.env)` between random markers, so rc-file output can't corrupt it. It only fills in variables that are unset or empty, and appends missing `PATH` entries. It has a 10 s timeout, the shell's process group is killed on timeout, and Windows skips this step.
+3. `piAgentManager.environment` (machine-scoped setting).
+4. Secrets in VS Code `SecretStorage` under `piAgentManager.env.<NAME>`.
+
+The merged environment is also used to find the `pi` executable. `src/pi/config-references.ts` lists the variables that `models.json` and `mcp.json` reference (`$NAME`, `${NAME}`, `{ "env": "NAME" }`, `*EnvVar` keys, and legacy all-caps `apiKey` names). `PiEnvironment.checkMissing()` warns once per missing name. Secret values are never logged or posted to the webview.
+
 ## Webview state
 
 `src/webview/chat-state.ts` is a pure reducer from Pi events to transcript items:

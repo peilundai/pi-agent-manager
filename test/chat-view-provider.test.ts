@@ -117,6 +117,33 @@ describe("ChatViewProvider", () => {
     expect(posted.at(-1)).toMatchObject({ type: "init", setupError: { kind: "executable" } });
   });
 
+  it("restarts Pi so a changed environment takes effect", async () => {
+    let starts = 0;
+    let failFirst = true;
+    const { provider, posted, ready } = setup({
+      createClient: async () => {
+        starts += 1;
+        if (failFirst) {
+          failFirst = false;
+          throw new PiCommandNotFoundError(["/usr/bin/pi"]);
+        }
+        return new FakeClient({ onEvent: () => undefined, onExit: () => undefined });
+      },
+    });
+    await ready();
+    expect(posted.at(-1)).toMatchObject({ setupError: { kind: "executable" } });
+    // A setup error is retried, for example after the login-shell PATH was loaded.
+    await provider.restartPi();
+    expect(starts).toBe(2);
+    expect(posted.some((message) => message.type === "snapshot")).toBe(true);
+    await provider.restartPi();
+    expect(starts).toBe(3);
+
+    const noFolder = setup({ workspace: false });
+    await noFolder.provider.restartPi();
+    expect(noFolder.posted).toEqual([]);
+  });
+
   it("forwards prompts and dialog answers to Pi", async () => {
     const { send, ready, client } = setup();
     await ready();
