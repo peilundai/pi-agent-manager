@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import type { EnvironmentReference } from "../src/pi/config-references";
@@ -62,7 +63,7 @@ describe("PiEnvironment", () => {
     environment.preload();
     const resolved = await environment.resolveDetailed();
     expect(resolved.env).toEqual({
-      PATH: "/usr/bin:/u/.nvm/bin",
+      PATH: ["/usr/bin", "/u/.nvm/bin"].join(delimiter),
       HOME: "/u",
       GATEWAY_KEY: "from-shell",
       EXA_API_KEY: "from-secret",
