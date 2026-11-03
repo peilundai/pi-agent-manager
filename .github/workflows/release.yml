@@ -1,11 +1,20 @@
 name: Release
 
+# Publishes when a new version reaches main: a push to main whose package.json
+# version has no vX.Y.Z tag yet creates that tag and publishes it. Pushing a
+# vX.Y.Z tag by hand, or running the workflow from the Actions tab, also works.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -18,40 +27,85 @@ jobs:
       OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - name: Decide whether to release
+        id: plan
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            if [ "${GITHUB_REF_NAME}" != "${tag}" ]; then
+              echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${tag}"
+              exit 1
+            fi
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Releases are made from main or a vX.Y.Z tag, not ${GITHUB_REF}."
+            exit 1
+          fi
+          remote="$(git ls-remote --tags origin "refs/tags/${tag}" | cut -f1)"
+          if [ -z "${remote}" ]; then
+            echo "New version ${version}: releasing ${tag} from ${GITHUB_SHA}."
+            echo "create_tag=true" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          elif [ "${remote}" = "${GITHUB_SHA}" ]; then
+            # Re-running a release whose tag this commit already got.
+            echo "${tag} already points at this commit: releasing it again."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "${tag} already exists on another commit; bump the version in package.json to release. Nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.plan.outputs.release == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - name: Verify tag matches package.json
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version v${version}"
-            exit 1
-          fi
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
-      - run: npm run test:e2e
-      - run: npm run build
-      - run: node scripts/package-vsix.mjs
+      - if: steps.plan.outputs.release == 'true'
+        run: npm ci
+      - if: steps.plan.outputs.release == 'true'
+        run: npm run check
+      - if: steps.plan.outputs.release == 'true'
+        run: npm test
+      - if: steps.plan.outputs.release == 'true'
+        run: npm run test:e2e
+      - if: steps.plan.outputs.release == 'true'
+        run: npm run build
+      - if: steps.plan.outputs.release == 'true'
+        run: node scripts/package-vsix.mjs
       - name: Locate VSIX
+        if: steps.plan.outputs.release == 'true'
         run: echo "VSIX=$(node -p "const p=require('./package.json'); p.name + '-' + p.version + '.vsix'")" >> "$GITHUB_ENV"
+      # A tag pushed with GITHUB_TOKEN does not start another workflow run, so
+      # this run carries on and publishes it.
+      - name: Create tag
+        if: steps.plan.outputs.create_tag == 'true'
+        run: |
+          git tag "${TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${TAG}"
+      # --skip-duplicate lets a re-run finish when one store already has this version.
       - name: Publish to the VS Code Marketplace
-        if: env.VSCE_PAT != ''
-        run: npx vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT"
+        if: steps.plan.outputs.release == 'true' && env.VSCE_PAT != ''
+        run: npx vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT" --skip-duplicate
       - name: Publish to Open VSX
-        if: env.OVSX_PAT != ''
-        run: npx ovsx publish "$VSIX" --pat "$OVSX_PAT"
+        if: steps.plan.outputs.release == 'true' && env.OVSX_PAT != ''
+        run: npx ovsx publish "$VSIX" --pat "$OVSX_PAT" --skip-duplicate
       - name: Note skipped stores
-        if: env.VSCE_PAT == '' || env.OVSX_PAT == ''
+        if: steps.plan.outputs.release == 'true' && (env.VSCE_PAT == '' || env.OVSX_PAT == '')
         run: |
           [ -n "$VSCE_PAT" ] || echo "::warning::VSCE_PAT is not set; skipped the VS Code Marketplace."
           [ -n "$OVSX_PAT" ] || echo "::warning::OVSX_PAT is not set; skipped Open VSX."
       - name: Extract release notes
-        run: node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > release-notes.md
-      - uses: softprops/action-gh-release@v3
+        if: steps.plan.outputs.release == 'true'
+        run: node scripts/release-notes.mjs "${VERSION}" > release-notes.md
+      - if: steps.plan.outputs.release == 'true'
+        uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
           body_path: release-notes.md
           files: ${{ env.VSIX }}
           fail_on_unmatched_files: true

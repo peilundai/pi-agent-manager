@@ -1,11 +1,11 @@
 # Publishing Pi Agent Manager
 
-Releases are published by `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed. The workflow:
+Releases are published by `.github/workflows/release.yml`. It runs on every push to `main`, and it releases when `package.json`'s `version` has no `vX.Y.Z` tag yet. Merging a release pull request that bumps the version is therefore the release. Pushes that don't change the version skip it. The workflow:
 
-1. checks that the tag matches `package.json`'s `version`,
+1. checks that the version is new (or that its tag already points at this commit, when re-running),
 2. runs typecheck, lint, unit tests and the real-Pi end-to-end tests,
 3. builds and verifies the VSIX,
-4. publishes it to the **VS Code Marketplace** (when `VSCE_PAT` is set) and **Open VSX** (when `OVSX_PAT` is set),
+4. creates the `vX.Y.Z` tag if needed and publishes the VSIX to the **VS Code Marketplace** (when `VSCE_PAT` is set) and **Open VSX** (when `OVSX_PAT` is set),
 5. creates a GitHub Release with the VSIX and the matching `CHANGELOG.md` section.
 
 A store whose token is missing is skipped with a warning, so you can turn the stores on one at a time.
@@ -54,17 +54,19 @@ Open VSX serves Cursor, VSCodium, Windsurf, Gitpod and other VS Code–compatibl
 2. Update `CHANGELOG.md`: replace "Unreleased" in the version heading with the release date, and describe the changes.
 3. Bump `version` in `package.json` for later releases. Use `npm version patch|minor --no-git-tag-version` so `package-lock.json` matches.
 4. Regenerate third-party notices if dependencies changed: `npm run notices`.
-5. Merge to `main` through a pull request whose title follows Conventional Commits, for example `chore(release): 0.2.0`. See `AGENTS.md`.
+5. Open a pull request whose title follows Conventional Commits, for example `chore(release): 0.2.0`. See `AGENTS.md`.
 
 ## Release
 
-```sh
-git checkout main && git pull
-git tag v0.2.0
-git push origin v0.2.0
-```
+Merge the release pull request. The **Release** workflow in the Actions tab tags the merge commit, publishes it and creates the GitHub Release. Marketplace listings usually appear within a few minutes; Open VSX is immediate.
 
-Watch the **Release** workflow in the Actions tab. Marketplace listings usually appear within a few minutes; Open VSX is immediate.
+Other ways to start a release, all running the same checks:
+
+- **Run workflow** on the **Release** workflow in the Actions tab, with `main` selected. It does nothing if the version's tag already exists on another commit.
+- Push a tag by hand: `git tag v0.2.0 && git push origin v0.2.0`. The tag must match `package.json`.
+- Publish a release in the GitHub UI with a new `vX.Y.Z` tag on `main`. The workflow fills in its notes and attaches the VSIX.
+
+A tag that the workflow creates itself doesn't start a second run, because GitHub doesn't trigger workflows from pushes made with `GITHUB_TOKEN`. If a tag ruleset protects `v*` tags, allow GitHub Actions to create them.
 
 ## Preview and pre-releases
 
@@ -74,4 +76,4 @@ Watch the **Release** workflow in the Actions tab. Marketplace listings usually 
 ## If something goes wrong
 
 - **Unpublish or remove a version:** `npx vsce unpublish peilun-dai.pi-agent-manager` removes the whole extension, so prefer publishing a fixed patch version. On Open VSX, ask the namespace owner or the Open VSX team to remove a version.
-- **Expired token:** renew the token and update the repository secret. Re-run the failed workflow from the Actions tab; the tag doesn't need to change.
+- **Expired token:** renew the token and update the repository secret. Re-run the failed workflow from the Actions tab; the tag doesn't need to change. Re-runs are safe after a partial publish: both publish steps use `--skip-duplicate`, so a store that already has the version is skipped.
