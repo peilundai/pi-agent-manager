@@ -138,7 +138,7 @@ The end-to-end suites need no API key. They point a custom OpenAI-compatible `mo
 - the real-Pi and Playwright suites
 - a packaged `.vsix` artifact
 
-Merging a version bump to `main` (or pushing a matching `vX.Y.Z` tag) tags the release, publishes the VSIX to the VS Code Marketplace and Open VSX and creates a GitHub Release with its CHANGELOG notes. See [docs/PUBLISHING.md](docs/PUBLISHING.md). Dependabot keeps npm packages and actions current.
+Merging a version bump to `main` (or pushing a matching `vX.Y.Z` tag) tags the release, publishes the VSIX to the VS Code Marketplace and, once its token is set, Open VSX, and creates a GitHub Release with its CHANGELOG notes. See [docs/PUBLISHING.md](docs/PUBLISHING.md). Dependabot keeps npm packages and actions current.
 
 See [docs/architecture.md](docs/architecture.md) for how the extension talks to Pi.
 
