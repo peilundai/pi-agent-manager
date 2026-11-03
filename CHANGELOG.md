@@ -22,6 +22,11 @@ Rewritten from scratch as a native chat UI for the Pi coding agent. First releas
 - Pi 1.5 color palette for light, dark and high-contrast themes.
 - `Cmd/Ctrl+L` inserts the editor selection into the composer.
 
+### Fixed
+
+- The π button in the editor title bar is now visible in dark themes. It ships light and dark icon variants; the sidebar icon already follows the theme.
+- Inline diffs use the active VS Code theme's diff-editor and Git colors, so they match the built-in diff view in light, dark and high-contrast themes.
+
 ### Removed
 
 - Embedded terminal (xterm.js + node-pty) sessions and the status bridge extension. Packages are now a single universal VSIX with no native code.
