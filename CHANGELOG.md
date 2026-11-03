@@ -2,10 +2,13 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
-## Unreleased
+## 0.2.2 — 2026-11-03 (first Marketplace preview)
+
+First release published to the VS Code Marketplace and Open VSX, as an unofficial preview. 0.2.0 and 0.2.1 were released on GitHub only.
 
 ### Changed
 
+- The publisher ID is now `peilundai`, so the extension ID is `peilundai.pi-agent-manager`. If you installed 0.2.0 or 0.2.1 from a VSIX, uninstall it before installing from a store.
 - The editor title bar button and the sidebar icon now show the pixel-art π bot from the Marketplace icon. The title bar button uses the theme's accent purple in light and dark themes, and the sidebar icon follows the theme's icon color.
 
 ## 0.2.1 — 2026-11-03
@@ -20,9 +23,9 @@ All notable changes to Pi Agent Manager are documented here. (During development
 
 - Write tool cards now start folded, showing their line count and summary; click the header to see the content. Edit diffs still open by default.
 
-## 0.2.0 — 2026-11-03 (first Marketplace preview)
+## 0.2.0 — 2026-11-03
 
-Rewritten from scratch as a native chat UI for the Pi coding agent. First release published to the VS Code Marketplace and Open VSX, as an unofficial preview.
+Rewritten from scratch as a native chat UI for the Pi coding agent. Released on GitHub as a VSIX.
 
 ### Added
 
