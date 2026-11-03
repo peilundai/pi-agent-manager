@@ -96,9 +96,7 @@ export function summarizeTool(tool: ToolState): string | undefined {
       return `Wrote ${plural(lines, "line")}`;
     }
     case "edit": {
-      const rows = parsePiDiff(str(tool.details?.diff) ?? "");
-      const added = rows.filter((row) => row.kind === "add").length;
-      const removed = rows.filter((row) => row.kind === "del").length;
+      const { added, removed } = diffStats(tool) ?? { added: 0, removed: 0 };
       if (!added && !removed) return "Applied edit";
       const parts = [];
       if (added) parts.push(`Added ${plural(added, "line")}`);
@@ -120,6 +118,38 @@ export function summarizeTool(tool: ToolState): string | undefined {
     default:
       return tool.output ? firstLine(tool.output, 120) : "Done";
   }
+}
+
+export interface DiffStats {
+  added: number;
+  removed: number;
+}
+
+/** Rows of the diff an edit or write tool shows, from Pi's diff when present. */
+export function toolDiffRows(tool: Pick<ToolState, "name" | "args" | "details">): DiffRow[] {
+  if (tool.name === "edit") {
+    const rows = parsePiDiff(str(tool.details?.diff) ?? "");
+    return rows.length ? rows : editArgsDiff(tool.args);
+  }
+  if (tool.name === "write" && typeof tool.args.content === "string") {
+    return tool.args.content
+      .replace(/\n$/, "")
+      .split("\n")
+      .map((text, index) => ({ kind: "add", line: index + 1, text }));
+  }
+  return [];
+}
+
+/** Added and removed line counts for an edit or write, or undefined for other tools. */
+export function diffStats(tool: Pick<ToolState, "name" | "args" | "details">): DiffStats | undefined {
+  if (tool.name !== "edit" && tool.name !== "write") return undefined;
+  let added = 0;
+  let removed = 0;
+  for (const row of toolDiffRows(tool)) {
+    if (row.kind === "add") added++;
+    else if (row.kind === "del") removed++;
+  }
+  return added || removed ? { added, removed } : undefined;
 }
 
 const DIFF_LINE = /^([+\- ])(\s*\d*) (.*)$/;

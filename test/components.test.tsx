@@ -156,6 +156,10 @@ describe("ToolCard", () => {
     );
     expect(screen.getByText("old")).toBeInTheDocument();
     expect(screen.getByText("new")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 added, 1 removed")).toHaveTextContent("+1-1");
+    fireEvent.click(screen.getByRole("button", { expanded: true }));
+    expect(screen.getByText("+1")).toHaveClass("tool-stat-add");
+    expect(screen.getByText("-1")).toHaveClass("tool-stat-del");
     fireEvent.click(screen.getByText("src/a.ts"));
     expect(posted.at(-1)).toEqual({ version: 1, type: "file.open", path: "src/a.ts" });
   });

@@ -803,6 +803,23 @@ pre,
   text-decoration: underline;
 }
 
+.tool-stats {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-stat-add {
+  color: var(--vscode-gitDecoration-addedResourceForeground, var(--pi-diff-added));
+}
+
+.tool-stat-del {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--pi-diff-removed));
+}
+
 .tool-duration {
   flex-shrink: 0;
   color: var(--pi-dim);

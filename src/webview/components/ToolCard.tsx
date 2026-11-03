@@ -1,6 +1,6 @@
 import { memo, useState, type MouseEvent } from "react";
 import type { ToolState } from "../chat-state";
-import { describeTool, editArgsDiff, parsePiDiff, summarizeTool, type DiffRow } from "../tool-format";
+import { describeTool, diffStats, summarizeTool, toolDiffRows, type DiffRow } from "../tool-format";
 import { useChat } from "./context";
 
 const MAX_DIFF_ROWS = 400;
@@ -27,22 +27,14 @@ export function DiffView({ rows }: { rows: DiffRow[] }) {
 }
 
 function ToolBody({ tool }: { tool: ToolState }) {
-  if (tool.name === "edit") {
-    const diff = typeof tool.details?.diff === "string" ? parsePiDiff(tool.details.diff) : [];
-    const rows = diff.length ? diff : editArgsDiff(tool.args);
+  if (tool.name === "edit" || (tool.name === "write" && typeof tool.args.content === "string")) {
+    const rows = toolDiffRows(tool);
     return (
       <>
         {rows.length > 0 && <DiffView rows={rows} />}
         {tool.status === "error" && tool.output && <pre className="tool-output error">{tool.output}</pre>}
       </>
     );
-  }
-  if (tool.name === "write" && typeof tool.args.content === "string") {
-    const rows: DiffRow[] = tool.args.content
-      .replace(/\n$/, "")
-      .split("\n")
-      .map((text, index) => ({ kind: "add", line: index + 1, text }));
-    return <DiffView rows={rows} />;
   }
   const output = tool.output.length > MAX_OUTPUT_CHARS ? `${tool.output.slice(0, MAX_OUTPUT_CHARS)}\n…` : tool.output;
   const command = (tool.name === "bash" || tool.name === "powershell") && typeof tool.args.command === "string" ? tool.args.command : undefined;
@@ -62,6 +54,7 @@ export const ToolCard = memo(function ToolCard({ tool }: { tool: ToolState }) {
   const { post } = useChat();
   const description = describeTool(tool);
   const summary = summarizeTool(tool);
+  const stats = tool.status === "success" || tool.status === "running" ? diffStats(tool) : undefined;
   const autoOpen = tool.name === "edit" || tool.name === "write";
   const [open, setOpen] = useState<boolean | undefined>(undefined);
   const expanded = open ?? (autoOpen && tool.status !== "streaming");
@@ -88,6 +81,12 @@ export const ToolCard = memo(function ToolCard({ tool }: { tool: ToolState }) {
             title={description.path ? `Open ${description.path}` : description.target}
           >
             {description.target}
+          </span>
+        )}
+        {stats && (
+          <span className="tool-stats" aria-label={`${stats.added} added, ${stats.removed} removed`}>
+            {stats.added > 0 && <span className="tool-stat-add">+{stats.added}</span>}
+            {stats.removed > 0 && <span className="tool-stat-del">-{stats.removed}</span>}
           </span>
         )}
         {tool.durationMs !== undefined && tool.durationMs >= 1_000 && (
