@@ -55,7 +55,32 @@ export function slashQuery(text: string, caret: number): string | undefined {
   return match && !text.slice(caret).includes("\n") ? match[1] ?? "" : undefined;
 }
 
+function formatTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+  return String(value);
+}
+
 function ContextRing({ stats }: { stats: PiSessionStats | undefined }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   const percent = stats?.contextUsage?.percent;
   if (typeof percent !== "number") return null;
   const radius = 6;
@@ -63,24 +88,80 @@ function ContextRing({ stats }: { stats: PiSessionStats | undefined }) {
   const clamped = Math.min(Math.max(percent, 0), 100);
   const tokens = stats?.contextUsage?.tokens;
   const window = stats?.contextUsage?.contextWindow;
-  const cost = typeof stats?.cost === "number" && stats.cost > 0 ? ` · $${stats.cost.toFixed(2)}` : "";
+  const cost = typeof stats?.cost === "number" && stats.cost > 0 ? stats.cost : undefined;
   const title = `Context ${clamped.toFixed(0)}% used${
     typeof tokens === "number" && window ? ` (${Math.round(tokens / 1000)}k / ${Math.round(window / 1000)}k tokens)` : ""
-  }${cost}`;
+  }${cost !== undefined ? ` · $${cost.toFixed(2)}` : ""}`;
+  const high = clamped > 80;
+  const usage = stats?.tokens;
+  const rows: [string, number | undefined][] = [
+    ["Input", usage?.input],
+    ["Output", usage?.output],
+    ["Cache read", usage?.cacheRead],
+    ["Cache write", usage?.cacheWrite],
+    ["Total", usage?.total],
+  ];
+  const tokenRows = rows.filter((row): row is [string, number] => typeof row[1] === "number");
+
   return (
-    <span className={`context-ring${clamped > 80 ? " high" : ""}`} title={title} aria-label={title} role="img">
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r={radius} className="ring-track" />
-        <circle
-          cx="8"
-          cy="8"
-          r={radius}
-          className="ring-value"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - clamped / 100)}
-        />
-      </svg>
-    </span>
+    <div className="context-ring-wrap" ref={ref}>
+      <button
+        type="button"
+        className={`context-ring${high ? " high" : ""}`}
+        title={title}
+        aria-label={title}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r={radius} className="ring-track" />
+          <circle
+            cx="8"
+            cy="8"
+            r={radius}
+            className="ring-value"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - clamped / 100)}
+          />
+        </svg>
+      </button>
+      {open && (
+        <div className="popover context-popover" role="dialog" aria-label="Context usage">
+          <div className="picker-label">Context window</div>
+          <div className="context-headline">
+            <span className="context-percent">{clamped.toFixed(0)}%</span>
+            <span className="context-sub">
+              {typeof tokens === "number" && window ? `${formatTokens(tokens)} / ${formatTokens(window)} tokens` : "used"}
+            </span>
+          </div>
+          <div className={`context-bar${high ? " high" : ""}`} aria-hidden="true">
+            <span style={{ width: `${clamped}%` }} />
+          </div>
+          {tokenRows.length > 0 && (
+            <>
+              <div className="picker-label context-section">Session tokens</div>
+              <dl className="context-rows">
+                {tokenRows.map(([label, value]) => (
+                  <div key={label} className="context-row">
+                    <dt>{label}</dt>
+                    <dd>{value.toLocaleString()}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          )}
+          {cost !== undefined && (
+            <dl className="context-rows context-cost">
+              <div className="context-row">
+                <dt>Cost</dt>
+                <dd>${cost.toFixed(2)}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

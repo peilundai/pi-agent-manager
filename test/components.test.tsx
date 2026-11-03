@@ -282,7 +282,24 @@ describe("Composer", () => {
     expect(screen.queryByAltText("a.webp")).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Commands and skills"));
     await waitFor(() => expect(input.value).toBe("/"));
-    expect(screen.getByRole("img", { name: /Context 85% used \(170k \/ 200k tokens\) · \$1\.23/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Context 85% used \(170k \/ 200k tokens\) · \$1\.23/ })).toBeInTheDocument();
+  });
+
+  it("opens context usage details when the ring is clicked", () => {
+    renderComposer();
+    const ring = screen.getByRole("button", { name: /Context 85% used/ });
+    expect(screen.queryByRole("dialog", { name: "Context usage" })).not.toBeInTheDocument();
+    fireEvent.click(ring);
+    const popover = screen.getByRole("dialog", { name: "Context usage" });
+    expect(ring).toHaveAttribute("aria-expanded", "true");
+    expect(popover).toHaveTextContent("85%");
+    expect(popover).toHaveTextContent("170k / 200k tokens");
+    expect(popover).toHaveTextContent("$1.23");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Context usage" })).not.toBeInTheDocument();
+    fireEvent.click(ring);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Context usage" })).not.toBeInTheDocument();
   });
 
   it("opens the model picker and posts model changes", () => {
