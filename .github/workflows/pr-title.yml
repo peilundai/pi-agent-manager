@@ -18,8 +18,12 @@ jobs:
       - name: Check the pull request title
         env:
           TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          pattern='^(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\([a-z0-9._/-]+\))?!?: [^ ].{0,71}$'
+          # Dependabot writes its own titles and can exceed 72 chars (long package or
+          # group names), so check only its format, not its length.
+          if [ "$AUTHOR" = "dependabot[bot]" ]; then max=''; else max='{0,71}'; fi
+          pattern="^(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\\([a-z0-9._/-]+\\))?!?: [^ ].${max:-*}\$"
           if printf '%s' "$TITLE" | grep -Eq "$pattern"; then
             echo "OK: $TITLE"
           else
