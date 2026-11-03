@@ -21,3 +21,5 @@ playwright.config.ts
 vitest.e2e.config.ts
 .claude/**
 release/**
+AGENTS.md
+CLAUDE.md
