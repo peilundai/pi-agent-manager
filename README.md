@@ -1,6 +1,6 @@
 # Pi Agent Manager for VS Code
 
-[![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
+[![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
 
 Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar: streaming answers, tool cards with diffs, and your past chats, drawn in Pi's own colors.
 
