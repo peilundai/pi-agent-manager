@@ -12,8 +12,8 @@ const DIST = join(process.cwd(), "dist");
 const TYPES: Record<string, string> = { ".js": "text/javascript", ".css": "text/css", ".ttf": "font/ttf" };
 
 const THEMES = {
-  dark: "--vscode-sideBar-background:#181818;--vscode-foreground:#cccccc;--vscode-input-background:#313131;--vscode-focusBorder:#0078d4",
-  light: "--vscode-sideBar-background:#f8f8f8;--vscode-foreground:#3b3b3b;--vscode-input-background:#ffffff;--vscode-focusBorder:#005fb8",
+  dark: "--vscode-sideBar-background:#181818;--vscode-foreground:#cccccc;--vscode-input-background:#313131;--vscode-focusBorder:#0078d4;--vscode-diffEditor-insertedLineBackground:#9bb95533;--vscode-diffEditor-removedLineBackground:#ff000033;--vscode-gitDecoration-addedResourceForeground:#81b88b;--vscode-gitDecoration-deletedResourceForeground:#c74e39",
+  light: "--vscode-sideBar-background:#f8f8f8;--vscode-foreground:#3b3b3b;--vscode-input-background:#ffffff;--vscode-focusBorder:#005fb8;--vscode-diffEditor-insertedLineBackground:#9bb95533;--vscode-diffEditor-removedLineBackground:#ff000033;--vscode-gitDecoration-addedResourceForeground:#587c0c;--vscode-gitDecoration-deletedResourceForeground:#ad0707",
 } as const;
 
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/webview.css"></head>

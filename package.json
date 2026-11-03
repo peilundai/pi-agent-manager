@@ -52,7 +52,10 @@
         "command": "piAgentManager.open",
         "title": "Open",
         "category": "Pi Agent Manager",
-        "icon": "media/pi.svg"
+        "icon": {
+          "light": "media/pi-light.svg",
+          "dark": "media/pi-dark.svg"
+        }
       },
       {
         "command": "piAgentManager.newChat",

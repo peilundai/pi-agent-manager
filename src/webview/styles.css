@@ -688,9 +688,12 @@ pre,
 
 .hljs-string,
 .hljs-regexp,
-.hljs-template-tag,
-.hljs-addition {
+.hljs-template-tag {
   color: var(--pi-syntax-string);
+}
+
+.hljs-addition {
+  color: var(--vscode-gitDecoration-addedResourceForeground, var(--pi-diff-added));
 }
 
 .hljs-number,
@@ -721,7 +724,7 @@ pre,
 }
 
 .hljs-deletion {
-  color: var(--pi-diff-removed);
+  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--pi-diff-removed));
 }
 
 .hljs-emphasis {
@@ -876,22 +879,44 @@ pre,
   padding-right: 10px;
 }
 
-.diff-add {
-  background: color-mix(in srgb, var(--pi-tool-success-bg) 75%, transparent);
+/*
+ * Diff rows follow the active VS Code theme's diff-editor colors, so they match the
+ * built-in diff view in any light, dark or high-contrast theme. Pi tokens are fallbacks.
+ */
+.diff {
+  --pi-diff-add-bg: var(
+    --vscode-diffEditor-insertedLineBackground,
+    color-mix(in srgb, var(--pi-diff-added) 18%, transparent)
+  );
+  --pi-diff-del-bg: var(
+    --vscode-diffEditor-removedLineBackground,
+    color-mix(in srgb, var(--pi-diff-removed) 18%, transparent)
+  );
+  --pi-diff-add-fg: var(--vscode-gitDecoration-addedResourceForeground, var(--pi-diff-added));
+  --pi-diff-del-fg: var(--vscode-gitDecoration-deletedResourceForeground, var(--pi-diff-removed));
 }
 
-.diff-add .diff-sign,
-.diff-add .diff-text {
-  color: var(--pi-diff-added);
+.diff-add {
+  background: var(--pi-diff-add-bg);
+  box-shadow: inset 2px 0 var(--pi-diff-add-fg);
 }
 
 .diff-del {
-  background: color-mix(in srgb, var(--pi-tool-error-bg) 65%, transparent);
+  background: var(--pi-diff-del-bg);
+  box-shadow: inset 2px 0 var(--pi-diff-del-fg);
 }
 
-.diff-del .diff-sign,
+.diff-add .diff-sign {
+  color: var(--pi-diff-add-fg);
+}
+
+.diff-del .diff-sign {
+  color: var(--pi-diff-del-fg);
+}
+
+.diff-add .diff-text,
 .diff-del .diff-text {
-  color: var(--pi-diff-removed);
+  color: var(--pi-text);
 }
 
 .diff-skip {
@@ -899,9 +924,17 @@ pre,
   color: var(--pi-dim);
 }
 
-body.vscode-light .diff-add .diff-text,
-body.vscode-light .diff-del .diff-text {
-  color: var(--pi-text);
+/* High contrast themes outline changed lines instead of relying on tint alone. */
+body.vscode-high-contrast .diff-add,
+body.vscode-high-contrast-light .diff-add {
+  outline: 1px dashed var(--vscode-diffEditor-insertedTextBorder, var(--pi-diff-add-fg));
+  outline-offset: -1px;
+}
+
+body.vscode-high-contrast .diff-del,
+body.vscode-high-contrast-light .diff-del {
+  outline: 1px dashed var(--vscode-diffEditor-removedTextBorder, var(--pi-diff-del-fg));
+  outline-offset: -1px;
 }
 
 /* ───── Notices, dialogs, misc items ───── */

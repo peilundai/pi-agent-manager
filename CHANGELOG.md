@@ -23,6 +23,11 @@ Rewritten from scratch as a native chat UI for the Pi coding agent. First releas
 - `Cmd/Ctrl+L` inserts the editor selection into the composer.
 - Works without manual setup when VS Code was not started from a terminal: Pi gets the variables your login shell exports (gateway keys, MCP tokens, `PATH`). Missing variables referenced by Pi's `models.json` or `mcp.json` are named, with a one-click fix that stores the value in VS Code's encrypted secret storage. New commands: Set/Remove Environment Secret, Reload Environment and Restart Pi, and Show Environment Diagnostics. New settings: `piAgentManager.loadShellEnvironment` and `piAgentManager.environment`.
 
+### Fixed
+
+- The π button in the editor title bar is now visible in dark themes. It ships light and dark icon variants; the sidebar icon already follows the theme.
+- Inline diffs use the active VS Code theme's diff-editor and Git colors, so they match the built-in diff view in light, dark and high-contrast themes.
+
 ### Removed
 
 - Embedded terminal (xterm.js + node-pty) sessions and the status bridge extension. Packages are now a single universal VSIX with no native code.
