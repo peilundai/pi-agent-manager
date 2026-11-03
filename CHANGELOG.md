@@ -2,6 +2,12 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
+## Unreleased
+
+### Changed
+
+- The editor title bar button and the sidebar icon now show the pixel-art π bot from the Marketplace icon. The title bar button uses the theme's accent purple in light and dark themes, and the sidebar icon follows the theme's icon color.
+
 ## 0.2.1 — 2026-11-03
 
 ### Added
