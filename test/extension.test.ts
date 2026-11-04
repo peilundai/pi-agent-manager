@@ -18,7 +18,7 @@ describe("extension activation", () => {
   it("registers the chat view and commands", async () => {
     mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
     const subscriptions: Array<{ dispose(): void }> = [];
-    activate({
+    await activate({
       extensionUri: mock.Uri.file("/ext"),
       subscriptions,
       workspaceState: { get: () => undefined, update: async () => undefined },
@@ -39,7 +39,7 @@ describe("extension activation", () => {
       "piAgentManager.reloadEnvironment",
       "piAgentManager.showEnvironmentDiagnostics",
     ]);
-    expect(subscriptions).toHaveLength(16);
+    expect(subscriptions).toHaveLength(17);
     expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeConfiguration).toHaveBeenCalledOnce();
@@ -50,7 +50,7 @@ describe("extension activation", () => {
     const manifest = (await import("../package.json")).default as {
       contributes: { commands: Array<{ command: string }>; views: Record<string, Array<{ id: string }>> };
     };
-    activate({ extensionUri: mock.Uri.file("/ext"), subscriptions: [], workspaceState: { get: () => undefined, update: async () => undefined }, secrets } as never);
+    await activate({ extensionUri: mock.Uri.file("/ext"), subscriptions: [], workspaceState: { get: () => undefined, update: async () => undefined }, secrets } as never);
     const registered = mock.commands.registerCommand.mock.calls.map((call) => call[0]).sort();
     expect(manifest.contributes.commands.map((command) => command.command).sort()).toEqual(registered);
     expect(manifest.contributes.views.piAgentManager?.[0]?.id).toBe("piAgentManager.view");
@@ -114,6 +114,16 @@ describe("chat placement", () => {
     await deactivate();
   });
 
+  it("does not run a reveal command that the host did not register", async () => {
+    mock.commands.getCommands.mockResolvedValue([]);
+    await activate(hostContext() as never);
+    await runOpen();
+    expect(executed().filter((command) => command !== "setContext")).toEqual([]);
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", FALLBACK_CONTEXT, true);
+    expect(executed()).not.toContain(SECONDARY_CONTAINER);
+    await deactivate();
+  });
+
   it("uses the container command when the view focus command is absent", async () => {
     mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER]);
     await activate(hostContext() as never);
@@ -138,8 +148,11 @@ describe("view contributions", () => {
     };
     expect(manifest.contributes.viewsContainers.secondarySidebar?.map((container) => container.id)).toEqual(["piAgentManager"]);
     expect(manifest.contributes.viewsContainers.activitybar?.map((container) => container.id)).toEqual(["piAgentManagerSidebar"]);
-    expect(manifest.contributes.views.piAgentManager?.[0]).toMatchObject({ id: "piAgentManager.view", type: "webview" });
-    expect(manifest.contributes.views.piAgentManager?.[0]?.when).toBeUndefined();
+    expect(manifest.contributes.views.piAgentManager?.[0]).toMatchObject({
+      id: "piAgentManager.view",
+      type: "webview",
+      when: `!${FALLBACK_CONTEXT}`,
+    });
     expect(manifest.contributes.views.piAgentManagerSidebar?.[0]).toMatchObject({
       id: "piAgentManager.sidebarView",
       type: "webview",

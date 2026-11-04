@@ -26,11 +26,38 @@ const MAX_ATTACH_IMAGE_BYTES = 10 * 1024 * 1024;
 const FILE_EXCLUDES = "**/{node_modules,.git,dist,out,build,.next,coverage,.venv,__pycache__}/**";
 
 export const VIEW_ID = "piAgentManager.view";
+export const SIDEBAR_VIEW_ID = "piAgentManager.sidebarView";
 export const CONTAINER_COMMAND = "workbench.view.extension.piAgentManager";
+const SIDEBAR_CONTAINER_COMMAND = "workbench.view.extension.piAgentManagerSidebar";
+export const FALLBACK_CONTEXT = "piAgentManager.useSidebarFallback";
+
+export type ChatSurface = "secondarySidebar" | "activitybar";
+
+const SURFACES: Record<ChatSurface, { readonly viewId: string; readonly containerCommand: string }> = {
+  secondarySidebar: { viewId: VIEW_ID, containerCommand: CONTAINER_COMMAND },
+  activitybar: { viewId: SIDEBAR_VIEW_ID, containerCommand: SIDEBAR_CONTAINER_COMMAND },
+};
+
+export function chatSurface(commands: readonly string[]): ChatSurface {
+  return commands.includes(CONTAINER_COMMAND) ? "secondarySidebar" : "activitybar";
+}
+
+function revealCommand(surface: ChatSurface, commands: readonly string[]): string | undefined {
+  const target = SURFACES[surface];
+  const focus = `${target.viewId}.focus`;
+  if (commands.includes(focus)) return focus;
+  if (commands.includes(target.containerCommand)) return target.containerCommand;
+  return undefined;
+}
+
+function ownsView(surface: ChatSurface, viewType: string): boolean {
+  return viewType === SURFACES[surface].viewId;
+}
 
 export interface ChatViewProviderOptions {
   extensionUri: vscode.Uri;
   workspaceFolder: vscode.WorkspaceFolder | undefined;
+  surface?: ChatSurface;
   repository: Pick<PiSessionRepository, "list" | "watch" | "delete"> & Partial<Pick<PiSessionRepository, "useEnvironment">>;
   /** Builds Pi's environment (login shell, settings, secrets); defaults to VS Code's own. */
   environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
@@ -99,10 +126,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly session: ChatSession;
   /** The folder Pi runs in. In multi-root windows it can change; see followEditor(). */
   private folder: vscode.WorkspaceFolder | undefined;
+  private readonly surface: ChatSurface;
   /** Serializes folder switches so rapid editor changes cannot interleave Pi restarts. */
   private switching: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: ChatViewProviderOptions) {
+    this.surface = options.surface ?? "secondarySidebar";
     this.folder = options.workspaceFolder;
     this.setupError = options.workspaceFolder ? undefined : { kind: "workspace" };
     this.session = new ChatSession({
@@ -130,6 +159,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
+    if (!ownsView(this.surface, view.viewType)) return;
     this.view = view;
     this.ready = false;
     const distUri = vscode.Uri.joinPath(this.options.extensionUri, "dist");
@@ -150,7 +180,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   async reveal(): Promise<void> {
-    await vscode.commands.executeCommand(CONTAINER_COMMAND);
+    const command = revealCommand(this.surface, await vscode.commands.getCommands(true));
+    if (command) await vscode.commands.executeCommand(command);
     this.view?.show?.(true);
   }
 

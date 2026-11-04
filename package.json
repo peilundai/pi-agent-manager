@@ -132,6 +132,13 @@
           "title": "Pi Agent Manager",
           "icon": "media/pi.svg"
         }
+      ],
+      "activitybar": [
+        {
+          "id": "piAgentManagerSidebar",
+          "title": "Pi Agent Manager",
+          "icon": "media/pi.svg"
+        }
       ]
     },
     "views": {
@@ -140,7 +147,17 @@
           "type": "webview",
           "id": "piAgentManager.view",
           "name": "Chat",
-          "icon": "media/pi.svg"
+          "icon": "media/pi.svg",
+          "when": "!piAgentManager.useSidebarFallback"
+        }
+      ],
+      "piAgentManagerSidebar": [
+        {
+          "type": "webview",
+          "id": "piAgentManager.sidebarView",
+          "name": "Chat",
+          "icon": "media/pi.svg",
+          "when": "piAgentManager.useSidebarFallback"
         }
       ]
     },

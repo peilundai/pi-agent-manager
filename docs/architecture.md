@@ -1,6 +1,6 @@
 # Architecture
 
-Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. The extension host drives one `pi --mode rpc` child process. The webview is a React app that renders Pi's event stream as a chat.
+Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. Hosts that do not register that bar, such as Cursor, show the same chat from the left activity bar instead. VS Code moves a view into Explorer when its container is missing. The secondary view stays hidden while the activity bar fallback is on. The extension host drives one `pi --mode rpc` child process. The webview is a React app that renders Pi's event stream as a chat.
 
 ```
 ┌──────────────── Extension host (Node) ────────────────┐        ┌──────── Webview (React) ────────┐

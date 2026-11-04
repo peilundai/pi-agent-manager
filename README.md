@@ -31,6 +31,8 @@
 2. Install **Pi Agent Manager** from the Marketplace.
 3. Click the **π** icon in the editor title bar, or run **Pi Agent Manager: Open**, then start typing.
 
+In VS Code the chat opens in the Secondary Side Bar, on the right. In Cursor that side bar is not available, so the same π icon is on the left activity bar with the other icons. Only one Pi panel is shown.
+
 Pi Agent Manager runs `pi --mode rpc`, so your providers, default model, skills, prompt templates, extensions and session history (`~/.pi/agent`) all just work.
 
 ## What's inside

@@ -2,6 +2,12 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
+## Unreleased
+
+### Fixed
+
+- In Cursor, Pi opens from the left activity bar. Cursor does not register the Secondary Side Bar, so opening Pi failed with `command 'workbench.view.extension.piAgentManager' not found`. VS Code still opens Pi in the Secondary Side Bar, and only one panel is shown.
+
 ## 0.2.3 — 2026-11-04
 
 ### Changed
