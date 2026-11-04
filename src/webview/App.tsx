@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { isHostMessage, type HostToWebviewMessage, type ImageAttachment, type PromptMode, type WebviewToHostMessage } from "../shared/protocol";
 import { chatReducer, initialChatState, type ChatState } from "./chat-state";
-import { Composer, type ComposerHandle, type LocalCommand } from "./components/Composer";
+import { Composer, type ComposerDraft, type ComposerHandle, type LocalCommand } from "./components/Composer";
 import { ChatContext } from "./components/context";
 import { EmptyState, PiMascot } from "./components/EmptyState";
 import { Header, SessionPicker } from "./components/Header";
@@ -154,7 +154,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
       if (!isHostMessage(message)) return;
       switch (message.type) {
         case "composer.insert":
-          composer.current?.insert(message.text, message.images);
+          composer.current?.insert(message.text, message.images, message.references);
           return;
         case "composer.focus":
           composer.current?.focus();
@@ -196,14 +196,17 @@ export function App({ transport }: { transport: WebviewTransport }) {
   }, [state.epoch]);
 
   const onDraftChange = useCallback(
-    (draft: string) => {
-      persisted.current = { ...persisted.current, draft };
+    (draft: ComposerDraft) => {
+      persisted.current = { ...persisted.current, draft: draft.text, draftReferences: draft.references };
       transport.setState(persisted.current);
     },
     [transport],
   );
   // The composer remounts after a setup error is retried; give it the latest draft, not the first one.
-  const loadDraft = useCallback(() => persisted.current.draft ?? "", []);
+  const loadDraft = useCallback(
+    (): ComposerDraft => ({ text: persisted.current.draft ?? "", references: persisted.current.draftReferences ?? [] }),
+    [],
+  );
 
   const submit = useCallback(
     (text: string, images: ImageAttachment[], mode: PromptMode) => {

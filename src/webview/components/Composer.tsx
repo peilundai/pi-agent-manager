@@ -1,13 +1,54 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
-import type { ImageAttachment, PromptMode } from "../../shared/protocol";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import type { ContextReference, ImageAttachment, PromptMode } from "../../shared/protocol";
 import type { PiCommand, PiModel, PiSessionStats, ThinkingLevel } from "../../pi/rpc-types";
 import { useChat } from "./context";
 import { ModelPicker, modelLabel, supportedLevels, thinkingLabel } from "./ModelPicker";
 
 export interface ComposerHandle {
   focus(): void;
-  insert(text: string, images?: ImageAttachment[]): void;
+  insert(text: string, images?: ImageAttachment[], references?: ContextReference[]): void;
   toggleModelPicker(): void;
+}
+
+/** The composer's text plus the selections its reference tokens point to. */
+export interface ComposerDraft {
+  text: string;
+  references: ContextReference[];
+}
+
+export interface ReferenceToken {
+  start: number;
+  end: number;
+  label: string;
+}
+
+/** Finds each reference label that stands as a whitespace-delimited token in `text`. */
+export function findReferenceTokens(text: string, labels: readonly string[]): ReferenceToken[] {
+  const found: ReferenceToken[] = [];
+  for (const label of new Set(labels)) {
+    if (!label) continue;
+    for (let start = text.indexOf(label); start !== -1; start = text.indexOf(label, start + 1)) {
+      const end = start + label.length;
+      if ((start === 0 || /\s/.test(text.charAt(start - 1))) && (end === text.length || /\s/.test(text.charAt(end)))) {
+        found.push({ start, end, label });
+      }
+    }
+  }
+  found.sort((left, right) => left.start - right.start || right.end - left.end);
+  const tokens: ReferenceToken[] = [];
+  for (const token of found) {
+    if (token.start >= (tokens.at(-1)?.end ?? 0)) tokens.push(token);
+  }
+  return tokens;
+}
+
+/** Appends the context of every reference still present in `text`, in the order they appear. */
+export function expandReferences(text: string, references: readonly ContextReference[]): string {
+  const byLabel = new Map(references.map((reference) => [reference.label, reference.text]));
+  const labels = [...new Set(findReferenceTokens(text, [...byLabel.keys()]).map((token) => token.label))];
+  const context = labels.map((label) => (byLabel.get(label) ?? "").trim()).filter(Boolean).join("\n\n");
+  if (!context) return text;
+  return text ? `${text}\n\n${context}` : context;
 }
 
 export interface LocalCommand {
@@ -176,9 +217,9 @@ export interface ComposerProps {
   localCommands: LocalCommand[];
   stats: PiSessionStats | undefined;
   /** Returns the latest saved draft; read once when the composer mounts. */
-  loadDraft(): string;
+  loadDraft(): ComposerDraft;
   history: string[];
-  onDraftChange(text: string): void;
+  onDraftChange(draft: ComposerDraft): void;
   onSubmit(text: string, images: ImageAttachment[], mode: PromptMode): void;
   onAbort(): void;
   files: { requestId: number; files: string[] };
@@ -187,7 +228,11 @@ export interface ComposerProps {
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(props, ref) {
   const { post } = useChat();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState(() => props.loadDraft());
+  const highlightsRef = useRef<HTMLDivElement>(null);
+  const [initialDraft] = useState(() => props.loadDraft());
+  const [text, setText] = useState(initialDraft.text);
+  /** Selections inserted from the editor, shown as `@path#lines` tokens and expanded on send. */
+  const [references, setReferences] = useState<ContextReference[]>(initialDraft.references);
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [caret, setCaret] = useState(0);
   const [menuIndex, setMenuIndex] = useState(0);
@@ -200,26 +245,42 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const requestCounter = useRef(0);
   const isMac = props.platform === "darwin";
 
+  const tokens = useMemo(() => findReferenceTokens(text, references.map((reference) => reference.label)), [text, references]);
+
+  const syncHighlights = useCallback(() => {
+    if (highlightsRef.current && textareaRef.current) highlightsRef.current.scrollTop = textareaRef.current.scrollTop;
+  }, []);
+
   const resize = useCallback(() => {
     const element = textareaRef.current;
     if (!element) return;
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 280)}px`;
-  }, []);
+    syncHighlights();
+  }, [syncHighlights]);
 
-  useEffect(resize, [text, resize]);
+  useEffect(resize, [text, tokens, resize]);
   const { onDraftChange } = props;
-  useEffect(() => onDraftChange(text), [text, onDraftChange]);
+  useEffect(() => {
+    // Only persist the selections the draft still refers to.
+    const used = new Set(tokens.map((token) => token.label));
+    onDraftChange({ text, references: references.filter((reference) => used.has(reference.label)) });
+  }, [text, tokens, references, onDraftChange]);
 
-  const insert = useCallback((value: string, extraImages?: ImageAttachment[]) => {
+  const insert = useCallback((value: string, extraImages?: ImageAttachment[], extraReferences?: ContextReference[]) => {
     if (extraImages?.length) setImages((current) => [...current, ...extraImages].slice(0, 20));
+    if (extraReferences?.length) {
+      // Re-sending the same lines refreshes their content.
+      const labels = new Set(extraReferences.map((reference) => reference.label));
+      setReferences((current) => [...current.filter((reference) => !labels.has(reference.label)), ...extraReferences]);
+    }
     if (!value) return;
     const element = textareaRef.current;
     setText((current) => {
       const start = element?.selectionStart ?? current.length;
       const end = element?.selectionEnd ?? current.length;
       const prefix = current.slice(0, start);
-      const spacer = prefix && !/\s$/.test(prefix) ? "\n\n" : "";
+      const spacer = prefix && !/\s$/.test(prefix) ? (extraReferences?.length ? " " : "\n\n") : "";
       const next = `${prefix}${spacer}${value}${current.slice(end)}`;
       const position = prefix.length + spacer.length + value.length;
       requestAnimationFrame(() => {
@@ -310,11 +371,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const activeIndex = menu.length ? Math.min(menuIndex, menu.length - 1) : 0;
 
   const submit = (mode: PromptMode) => {
-    const value = text.trim();
+    const value = expandReferences(text.trim(), references);
     if (!value && !images.length) return;
     props.onSubmit(value, images, mode);
     setText("");
     setImages([]);
+    setReferences([]);
     setHistoryIndex(-1);
     setMenuDismissed(false);
   };
@@ -336,6 +398,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (event.key === "Escape") {
         event.preventDefault();
         setMenuDismissed(true);
+        return;
+      }
+    }
+    if (event.key === "Backspace" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      // A reference token behaves like a chip: one Backspace removes all of it.
+      const { selectionStart, selectionEnd } = event.currentTarget;
+      const token = selectionStart === selectionEnd ? tokens.find((candidate) => candidate.end === selectionStart) : undefined;
+      if (token) {
+        event.preventDefault();
+        replaceRange(token.start, token.end, "");
         return;
       }
     }
@@ -390,6 +462,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (uri) insert(`@${uri.replace(/^file:\/\//, "").split("\n")[0]} `);
     }
   };
+
+  const highlights: ReactNode[] = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    highlights.push(text.slice(cursor, token.start));
+    highlights.push(
+      <mark key={token.start} className="composer-reference">
+        {token.label}
+      </mark>,
+    );
+    cursor = token.end;
+  }
+  // The trailing space keeps a final empty line, so the overlay scrolls as far as the textarea.
+  highlights.push(`${text.slice(cursor)} `);
 
   const levels = supportedLevels(props.model);
   const canSend = (text.trim().length > 0 || images.length > 0) && !props.disabled;
@@ -460,6 +546,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ))}
         </div>
       )}
+      <div className="composer-field">
+      {tokens.length > 0 && (
+        <div ref={highlightsRef} className="composer-highlights" aria-hidden="true">
+          {highlights}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         className="composer-input"
@@ -482,7 +574,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         }}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
+        onScroll={syncHighlights}
       />
+      </div>
       <div className="composer-toolbar">
         <button
           type="button"

@@ -60,3 +60,10 @@ export function formatEditorSelection(context: EditorSelectionContext): string {
   const path = context.relativePath.replace(/`/g, "\\`");
   return `From \`${path}\` ${location}:\n\n${fence}${languageTag(context.languageId)}\n${text}\n${fence}\n\n`;
 }
+
+/** The compact composer token for a selection, for example `@src/app.ts#8-12` or `@src/app.ts#8`. */
+export function selectionLabel(context: Pick<EditorSelectionContext, "relativePath" | "startLine" | "endLine">): string {
+  const start = context.startLine + 1;
+  const end = context.endLine + 1;
+  return `@${context.relativePath}#${start === end ? start : `${start}-${end}`}`;
+}

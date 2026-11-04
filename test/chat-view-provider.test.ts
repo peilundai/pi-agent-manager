@@ -278,7 +278,12 @@ describe("ChatViewProvider", () => {
     await ready();
     await provider.sendSelection();
     expect(posted.slice(-2)).toEqual([
-      { version: 1, type: "composer.insert", text: "From `src/app.ts` line 5:\n\n```typescript\nconst a = 1;\n```\n\n" },
+      {
+        version: 1,
+        type: "composer.insert",
+        text: "@src/app.ts#5 ",
+        references: [{ label: "@src/app.ts#5", text: "From `src/app.ts` line 5:\n\n```typescript\nconst a = 1;\n```\n\n" }],
+      },
       { version: 1, type: "composer.focus" },
     ]);
   });

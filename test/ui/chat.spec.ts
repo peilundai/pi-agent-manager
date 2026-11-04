@@ -85,6 +85,29 @@ test.describe("Pi Agent Manager webview", () => {
     await expect(input).toHaveValue("look at @src/greet.ts ");
   });
 
+  test("shows editor selections as chips and sends their content", async ({ chat }) => {
+    const { page } = chat;
+    await expect(page.locator(".model-pill .model-name")).toHaveText("Mock Sonnet");
+    const input = page.getByLabel("Message Pi");
+    await input.fill("Explain ");
+    const reference = { label: "@src/greet.ts#1-3", text: "From `src/greet.ts` lines 1-3:\n\n```typescript\nexport const greet = () => 'hi';\n```\n\n" };
+    await page.evaluate(
+      (value) => window.postMessage({ version: 1, type: "composer.insert", text: `${value.label} `, references: [value] }, "*"),
+      reference,
+    );
+    await expect(input).toHaveValue("Explain @src/greet.ts#1-3 ");
+    await expect(page.locator("mark.composer-reference")).toHaveText("@src/greet.ts#1-3");
+    await input.pressSequentially("briefly");
+    await chat.screenshot("selection-chip-dark");
+    await chat.setTheme("light");
+    await chat.screenshot("selection-chip-light");
+    await input.press("Enter");
+    await expect.poll(() => chat.received.find((message) => message.type === "prompt")).toMatchObject({
+      text: "Explain @src/greet.ts#1-3 briefly\n\nFrom `src/greet.ts` lines 1-3:\n\n```typescript\nexport const greet = () => 'hi';\n```",
+    });
+    await expect(page.locator("mark.composer-reference")).toHaveCount(0);
+  });
+
   test("lists and resumes past chats", async ({ chat }) => {
     const { page } = chat;
     const input = page.getByLabel("Message Pi");

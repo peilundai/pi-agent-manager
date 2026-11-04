@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import * as vscode from "vscode";
 import { boundFilePosition, imageMimeType, searchFiles, selectionFromEditor } from "../editor/editor-context";
-import { formatEditorSelection } from "../editor/selection";
+import { formatEditorSelection, selectionLabel } from "../editor/selection";
 import { ChatSession, type ChatSessionOptions } from "../pi/chat-session";
 import { augmentPath, buildPiInvocation, buildRpcArgs, resolvePiCommand } from "../pi/command-resolver";
 import { PiRpcClient } from "../pi/rpc-client";
@@ -250,9 +250,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const relativePath =
       document.uri.scheme === "untitled" ? document.fileName : vscode.workspace.asRelativePath(document.uri, false);
     try {
-      const text = formatEditorSelection(selectionFromEditor(editor, relativePath));
+      const selection = selectionFromEditor(editor, relativePath);
+      const label = selectionLabel(selection);
+      const text = formatEditorSelection(selection);
       await this.reveal();
-      this.post({ version: 1, type: "composer.insert", text });
+      this.post({ version: 1, type: "composer.insert", text: `${label} `, references: [{ label, text }] });
       this.post({ version: 1, type: "composer.focus" });
     } catch (error) {
       void vscode.window.showWarningMessage(errorMessage(error));

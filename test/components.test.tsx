@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { WebviewToHostMessage } from "../src/shared/protocol";
 import type { ToolState } from "../src/webview/chat-state";
-import { Composer, type ComposerProps } from "../src/webview/components/Composer";
+import { Composer, type ComposerHandle, type ComposerProps } from "../src/webview/components/Composer";
 import { ChatContext } from "../src/webview/components/context";
 import { Header, relativeTime, SessionPicker } from "../src/webview/components/Header";
 import { Markdown } from "../src/webview/components/Markdown";
@@ -260,7 +261,7 @@ describe("Composer", () => {
       commands: [],
       localCommands: [],
       stats: { contextUsage: { percent: 85, tokens: 170_000, contextWindow: 200_000 }, cost: 1.234 },
-      loadDraft: () => "",
+      loadDraft: () => ({ text: "", references: [] }),
       history: ["first prompt", "second prompt"],
       onDraftChange: vi.fn(),
       onSubmit: vi.fn(),
@@ -352,6 +353,52 @@ describe("Composer", () => {
     fireEvent.click(screen.getByTitle("Choose model and thinking level"));
     fireEvent.click(screen.getByText("GPT"));
     expect(posted.at(-1)).toEqual({ version: 1, type: "model.set", provider: "openai", modelId: "gpt" });
+  });
+
+  it("inserts an editor selection as a chip and expands it on send", async () => {
+    const ref = createRef<ComposerHandle>();
+    const props: ComposerProps = {
+      busy: false,
+      disabled: false,
+      platform: "darwin",
+      models,
+      model: models[0],
+      thinkingLevel: "medium",
+      commands: [],
+      localCommands: [],
+      stats: undefined,
+      loadDraft: () => ({ text: "Explain", references: [] }),
+      history: [],
+      onDraftChange: vi.fn(),
+      onSubmit: vi.fn(),
+      onAbort: vi.fn(),
+      files: { requestId: -1, files: [] },
+    };
+    const { container } = withContext(<Composer ref={ref} {...props} />);
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    input.setSelectionRange(7, 7);
+    const reference = { label: "@CLAUDE.md#43-48", text: "From `CLAUDE.md` lines 43-48:\n\n```md\nbody\n```\n\n" };
+    act(() => ref.current?.insert(`${reference.label} `, undefined, [reference]));
+    expect(input.value).toBe("Explain @CLAUDE.md#43-48 ");
+    expect(container.querySelector("mark.composer-reference")).toHaveTextContent("@CLAUDE.md#43-48");
+    expect(props.onDraftChange).toHaveBeenLastCalledWith({ text: "Explain @CLAUDE.md#43-48 ", references: [reference] });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      "Explain @CLAUDE.md#43-48\n\nFrom `CLAUDE.md` lines 43-48:\n\n```md\nbody\n```",
+      [],
+      "send",
+    );
+    await waitFor(() => expect(container.querySelector("mark.composer-reference")).not.toBeInTheDocument());
+  });
+
+  it("removes a whole chip with one Backspace", async () => {
+    const reference = { label: "@src/a.ts#3", text: "context" };
+    const { input, props } = renderComposer({ loadDraft: () => ({ text: "see @src/a.ts#3", references: [reference] }) });
+    input.setSelectionRange(15, 15);
+    fireEvent.keyDown(input, { key: "Backspace" });
+    await waitFor(() => expect(input.value).toBe("see "));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenCalledWith("see", [], "send");
   });
 
   it("asks the host to pick attachments", () => {

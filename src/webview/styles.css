@@ -1365,7 +1365,39 @@ body.vscode-high-contrast-light .diff-del {
   font-size: 11px;
 }
 
+.composer-field {
+  position: relative;
+}
+
+/* Paints reference chips behind the textarea's own text; it mirrors the textarea's box and wrapping. */
+.composer-highlights {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 11px 14px 6px;
+  color: transparent;
+  font: inherit;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+  pointer-events: none;
+}
+
+.composer-reference {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--pi-accent) 24%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pi-accent) 24%, transparent);
+  color: transparent;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .composer-input {
+  position: relative;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
   display: block;
   width: 100%;
   min-height: 44px;
