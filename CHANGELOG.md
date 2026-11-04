@@ -2,7 +2,7 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
-## Unreleased
+## 0.2.3 — 2026-11-04
 
 ### Changed
 
