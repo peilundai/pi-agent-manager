@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import type { DialogResponse } from "../../shared/protocol";
 import type { AssistantBlock, ChatItem, DialogRequest, ToolState } from "../chat-state";
 import { useChat } from "./context";
+import { isUrl, LinkText } from "./LinkText";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 
@@ -131,10 +132,14 @@ export function DialogCard({
   };
   if (answer || expired) {
     return (
-      <div className="dialog-receipt">
-        <span className="codicon codicon-pass" aria-hidden="true" />
-        <span className="dialog-receipt-title">{request.title}</span>
-        <span className="dialog-receipt-answer">{answer ?? "Timed out"}</span>
+      <div className={`dialog-receipt${answer ? "" : " timed-out"}`}>
+        <span className={`codicon codicon-${answer ? "pass" : "clock"}`} aria-hidden="true" />
+        <div className="dialog-receipt-body">
+          <span className="dialog-receipt-title">{request.title}</span>
+          <span className={`dialog-receipt-answer${answer && isUrl(answer) ? " mono" : ""}`} title={answer ?? "Timed out"}>
+            {answer ?? "Timed out"}
+          </span>
+        </div>
       </div>
     );
   }
@@ -142,10 +147,16 @@ export function DialogCard({
     <div className="dialog-card" role="group" aria-label={request.title}>
       <div className="dialog-title">
         <span className="codicon codicon-question" aria-hidden="true" />
-        {request.title}
+        <span className="dialog-title-text">
+          <LinkText text={request.title} />
+        </span>
         {remaining !== undefined && <span className="dialog-timer">{remaining}s</span>}
       </div>
-      {request.message && <div className="dialog-message">{request.message}</div>}
+      {request.message && (
+        <div className="dialog-message">
+          <LinkText text={request.message} />
+        </div>
+      )}
       {request.method === "confirm" && (
         <div className="dialog-actions">
           <button type="button" className="button primary" onClick={() => respond("Yes", { confirmed: true })} autoFocus>
@@ -238,7 +249,9 @@ export function TranscriptItem({
             className={`codicon codicon-${item.level === "error" ? "error" : item.level === "warning" ? "warning" : "info"}`}
             aria-hidden="true"
           />
-          <span className="notice-text">{item.text}</span>
+          <span className="notice-text">
+            <LinkText text={item.text} />
+          </span>
           <button type="button" className="icon-button small" aria-label="Dismiss" onClick={() => onDismiss(item.id)}>
             <span className="codicon codicon-close" />
           </button>

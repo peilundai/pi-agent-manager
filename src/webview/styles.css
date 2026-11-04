@@ -530,9 +530,11 @@ pre,
 .thinking-text {
   max-height: 320px;
   overflow-y: auto;
-  margin-top: 4px;
-  padding-left: 10px;
-  border-left: 2px solid var(--pi-hairline);
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--pi-hairline);
+  border-radius: 8px;
+  background: var(--pi-surface-sunken);
   color: var(--pi-thinking);
   font-style: italic;
   white-space: pre-wrap;
@@ -646,8 +648,10 @@ pre,
 }
 
 .markdown blockquote {
-  padding-left: 10px;
-  border-left: 3px solid var(--pi-hairline-strong);
+  padding: 6px 12px;
+  border: 1px solid var(--pi-hairline);
+  border-radius: 8px;
+  background: var(--pi-surface-sunken);
   color: var(--pi-md-quote);
 }
 
@@ -996,14 +1000,29 @@ body.vscode-high-contrast-light .diff-del {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 6px 8px 6px 10px;
-  border-radius: 8px;
-  background: var(--pi-tool-pending-bg);
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--pi-hairline);
+  border-radius: 10px;
+  background: var(--pi-surface-sunken);
   color: var(--pi-text);
+  font-size: 0.95em;
+  line-height: 1.5;
 }
 
-.notice .codicon {
-  margin-top: 0.15em;
+.notice > .codicon {
+  flex-shrink: 0;
+  margin-top: 0.2em;
+}
+
+.notice > .icon-button {
+  flex-shrink: 0;
+  margin: -2px 0 -2px auto;
+  opacity: 0.6;
+}
+
+.notice:hover > .icon-button,
+.notice > .icon-button:focus-visible {
+  opacity: 1;
 }
 
 .notice-text {
@@ -1013,12 +1032,18 @@ body.vscode-high-contrast-light .diff-del {
   overflow-wrap: anywhere;
 }
 
+.notice-info {
+  border-color: color-mix(in srgb, var(--pi-border) 28%, transparent);
+  background: color-mix(in srgb, var(--pi-border) 7%, var(--pi-surface));
+}
+
 .notice-info .codicon-info {
   color: var(--pi-border);
 }
 
 .notice-warning {
-  background: color-mix(in srgb, var(--pi-warning) 16%, transparent);
+  border-color: color-mix(in srgb, var(--pi-warning) 32%, transparent);
+  background: color-mix(in srgb, var(--pi-warning) 9%, var(--pi-surface));
 }
 
 .notice-warning .codicon-warning {
@@ -1026,11 +1051,85 @@ body.vscode-high-contrast-light .diff-del {
 }
 
 .notice-error {
-  background: color-mix(in srgb, var(--pi-tool-error-bg) 70%, transparent);
+  border-color: color-mix(in srgb, var(--pi-error) 32%, transparent);
+  background: color-mix(in srgb, var(--pi-tool-error-bg) 70%, var(--pi-surface));
 }
 
 .notice-error .codicon-error {
   color: var(--pi-error);
+}
+
+/* ───── Links inside plain text (notices, dialogs) ───── */
+
+.inline-link {
+  color: var(--pi-md-link);
+  text-decoration: none;
+}
+
+.inline-link:hover {
+  text-decoration: underline;
+}
+
+/* Long URLs collapse to one line: host in full, the rest truncated; open or copy it. */
+.url-chip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin: 6px 0;
+  padding: 2px 2px 2px 0;
+  border: 1px solid var(--pi-hairline);
+  border-radius: 6px;
+  background: var(--pi-surface);
+  white-space: nowrap;
+}
+
+.url-chip:first-child {
+  margin-top: 0;
+}
+
+.url-chip:last-child {
+  margin-bottom: 0;
+}
+
+.url-chip-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 6px 2px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--pi-md-link);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: calc(var(--vscode-editor-font-size, 12px) * 0.95);
+  text-align: left;
+  cursor: pointer;
+}
+
+.url-chip-open:hover .url-host {
+  text-decoration: underline;
+}
+
+.url-chip-open .codicon {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.url-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.url-rest {
+  color: var(--pi-dim);
+}
+
+.url-chip-copy {
+  flex-shrink: 0;
 }
 
 .divider-notice {
@@ -1058,25 +1157,38 @@ body.vscode-high-contrast-light .diff-del {
 
 .dialog-title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-weight: 600;
+  line-height: 1.45;
 }
 
 .dialog-title .codicon {
+  flex-shrink: 0;
+  margin-top: 0.15em;
   color: var(--pi-accent);
 }
 
+.dialog-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dialog-timer {
+  flex-shrink: 0;
   margin-left: auto;
   color: var(--pi-dim);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 .dialog-message {
   margin-top: 4px;
+  padding-left: 22px;
   color: var(--pi-muted);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .dialog-actions {
@@ -1120,21 +1232,63 @@ body.vscode-high-contrast-light .diff-del {
   margin-top: 8px;
 }
 
+/* Answered dialog: title wraps beside the icon; the answer sits after it, or on its own line. */
 .dialog-receipt {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 8px;
   color: var(--pi-muted);
   font-size: 0.95em;
+  line-height: 1.5;
 }
 
-.dialog-receipt .codicon {
+.dialog-receipt > .codicon {
+  flex-shrink: 0;
+  margin-top: 0.2em;
   color: var(--pi-success);
 }
 
+.dialog-receipt.timed-out > .codicon {
+  color: var(--pi-dim);
+}
+
+.dialog-receipt-body {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.dialog-receipt-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dialog-receipt-answer {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 7px;
+  overflow: hidden;
+  border: 1px solid var(--pi-hairline);
+  border-radius: 6px;
+  background: var(--pi-surface-sunken);
   color: var(--pi-text);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-receipt-answer.mono {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: calc(var(--vscode-editor-font-size, 12px) * 0.95);
+  font-weight: 400;
+}
+
+.dialog-receipt.timed-out .dialog-receipt-answer {
+  color: var(--pi-dim);
+  font-weight: 400;
 }
 
 .text-input {
