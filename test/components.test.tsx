@@ -5,6 +5,7 @@ import type { ToolState } from "../src/webview/chat-state";
 import { Composer, type ComposerProps } from "../src/webview/components/Composer";
 import { ChatContext } from "../src/webview/components/context";
 import { Header, relativeTime, SessionPicker } from "../src/webview/components/Header";
+import { LinkText, splitLinks } from "../src/webview/components/LinkText";
 import { Markdown } from "../src/webview/components/Markdown";
 import { modelLabel, ModelPicker, supportedLevels, thinkingLabel } from "../src/webview/components/ModelPicker";
 import { ToolCard } from "../src/webview/components/ToolCard";
@@ -245,6 +246,51 @@ describe("TranscriptItem", () => {
     expect(screen.getByText("Rate limited")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Thought"));
     expect(screen.getByText("plan")).toBeInTheDocument();
+  });
+});
+
+describe("LinkText", () => {
+  const long = "https://auth.example.com/authorize?response_type=code&client_id=abc&state=0123456789";
+
+  it("splits short URLs inline and long URLs into blocks", () => {
+    expect(splitLinks("See https://x.io/docs, then retry.")).toEqual([
+      { type: "text", text: "See " },
+      { type: "url", url: "https://x.io/docs", block: false },
+      { type: "text", text: ", then retry." },
+    ]);
+    expect(splitLinks(`Sign in:\n${long}\n`)).toEqual([
+      { type: "text", text: "Sign in:" },
+      { type: "url", url: long, block: true },
+    ]);
+    expect(splitLinks("no links")).toEqual([{ type: "text", text: "no links" }]);
+  });
+
+  it("opens and copies links", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const { posted } = withContext(<LinkText text={`Open https://x.io or ${long}`} />);
+    fireEvent.click(screen.getByText("https://x.io"));
+    expect(posted.at(-1)).toEqual({ version: 1, type: "url.open", url: "https://x.io" });
+    fireEvent.click(screen.getByTitle(long));
+    expect(posted.at(-1)).toEqual({ version: 1, type: "url.open", url: long });
+    expect(screen.getByText("auth.example.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Copy link"));
+    expect(writeText).toHaveBeenCalledWith(long);
+    await waitFor(() => expect(screen.getByLabelText("Copied")).toBeInTheDocument());
+  });
+
+  it("links URLs in notices and shows URL answers in a receipt", () => {
+    const noop = () => undefined;
+    const { rerender } = withContext(
+      <TranscriptItem item={{ kind: "notice", id: "n", level: "info", text: `Sign in:\n${long}` }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />,
+    );
+    expect(screen.getByLabelText("Copy link")).toBeInTheDocument();
+    rerender(
+      <ChatContext.Provider value={{ post: noop }}>
+        <TranscriptItem item={{ kind: "dialog", id: "d", request: { id: "q", method: "input", title: "Paste the URL" }, answer: long }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />
+      </ChatContext.Provider>,
+    );
+    expect(screen.getByTitle(long)).toHaveClass("dialog-receipt-answer", "mono");
   });
 });
 
