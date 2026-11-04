@@ -69,7 +69,7 @@ Open VSX serves Cursor, VSCodium, Windsurf, Gitpod and other VS Code–compatibl
 1. **Smoke-test the VSIX in real VS Code.** Download the `vsix` artifact from the latest green CI run, or run `npm run build && node scripts/package-vsix.mjs` locally. Then:
    - Install it: `code --install-extension pi-agent-manager-<version>.vsix`.
    - Open a project, run **Pi Agent Manager: Open**, and send a prompt with a real model.
-   - Check an edit diff, an `@` mention, the `/` menu, **⌘L / Ctrl+L**, interrupting with Esc, Past Chats, and light and dark themes.
+   - Check an edit diff, an `@` mention, the `/` menu, **⌥L / Alt+L**, interrupting with Esc, Past Chats, and light and dark themes.
    - If possible, test on Windows too: pi installed through npm resolves to a `.cmd` file there.
 2. Update `CHANGELOG.md`: replace "Unreleased" in the version heading with the release date, and describe the changes.
 3. Bump `version` in `package.json` for later releases. Use `npm version patch|minor --no-git-tag-version` so `package-lock.json` matches.

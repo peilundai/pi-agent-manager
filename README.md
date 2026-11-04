@@ -64,7 +64,7 @@ Other commands: **Reload Environment and Restart Pi** (after you edit your shell
 - **Images.** Paste or drop screenshots, or attach files with <kbd>+</kbd>.
 - **Model pill.** Switch model and thinking level, with a context-usage ring showing tokens and cost.
 - **Past chats.** A searchable list grouped by Today, Yesterday, Last 7 Days and so on. Resume or delete chats, and rename the current one from the header.
-- **Add selection.** Select code and press <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> to insert a fenced snippet with its path and lines.
+- **Add selection.** Select code and press <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> to insert a fenced snippet with its path and lines.
 - **Themes.** Light, dark and high-contrast, with Pi's palette for accents, status, diffs and syntax colors.
 
 | Model & thinking picker | Extension confirm dialog |
@@ -99,12 +99,12 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 
 | Shortcut | Action |
 |---|---|
-| <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> | Add the editor selection (or current line) to the chat |
+| <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> | Add the editor selection (or current line) to the chat |
 | <kbd>⌘Esc</kbd> / <kbd>Ctrl+Esc</kbd> | Focus the chat input |
 | <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in the chat) | New chat |
 | <kbd>Esc</kbd> (while working) | Interrupt Pi |
 
-<kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> replaces VS Code's built-in **Expand Line Selection** while an editor has focus, as other chat extensions do. To keep the built-in shortcut, rebind **Pi Agent Manager: Add Selection to Chat** in **Keyboard Shortcuts**.
+<kbd>⌥L</kbd> / <kbd>Alt+L</kbd> leaves VS Code's built-in <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> (**Expand Line Selection**) and other chat extensions' shortcuts alone. On macOS it takes over typing `¬` while an editor has focus. To use a different shortcut, rebind **Pi Agent Manager: Add Selection to Chat** in **Keyboard Shortcuts**.
 
 ## Notes
 

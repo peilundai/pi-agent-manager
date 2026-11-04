@@ -110,8 +110,7 @@
     "keybindings": [
       {
         "command": "piAgentManager.sendSelection",
-        "key": "ctrl+l",
-        "mac": "cmd+l",
+        "key": "alt+l",
         "when": "editorTextFocus"
       },
       {
