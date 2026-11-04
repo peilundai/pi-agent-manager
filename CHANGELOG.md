@@ -13,6 +13,10 @@ All notable changes to Pi Agent Manager are documented here. (During development
 
 - **Add Selection to Chat** inserts a compact `@file#43-48` chip instead of pasting the whole code block. The code is still sent to Pi, and one Backspace removes the chip.
 
+### Fixed
+
+- In Cursor, Pi opens from the left activity bar. Cursor does not register the Secondary Side Bar, so opening Pi failed with `command 'workbench.view.extension.piAgentManager' not found`. VS Code still opens Pi in the Secondary Side Bar, and only one panel is shown.
+
 ## 0.2.3 — 2026-11-04
 
 ### Changed

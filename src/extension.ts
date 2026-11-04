@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { resolveWorkspaceFolder } from "./editor/editor-context";
 import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
-import { ChatViewProvider, VIEW_ID } from "./view/chat-view-provider";
+import { ChatViewProvider, FALLBACK_CONTEXT, SIDEBAR_VIEW_ID, VIEW_ID, chatSurface } from "./view/chat-view-provider";
 import { PiEnvironment, registerEnvironmentCommands } from "./view/pi-environment";
 
 const ARCHIVED_SESSIONS_KEY = "piAgentManager.archivedSessions";
@@ -21,23 +21,30 @@ class MementoArchiveStore implements ArchiveStore {
   }
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+const webviewViewOptions = { webviewOptions: { retainContextWhenHidden: true } };
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const workspaceFolder = resolveWorkspaceFolder(vscode.workspace, vscode.window.activeTextEditor);
   const log = vscode.window.createOutputChannel("Pi Agent Manager", { log: true });
   const environment = new PiEnvironment({ secrets: context.secrets, log });
   environment.preload();
+  const knownCommands = await vscode.commands.getCommands(true);
+  const surface = chatSurface(knownCommands);
+  if (surface === "activitybar") {
+    await vscode.commands.executeCommand("setContext", FALLBACK_CONTEXT, true);
+  }
   const provider = new ChatViewProvider({
     extensionUri: context.extensionUri,
     workspaceFolder,
     environment,
+    surface,
     repository: new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) }),
   });
   activeProvider = provider;
   context.subscriptions.push(
     provider,
-    vscode.window.registerWebviewViewProvider(VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    }),
+    vscode.window.registerWebviewViewProvider(VIEW_ID, provider, webviewViewOptions),
+    vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, provider, webviewViewOptions),
     vscode.commands.registerCommand("piAgentManager.open", () => provider.focusInput()),
     vscode.commands.registerCommand("piAgentManager.newChat", () => provider.newChat()),
     vscode.commands.registerCommand("piAgentManager.history", () => provider.toggleHistory()),

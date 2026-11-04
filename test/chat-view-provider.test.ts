@@ -66,7 +66,7 @@ function setup(
       return { dispose: vi.fn() };
     },
   };
-  const view = { webview, show: vi.fn(), onDidDispose: () => ({ dispose: vi.fn() }) };
+  const view = { viewType: "piAgentManager.view", webview, show: vi.fn(), onDidDispose: () => ({ dispose: vi.fn() }) };
   provider.resolveWebviewView(view as unknown as WebviewView);
   const send = async (message: unknown) => {
     receive(message);
@@ -354,6 +354,33 @@ describe("ChatViewProvider", () => {
     const { send } = setup();
     await send({ version: 1, type: "focus.changed", focused: true });
     expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", "piAgentManager.focused", true);
+  });
+
+  it("keeps the open chat when the other contributed view resolves", async () => {
+    const { provider, posted, ready, clients } = setup();
+    await ready();
+    const diverted: HostToWebviewMessage[] = [];
+    provider.resolveWebviewView({
+      viewType: "piAgentManager.sidebarView",
+      show: vi.fn(),
+      onDidDispose: () => ({ dispose: vi.fn() }),
+      webview: {
+        cspSource: "vscode-resource:",
+        options: {},
+        html: "",
+        asWebviewUri: (uri: unknown) => uri,
+        postMessage: async (message: HostToWebviewMessage) => {
+          diverted.push(message);
+          return true;
+        },
+        onDidReceiveMessage: () => ({ dispose: vi.fn() }),
+      },
+    } as unknown as WebviewView);
+    const before = posted.length;
+    await provider.focusInput();
+    expect(clients).toHaveLength(1);
+    expect(diverted).toEqual([]);
+    expect(posted.slice(before)).toContainEqual({ version: 1, type: "composer.focus" });
   });
 });
 
