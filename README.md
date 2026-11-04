@@ -2,145 +2,144 @@
 
 [![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
 
-Chat with your local [Pi coding agent](https://github.com/earendil-works/pi) from VS Code's side bar: streaming answers, tool cards with diffs, and your past chats, drawn in Pi's own colors.
-
-> **Unofficial, preview.** Pi Agent Manager is a community extension. It is not affiliated with or endorsed by the Pi project or its authors. See [Disclaimer and acknowledgements](#disclaimer-and-acknowledgements).
-
-## Requirements
-
-- VS Code 1.106 or newer.
-- Pi installed, signed in and working in a terminal:
-
-  ```sh
-  npm install -g @earendil-works/pi-coding-agent
-  pi            # sign in / pick a provider once
-  ```
+**The [Pi coding agent](https://github.com/earendil-works/pi), in a VS Code side-bar panel.** Chat next to your code, watch every read, edit and command as it happens, and approve or stop Pi at any time. Pi Agent Manager uses the `pi` you already have, so it needs no new account, key or config.
 
 <p align="center">
-  <img src="docs/images/chat-dark.png" width="360" alt="Pi Agent Manager in a dark theme" />
-  <img src="docs/images/chat-light.png" width="360" alt="Pi Agent Manager in a light theme" />
+  <img src="docs/images/hero.png" width="900" alt="Three Pi Agent Manager panels: a tool-using turn with an inline diff, a bash approval card, and the slash-command menu" />
 </p>
 
-## Zero setup
+> **Unofficial, preview.** A community extension, not affiliated with or endorsed by the Pi project. See [Disclaimer](#disclaimer-and-acknowledgements).
 
-If `pi` already works in your terminal, Pi Agent Manager works too. It runs your installed CLI in RPC mode (`pi --mode rpc`), so it uses your existing:
+## Why use it
 
-- providers, API keys and logins,
-- default model and thinking level,
-- skills, prompt templates and extensions,
-- session history in `~/.pi/agent/sessions`.
-
-The extension adds no accounts, keys or configuration of its own.
-
-## API keys, company gateways and MCP tokens
-
-Pi often reads keys from environment variables: `"apiKey": "${GATEWAY_API_KEY}"` for a custom provider or company gateway in `models.json`, or `"Authorization": "Bearer ${DOCS_TOKEN}"` for an MCP server in `mcp.json`. A VS Code window opened from the Dock, a desktop launcher or an automatic update restart does not run your shell startup files, so those variables can be missing even though `pi` works in your terminal.
-
-Pi Agent Manager handles this for you:
-
-1. **Login-shell environment.** When it starts Pi, the extension asks your login shell (`$SHELL -i -l -c`, run once per window) for the variables it sets up. It adds the ones VS Code doesn't have, plus missing `PATH` entries, so Pi sees what a terminal sees. Variables VS Code already has are left as they are. If the shell fails or takes longer than 10 s, Pi starts with VS Code's environment and the reason is logged to the **Pi Agent Manager** output channel.
-2. **Missing-variable check.** The extension reads Pi's `models.json` and `mcp.json` (user and project). If a variable they reference is still unset, it names the variable and offers **Set Secret…**, instead of leaving you with an authentication error from the gateway.
-3. **Secrets in VS Code.** **Pi Agent Manager: Set Environment Secret…** stores a value in VS Code's encrypted secret storage and passes it only to Pi. Use it for keys you don't export from your shell. **Remove Environment Secret…** deletes one.
-
-Other commands: **Reload Environment and Restart Pi** (after you edit your shell files) and **Show Environment Diagnostics**, which lists each variable Pi's config needs and where it comes from. Values are never shown or logged.
-
-## Features
-
-- **Chat in the Secondary Side Bar.** Click the π icon in an editor title bar, or run **Pi Agent Manager: Open**.
-- **Streaming transcript.** Markdown with syntax highlighting, collapsible thinking, and a status dot per step.
-- **Tool cards** for `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` and custom tools:
-  - one-line summaries (`⎿ Read 120 lines`),
-  - inline diffs for edits and writes,
-  - command output,
-  - click a path to open the file.
-- **Extension dialogs.** Pi extension `confirm`, `select`, `input` and `editor` prompts appear as inline cards. Notifications appear as notices.
-- **Composer:**
-  - <kbd>Enter</kbd> sends and <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a new line.
-  - <kbd>Esc</kbd> interrupts Pi while it works.
-  - Messages sent while Pi works are queued as follow-ups. <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> steers immediately instead.
-  - <kbd>↑</kbd> recalls earlier prompts.
-- **`/` menu.** Pi's prompt templates, skills and extension commands, plus `/new`, `/compact`, `/model`, `/rename` and `/history`.
-- **`@` mentions.** Fuzzy workspace file search.
-- **Images.** Paste or drop screenshots, or attach files with <kbd>+</kbd>.
-- **Model pill.** Switch model and thinking level, with a context-usage ring showing tokens and cost.
-- **Past chats.** A searchable list grouped by Today, Yesterday, Last 7 Days and so on. Resume or delete chats, and rename the current one from the header.
-- **Add selection.** Select code and press <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> to insert a fenced snippet with its path and lines.
-- **Themes.** Light, dark and high-contrast, with Pi's palette for accents, status, diffs and syntax colors.
-
-| Model & thinking picker | Extension confirm dialog |
+| If you… | Pi Agent Manager… |
 |---|---|
-| <img src="docs/images/model-picker-dark.png" width="320" alt="Model picker" /> | <img src="docs/images/dialog-dark.png" width="320" alt="Dialog card" /> |
+| switch between a terminal and the editor to check what Pi did | shows each step in the side bar: files read, **inline diffs**, command output. Click a path to open the file. |
+| worry about what an agent runs on your machine | turns Pi's confirm prompts into **Yes / No cards**. <kbd>Esc</kbd> interrupts Pi, and <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> steers it mid-run. |
+| copy and paste code and paths into the agent | uses <kbd>⌘L</kbd> to send the current selection, `@` to mention files, and paste or drop to attach screenshots. |
+| lose earlier conversations | keeps **past chats** per workspace, searchable and grouped by day, so you can resume one in a click. |
+| use a company gateway or MCP server keyed through env vars | loads your **login-shell environment**, names any variable that's missing, and stores secrets in VS Code's encrypted storage. |
+| develop on a remote box over SSH or a tunnel | runs on the **remote host**, next to your code and your remote `pi`. See [Remote development](#remote-development). |
 
-## Finding the pi executable
+## Get started in 1 minute
 
-If VS Code can't find `pi`, the view offers **Choose Executable…**. You can also set `piAgentManager.command` to an absolute path.
+1. Install Pi and sign in once in a terminal:
+   ```sh
+   npm install -g @earendil-works/pi-coding-agent
+   pi            # pick a provider / sign in
+   ```
+2. Install **Pi Agent Manager** from the Marketplace.
+3. Click the **π** icon in the editor title bar, or run **Pi Agent Manager: Open**, then start typing.
 
-Pi is looked up in this order:
+Pi Agent Manager runs `pi --mode rpc`, so your providers, default model, skills, prompt templates, extensions and session history (`~/.pi/agent`) all just work.
+
+## What's inside
+
+| Pick model & thinking level | `/` for skills, prompts and commands | Past chats |
+|---|---|---|
+| <img src="docs/images/model-picker-dark.png" width="260" alt="Model and thinking-level picker" /> | <img src="docs/images/slash-dark.png" width="260" alt="Slash-command menu" /> | <img src="docs/images/history-dark.png" width="260" alt="Searchable past chats" /> |
+| **Context & cost at a glance** | **Approve before it runs** | **Light, dark & high contrast** |
+| <img src="docs/images/context-usage-dark.png" width="260" alt="Context-usage ring with token and cost breakdown" /> | <img src="docs/images/dialog-dark.png" width="260" alt="Inline approval card" /> | <img src="docs/images/chat-light.png" width="260" alt="Light theme" /> |
+
+- **Streaming transcript:** Markdown with syntax highlighting, collapsible thinking, and a status dot per step.
+- **Tool cards** for `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` and custom tools, with one-line summaries, diffs and output.
+- **Composer:** <kbd>Enter</kbd> sends. Messages sent while Pi works queue as follow-ups. <kbd>↑</kbd> recalls earlier prompts.
+- **Extension dialogs:** Pi extension `confirm`, `select`, `input` and `editor` prompts appear as inline cards.
+- **Multi-root aware:** each chat stays in its own workspace folder, and you can switch folders from the header.
+- **Private:** no telemetry, and no network calls of its own. Your prompts go only to your local `pi`.
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> | Add the selection (or current line) to the chat |
+| <kbd>⌘Esc</kbd> / <kbd>Ctrl+Esc</kbd> | Focus the chat input |
+| <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in chat) | New chat |
+| <kbd>Esc</kbd> (while working) | Interrupt Pi |
+| <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> (while working) | Steer now instead of queueing |
+
+<kbd>⌘L</kbd> replaces VS Code's **Expand Line Selection** while an editor has focus. To keep that shortcut, rebind **Pi Agent Manager: Add Selection to Chat**.
+
+## Remote development
+
+Pi Agent Manager works with **Remote-SSH, Remote Tunnels, WSL and Dev Containers**. VS Code runs it on the remote host, which means:
+
+- it starts the **remote** `pi`, in the remote workspace folder,
+- it uses the remote `~/.pi/agent` for logins, models and history,
+- it loads the remote login shell's environment.
+
+The chat panel still shows locally. To set it up:
+
+1. Install and sign in to Pi **on the remote machine**. A local Pi install isn't used.
+2. Install the extension in the remote window (**Install in SSH: ‹host›** in the Extensions view).
+3. If `pi` isn't on the remote `PATH`, set `piAgentManager.command` in the **Remote** settings tab.
+
+Not supported: browser-only virtual workspaces, such as github.dev or vscode.dev without a tunnel. Pi needs a real filesystem and a machine to run on. Attach images with the **+** button or by pasting. Files dragged in from your local disk may not reach the remote.
+
+## API keys, gateways and MCP tokens
+
+Pi often reads keys from environment variables, such as `"apiKey": "${GATEWAY_API_KEY}"` in `models.json` or `"Bearer ${DOCS_TOKEN}"` in `mcp.json`. A VS Code window opened from the Dock doesn't run your shell startup files, so those variables can be missing even though `pi` works in your terminal. Pi Agent Manager fixes this:
+
+1. **Login-shell environment.** It asks your login shell once per window for its variables and missing `PATH` entries. It never overrides a variable VS Code already has. If the shell fails or takes more than 10 s, Pi starts anyway and the reason is logged to the **Pi Agent Manager** output channel.
+2. **Missing-variable check.** If a variable referenced in `models.json` or `mcp.json` is still unset, it names the variable and offers **Set Secret…**.
+3. **Encrypted secrets.** **Set Environment Secret…** stores a value in VS Code's secret storage and passes it only to Pi. **Remove Environment Secret…** deletes one.
+
+Other commands: **Reload Environment and Restart Pi** and **Show Environment Diagnostics**. Values are never shown or logged.
+
+<details>
+<summary><b>Finding the <code>pi</code> executable</b></summary>
+
+If VS Code can't find `pi`, the view offers **Choose Executable…**. Otherwise, Pi is looked up in this order:
 
 1. The `piAgentManager.command` setting.
 2. `PATH`.
 3. npm's global bin directory.
 4. Homebrew and `/usr/local/bin`.
 
-The executable's directory is added to the child process `PATH`, so nvm-managed Node installs work when VS Code is launched from the Dock.
+The executable's directory is added to Pi's `PATH`, so nvm-managed Node installs work too.
 
-## Settings
+</details>
+
+<details>
+<summary><b>Settings</b></summary>
 
 | Setting | Default | Description |
 |---|---|---|
 | `piAgentManager.command` | `pi` | Executable name or absolute path of the Pi CLI. |
-| `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]` or `["--offline"]`. Mode and session flags are managed by the extension. |
-| `piAgentManager.loadShellEnvironment` | `true` | Add the variables your login shell sets up (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |
-| `piAgentManager.maxContentWidth` | `800` | Maximum width in pixels of the transcript and composer; they stay centered when the view is wider. `0` fills the view. |
+| `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]`. Mode and session flags are managed for you. |
+| `piAgentManager.loadShellEnvironment` | `true` | Add your login shell's variables (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |
 | `piAgentManager.environment` | `{}` | Extra variables for Pi, such as a gateway base URL. Put keys in **Set Environment Secret…** instead. |
-| `piAgentManager.expandToolCards` | `edits` | Which tool cards start expanded: `edits` (edit diffs only), `all`, or `none`. Click a card header to toggle it. |
+| `piAgentManager.expandToolCards` | `edits` | Which tool cards start expanded: `edits`, `all` or `none`. |
+| `piAgentManager.maxContentWidth` | `800` | Maximum transcript width in pixels. `0` fills the view. |
 
-## Keyboard shortcuts
+</details>
 
-| Shortcut | Action |
-|---|---|
-| <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> | Add the editor selection (or current line) to the chat |
-| <kbd>⌘Esc</kbd> / <kbd>Ctrl+Esc</kbd> | Focus the chat input |
-| <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in the chat) | New chat |
-| <kbd>Esc</kbd> (while working) | Interrupt Pi |
+<details>
+<summary><b>Notes and limits</b></summary>
 
-<kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> replaces VS Code's built-in **Expand Line Selection** while an editor has focus, as other chat extensions do. To keep the built-in shortcut, rebind **Pi Agent Manager: Add Selection to Chat** in **Keyboard Shortcuts**.
+- History is scoped to one workspace folder: only chats Pi ran in that exact folder are listed.
+- In multi-root windows, an empty chat follows the active editor's folder. A chat with messages stays in its folder. Use the folder button in the header or **Switch Workspace Folder** to switch.
+- Pi's project trust applies. RPC mode can't show the trust prompt, so run `/trust` once in a terminal, or pass `--approve` through `piAgentManager.extraArgs`.
+- TUI-only commands, such as `/settings`, aren't available over RPC.
 
-## Notes
+</details>
 
-- Chats and history are scoped to one workspace folder: only chats Pi ran in that exact folder are listed.
-- In a multi-root window, the chat follows the active editor's folder while it is empty, and **New Chat** starts in the active editor's folder. A chat with messages stays in its folder. Use the folder button in the chat header, or **Pi Agent Manager: Switch Workspace Folder**, to switch explicitly.
-- Pi's [project trust](https://github.com/earendil-works/pi) applies as in the CLI. RPC mode cannot show the trust prompt, so trust a project once with `/trust` in the terminal, or pass `--approve` through `piAgentManager.extraArgs`.
-- Built-in TUI-only commands (for example `/settings`) are not available over RPC.
-
-## Privacy
-
-Pi Agent Manager collects no telemetry and makes no network requests of its own. Your prompts, files and images go only to your local `pi` process, which sends them to whichever model provider you configured in Pi.
-
-## Development
+<details>
+<summary><b>Development</b></summary>
 
 ```sh
 npm install
 npm run check          # TypeScript + ESLint
-npm test               # unit + React component tests (Vitest, jsdom)
-npm run test:coverage  # same, with V8 coverage thresholds
-npm run test:e2e       # real Pi CLI (devDependency) against a mock LLM
-npm run test:ui        # build, then drive the webview in Chromium (Playwright)
-npm run package        # check, test, build, then a verified universal .vsix
+npm test               # unit + React component tests (Vitest)
+npm run test:coverage  # with coverage thresholds
+npm run test:e2e       # real Pi CLI against a mock LLM (no API key)
+npm run test:ui        # Playwright webview tests; saves screenshots to test-results/screenshots/
+npm run package        # verified universal .vsix
 ```
 
-The end-to-end suites need no API key. They point a custom OpenAI-compatible `mock` provider (in a temporary `~/.pi/agent/models.json`) at a local scripted server. That server streams thinking, `read` → `edit` → `bash` tool calls and Markdown. A test extension asks for confirmation before `bash`. Playwright saves light and dark screenshots to `test-results/screenshots/`.
+See [docs/architecture.md](docs/architecture.md) for how the extension talks to Pi, and [docs/PUBLISHING.md](docs/PUBLISHING.md) for releases.
 
-**CI** (`.github/workflows/ci.yml`):
-- typecheck and lint
-- unit tests on Ubuntu, macOS and Windows (Node 22, plus Node 24 on Ubuntu)
-- coverage with thresholds
-- the real-Pi and Playwright suites
-- a packaged `.vsix` artifact
-
-Merging a version bump to `main` (or pushing a matching `vX.Y.Z` tag) tags the release, publishes the VSIX to the VS Code Marketplace and, once its token is set, Open VSX, and creates a GitHub Release with its CHANGELOG notes. See [docs/PUBLISHING.md](docs/PUBLISHING.md). Dependabot keeps npm packages and actions current.
-
-See [docs/architecture.md](docs/architecture.md) for how the extension talks to Pi.
+</details>
 
 ## Disclaimer and acknowledgements
 
