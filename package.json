@@ -115,8 +115,8 @@
       },
       {
         "command": "piAgentManager.focusInput",
-        "key": "ctrl+escape",
-        "mac": "cmd+escape"
+        "key": "ctrl+alt+p",
+        "mac": "ctrl+cmd+p"
       },
       {
         "command": "piAgentManager.newChat",

@@ -100,7 +100,7 @@ The executable's directory is added to the child process `PATH`, so nvm-managed 
 | Shortcut | Action |
 |---|---|
 | <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> | Add the editor selection (or current line) to the chat |
-| <kbd>⌘Esc</kbd> / <kbd>Ctrl+Esc</kbd> | Focus the chat input |
+| <kbd>⌃⌘P</kbd> / <kbd>Ctrl+Alt+P</kbd> | Focus the chat input |
 | <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in the chat) | New chat |
 | <kbd>Esc</kbd> (while working) | Interrupt Pi |
 
