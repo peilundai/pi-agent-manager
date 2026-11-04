@@ -110,14 +110,13 @@
     "keybindings": [
       {
         "command": "piAgentManager.sendSelection",
-        "key": "ctrl+l",
-        "mac": "cmd+l",
+        "key": "alt+l",
         "when": "editorTextFocus"
       },
       {
         "command": "piAgentManager.focusInput",
-        "key": "ctrl+escape",
-        "mac": "cmd+escape"
+        "key": "ctrl+alt+p",
+        "mac": "ctrl+cmd+p"
       },
       {
         "command": "piAgentManager.newChat",

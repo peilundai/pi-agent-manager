@@ -2,6 +2,13 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
+## Unreleased
+
+### Changed
+
+- **Add Selection to Chat** now defaults to `Alt+L` (`⌥L` on macOS) instead of `Cmd/Ctrl+L`, which clashed with VS Code's **Expand Line Selection** and other chat extensions. To keep the old shortcut, rebind **Pi Agent Manager: Add Selection to Chat** in **Keyboard Shortcuts**.
+- **Focus Chat Input** now defaults to `Ctrl+Alt+P` (`⌃⌘P` on macOS) instead of `Cmd/Ctrl+Esc`, which clashed with Claude Code and, on Windows, opened the Start menu.
+
 ## 0.2.2 — 2026-11-03 (first Marketplace preview)
 
 First release published to the VS Code Marketplace, as an unofficial preview. Open VSX publishing is set up but waits for its access token, so this version reaches Open VSX later. 0.2.0 and 0.2.1 were released on GitHub only.

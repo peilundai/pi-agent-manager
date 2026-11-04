@@ -16,7 +16,7 @@
 |---|---|
 | switch between a terminal and the editor to check what Pi did | shows each step in the side bar: files read, **inline diffs**, command output. Click a path to open the file. |
 | want to stay in control of what Pi does | lets you <kbd>Esc</kbd> to interrupt Pi and <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> to steer it mid-run. Prompts from your Pi extensions, such as a bash confirmation, appear as inline **Yes / No cards**. |
-| copy and paste code and paths into the agent | uses <kbd>⌘L</kbd> to send the current selection, `@` to mention files, and paste or drop to attach screenshots. |
+| copy and paste code and paths into the agent | uses <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> to send the current selection, `@` to mention files, and paste or drop to attach screenshots. |
 | lose earlier conversations | keeps **past chats** per workspace, searchable and grouped by day, so you can resume one in a click. |
 | use a company gateway or MCP server keyed through env vars | loads your **login-shell environment**, names any variable that's missing, and stores secrets in VS Code's encrypted storage. |
 | develop on a remote box over SSH or a tunnel | runs on the **remote host**, next to your code and your remote `pi`. See [Remote development](#remote-development). |
@@ -52,13 +52,13 @@ Pi Agent Manager runs `pi --mode rpc`, so your providers, default model, skills,
 
 | Shortcut | Action |
 |---|---|
-| <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> | Add the selection (or current line) to the chat |
-| <kbd>⌘Esc</kbd> / <kbd>Ctrl+Esc</kbd> | Focus the chat input |
+| <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> | Add the selection (or current line) to the chat |
+| <kbd>⌃⌘P</kbd> / <kbd>Ctrl+Alt+P</kbd> | Focus the chat input |
 | <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> (in chat) | New chat |
 | <kbd>Esc</kbd> (while working) | Interrupt Pi |
 | <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> (while working) | Steer now instead of queueing |
 
-<kbd>⌘L</kbd> replaces VS Code's **Expand Line Selection** while an editor has focus. To keep that shortcut, rebind **Pi Agent Manager: Add Selection to Chat**.
+These defaults leave VS Code's <kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd> (**Expand Line Selection**) and other chat extensions' shortcuts alone. On macOS, <kbd>⌥L</kbd> takes over typing `¬` while an editor has focus. To use a different shortcut, rebind **Pi Agent Manager: Add Selection to Chat** in **Keyboard Shortcuts**.
 
 ## Remote development
 
