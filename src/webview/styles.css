@@ -890,6 +890,10 @@ pre,
   color: var(--pi-muted);
 }
 
+.tool-output-status.error {
+  color: var(--pi-error);
+}
+
 .tool-output.error {
   background: color-mix(in srgb, var(--pi-tool-error-bg) 55%, transparent);
   color: var(--pi-error);

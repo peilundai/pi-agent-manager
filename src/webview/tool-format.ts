@@ -80,12 +80,32 @@ function countLines(text: string): number {
   return text.replace(/\n$/, "").split("\n").length;
 }
 
+const SHELL_STATUS = /(?:^|\n\n)(Command (?:exited with code -?\d+|timed out after [^\n]+|aborted|terminated without an exit code))\s*$/;
+
+/**
+ * Splits the status line Pi appends to a failed shell command ("Command exited with code 128")
+ * from the command's own output, which is usually ordinary stdout rather than an error.
+ */
+export function splitShellStatus(output: string): { body: string; status?: string } {
+  const match = SHELL_STATUS.exec(output);
+  if (!match) return { body: output };
+  return { body: output.slice(0, match.index), status: match[1]! };
+}
+
+function shellStatusSummary(status: string): string {
+  const code = /^Command exited with code (-?\d+)$/.exec(status)?.[1];
+  return code !== undefined ? `Exit code ${code}` : capitalize(status.replace(/^Command /, ""));
+}
+
 /** The one-line "⎿" result summary shown under a finished tool. */
 export function summarizeTool(tool: ToolState): string | undefined {
   if (tool.status === "streaming") return undefined;
   if (tool.status === "running") return tool.name === "bash" ? "Running…" : undefined;
   if (tool.status === "interrupted") return "Interrupted";
-  if (tool.status === "error") return firstLine(tool.output || "Failed", 160);
+  if (tool.status === "error") {
+    const status = tool.name === "bash" || tool.name === "powershell" ? splitShellStatus(tool.output).status : undefined;
+    return status ? shellStatusSummary(status) : firstLine(tool.output || "Failed", 160);
+  }
   switch (tool.name) {
     case "read": {
       const lines = countLines(tool.output);

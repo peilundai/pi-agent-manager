@@ -195,6 +195,19 @@ describe("ToolCard", () => {
     );
     expect(screen.getByText("exit 1: boom")).toHaveClass("tool-summary", "error");
   });
+
+  it("summarizes a failed command by its exit code and keeps its stdout neutral", () => {
+    const output = "/Users/me/work\nfatal: not a git repository\n\nCommand exited with code 128";
+    withContext(<ToolCard tool={{ ...base, name: "bash", args: { command: "pwd; git remote -v" }, status: "error", output }} />);
+    expect(screen.getByText("Exit code 128")).toHaveClass("tool-summary", "error");
+    expect(screen.queryByText(/\/Users\/me\/work/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    const status = screen.getByText("Command exited with code 128");
+    expect(status).toHaveClass("tool-output-status", "error");
+    expect(status.closest("pre")).toHaveClass("tool-output");
+    expect(status.closest("pre")).not.toHaveClass("error");
+    expect(status.closest("pre")).toHaveTextContent("/Users/me/work");
+  });
 });
 
 describe("TranscriptItem", () => {

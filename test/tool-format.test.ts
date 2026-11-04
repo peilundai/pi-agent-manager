@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolState } from "../src/webview/chat-state";
-import { describeTool, diffStats, editArgsDiff, languageForPath, parsePiDiff, summarizeTool } from "../src/webview/tool-format";
+import { describeTool, diffStats, editArgsDiff, languageForPath, parsePiDiff, splitShellStatus, summarizeTool } from "../src/webview/tool-format";
 
 const tool = (overrides: Partial<ToolState>): ToolState => ({ id: "t", name: "read", args: {}, status: "success", output: "", ...overrides });
 
@@ -17,7 +17,19 @@ describe("tool formatting", () => {
     expect(summarizeTool(tool({ name: "edit", details: { diff: " 1 a\n-2 b\n+2 c\n+3 d" } }))).toBe("Added 2 lines, removed 1 line");
     expect(summarizeTool(tool({ name: "bash", status: "error", output: "command not found\nmore" }))).toBe("command not found …");
     expect(summarizeTool(tool({ status: "streaming" }))).toBeUndefined();
+    expect(summarizeTool(tool({ name: "bash", status: "error", output: "/Users/me/work\n\nCommand exited with code 128" }))).toBe("Exit code 128");
+    expect(summarizeTool(tool({ name: "bash", status: "error", output: "Command timed out after 30 seconds" }))).toBe("Timed out after 30 seconds");
+    expect(summarizeTool(tool({ name: "powershell", status: "error", output: "partial\n\nCommand aborted" }))).toBe("Aborted");
     expect(summarizeTool(tool({ name: "grep", output: "No matches found" }))).toBe("No results");
+  });
+
+  it("separates Pi's shell status line from the command output", () => {
+    expect(splitShellStatus("/Users/me\nfatal: not a git repository\n\nCommand exited with code 128")).toEqual({
+      body: "/Users/me\nfatal: not a git repository",
+      status: "Command exited with code 128",
+    });
+    expect(splitShellStatus("Command aborted")).toEqual({ body: "", status: "Command aborted" });
+    expect(splitShellStatus("echo Command aborted")).toEqual({ body: "echo Command aborted" });
   });
 
   it("parses Pi's numbered diff format", () => {

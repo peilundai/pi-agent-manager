@@ -1,6 +1,6 @@
 import { memo, useState, type MouseEvent } from "react";
 import type { ToolState } from "../chat-state";
-import { describeTool, diffStats, summarizeTool, toolDiffRows, type DiffRow } from "../tool-format";
+import { describeTool, diffStats, splitShellStatus, summarizeTool, toolDiffRows, type DiffRow } from "../tool-format";
 import { useChat } from "./context";
 
 const MAX_DIFF_ROWS = 400;
@@ -36,12 +36,20 @@ function ToolBody({ tool }: { tool: ToolState }) {
       </>
     );
   }
-  const output = tool.output.length > MAX_OUTPUT_CHARS ? `${tool.output.slice(0, MAX_OUTPUT_CHARS)}\n…` : tool.output;
-  const command = (tool.name === "bash" || tool.name === "powershell") && typeof tool.args.command === "string" ? tool.args.command : undefined;
+  const shell = tool.name === "bash" || tool.name === "powershell";
+  // A failed shell command's output is mostly ordinary stdout; only Pi's status line is the error.
+  const { body, status } = shell && tool.status === "error" ? splitShellStatus(tool.output) : { body: tool.output, status: undefined };
+  const output = body.length > MAX_OUTPUT_CHARS ? `${body.slice(0, MAX_OUTPUT_CHARS)}\n…` : body;
+  const command = shell && typeof tool.args.command === "string" ? tool.args.command : undefined;
   return (
     <>
       {command && <pre className="tool-command">$ {command}</pre>}
-      {output ? (
+      {status ? (
+        <pre className="tool-output">
+          {output && `${output}\n\n`}
+          <span className="tool-output-status error">{status}</span>
+        </pre>
+      ) : output ? (
         <pre className={`tool-output${tool.status === "error" ? " error" : ""}`}>{output}</pre>
       ) : (
         !command && <pre className="tool-output muted">{JSON.stringify(tool.args, null, 2)}</pre>
