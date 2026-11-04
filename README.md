@@ -2,10 +2,10 @@
 
 [![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
 
-**The [Pi coding agent](https://github.com/earendil-works/pi), in a VS Code side-bar panel.** Chat next to your code, watch every read, edit and command as it happens, and approve or stop Pi at any time. Pi Agent Manager uses the `pi` you already have, so it needs no new account, key or config.
+**The [Pi coding agent](https://github.com/earendil-works/pi), in a VS Code side-bar panel.** Chat next to your code, watch every read, edit and command as it happens, and interrupt or steer Pi at any time. Pi Agent Manager uses the `pi` you already have, so it needs no new account, key or config.
 
 <p align="center">
-  <img src="docs/images/hero.png" width="900" alt="Three Pi Agent Manager panels: a tool-using turn with an inline diff, a bash approval card, and the slash-command menu" />
+  <img src="docs/images/hero.png" width="900" alt="Three Pi Agent Manager panels: a tool-using turn with an inline diff, a confirmation card from a Pi extension, and the slash-command menu" />
 </p>
 
 > **Unofficial, preview.** A community extension, not affiliated with or endorsed by the Pi project. See [Disclaimer](#disclaimer-and-acknowledgements).
@@ -15,7 +15,7 @@
 | If you… | Pi Agent Manager… |
 |---|---|
 | switch between a terminal and the editor to check what Pi did | shows each step in the side bar: files read, **inline diffs**, command output. Click a path to open the file. |
-| worry about what an agent runs on your machine | turns Pi's confirm prompts into **Yes / No cards**. <kbd>Esc</kbd> interrupts Pi, and <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> steers it mid-run. |
+| want to stay in control of what Pi does | lets you <kbd>Esc</kbd> to interrupt Pi and <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> to steer it mid-run. Prompts from your Pi extensions, such as a bash confirmation, appear as inline **Yes / No cards**. |
 | copy and paste code and paths into the agent | uses <kbd>⌘L</kbd> to send the current selection, `@` to mention files, and paste or drop to attach screenshots. |
 | lose earlier conversations | keeps **past chats** per workspace, searchable and grouped by day, so you can resume one in a click. |
 | use a company gateway or MCP server keyed through env vars | loads your **login-shell environment**, names any variable that's missing, and stores secrets in VS Code's encrypted storage. |
@@ -38,13 +38,13 @@ Pi Agent Manager runs `pi --mode rpc`, so your providers, default model, skills,
 | Pick model & thinking level | `/` for skills, prompts and commands | Past chats |
 |---|---|---|
 | <img src="docs/images/model-picker-dark.png" width="260" alt="Model and thinking-level picker" /> | <img src="docs/images/slash-dark.png" width="260" alt="Slash-command menu" /> | <img src="docs/images/history-dark.png" width="260" alt="Searchable past chats" /> |
-| **Context & cost at a glance** | **Approve before it runs** | **Light, dark & high contrast** |
-| <img src="docs/images/context-usage-dark.png" width="260" alt="Context-usage ring with token and cost breakdown" /> | <img src="docs/images/dialog-dark.png" width="260" alt="Inline approval card" /> | <img src="docs/images/chat-light.png" width="260" alt="Light theme" /> |
+| **Context & cost at a glance** | **Extension prompts inline** | **Light, dark & high contrast** |
+| <img src="docs/images/context-usage-dark.png" width="260" alt="Context-usage ring with token and cost breakdown" /> | <img src="docs/images/dialog-dark.png" width="260" alt="Inline confirmation card from a Pi extension" /> | <img src="docs/images/chat-light.png" width="260" alt="Light theme" /> |
 
 - **Streaming transcript:** Markdown with syntax highlighting, collapsible thinking, and a status dot per step.
 - **Tool cards** for `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` and custom tools, with one-line summaries, diffs and output.
 - **Composer:** <kbd>Enter</kbd> sends. Messages sent while Pi works queue as follow-ups. <kbd>↑</kbd> recalls earlier prompts.
-- **Extension dialogs:** Pi extension `confirm`, `select`, `input` and `editor` prompts appear as inline cards.
+- **Extension dialogs:** Pi extension `confirm`, `select`, `input` and `editor` prompts appear as inline cards. Pi Agent Manager doesn't add its own approval step: to confirm commands before they run, install a Pi extension that asks for confirmation.
 - **Multi-root aware:** each chat stays in its own workspace folder, and you can switch folders from the header.
 - **Private:** no telemetry, and no network calls of its own. Your prompts go only to your local `pi`.
 
