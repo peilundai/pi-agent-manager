@@ -1,4 +1,5 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { findReferenceTokens, parseReferencedPrompt, type ParsedReference } from "../../shared/context-references";
 import type { DialogResponse } from "../../shared/protocol";
 import type { AssistantBlock, ChatItem, DialogRequest, ToolState } from "../chat-state";
 import { useChat } from "./context";
@@ -7,8 +8,43 @@ import { ToolCard } from "./ToolCard";
 
 const COLLAPSE_USER_CHARS = 900;
 
+const PREVIEW_LINES = 12;
+
+function ReferenceChip({ reference }: { reference: ParsedReference }) {
+  const { post } = useChat();
+  const lines = reference.code.split("\n");
+  const range = reference.startLine === reference.endLine ? `line ${reference.startLine}` : `lines ${reference.startLine}-${reference.endLine}`;
+  const preview = lines.slice(0, PREVIEW_LINES).join("\n") + (lines.length > PREVIEW_LINES ? "\n…" : "");
+  return (
+    <button
+      type="button"
+      className="reference-chip"
+      title={`${reference.path} ${range}\n\n${preview}`}
+      onClick={() => post({ version: 1, type: "file.open", path: reference.path, line: reference.startLine - 1 })}
+    >
+      {reference.label}
+    </button>
+  );
+}
+
+/** The typed message with its attached selections drawn as chips. */
+function MessageWithReferences({ message, references }: { message: string; references: ParsedReference[] }) {
+  const byLabel = new Map(references.map((reference) => [reference.label, reference]));
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const token of findReferenceTokens(message, [...byLabel.keys()])) {
+    const reference = byLabel.get(token.label);
+    if (!reference) continue;
+    parts.push(message.slice(cursor, token.start), <ReferenceChip key={token.start} reference={reference} />);
+    cursor = token.end;
+  }
+  parts.push(message.slice(cursor));
+  return <>{parts}</>;
+}
+
 export const UserMessage = memo(function UserMessage({ item }: { item: Extract<ChatItem, { kind: "user" }> }) {
-  const long = item.text.length > COLLAPSE_USER_CHARS || item.text.split("\n").length > 14;
+  const { message, references } = useMemo(() => parseReferencedPrompt(item.text), [item.text]);
+  const long = message.length > COLLAPSE_USER_CHARS || message.split("\n").length > 14;
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`user-message${item.pending ? " pending" : ""}`}>
@@ -19,7 +55,11 @@ export const UserMessage = memo(function UserMessage({ item }: { item: Extract<C
           ))}
         </div>
       )}
-      {item.text && <div className={`user-text${long && !expanded ? " clamped" : ""}`}>{item.text}</div>}
+      {message && (
+        <div className={`user-text${long && !expanded ? " clamped" : ""}`}>
+          {references.length ? <MessageWithReferences message={message} references={references} /> : message}
+        </div>
+      )}
       {long && (
         <button type="button" className="link-button" onClick={() => setExpanded(!expanded)}>
           {expanded ? "Show less" : "Show more"}

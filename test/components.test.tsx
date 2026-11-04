@@ -207,6 +207,17 @@ describe("TranscriptItem", () => {
     expect(screen.getByText("Show less")).toBeInTheDocument();
   });
 
+  it("shows attached selections in sent messages as chips that open the file", () => {
+    const text = "Explain @src/a.ts#43-48 please\n\nFrom `src/a.ts` lines 43-48:\n\n```ts\nconst secret = 1;\n```";
+    const { posted } = withContext(<TranscriptItem item={{ kind: "user", id: "u", text, images: [] }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />);
+    const chip = screen.getByRole("button", { name: "@src/a.ts#43-48" });
+    expect(chip.closest(".user-text")).toHaveTextContent(/^Explain @src\/a\.ts#43-48 please$/);
+    expect(chip).toHaveAttribute("title", "src/a.ts lines 43-48\n\nconst secret = 1;");
+    expect(screen.queryByText("Show more")).not.toBeInTheDocument();
+    fireEvent.click(chip);
+    expect(posted.at(-1)).toEqual({ version: 1, type: "file.open", path: "src/a.ts", line: 42 });
+  });
+
   it("dismisses notices and renders compaction dividers", () => {
     const onDismiss = vi.fn();
     const { rerender } = withContext(<TranscriptItem item={{ kind: "notice", id: "n1", level: "warning", text: "Careful" }} tools={{}} onDialogAnswer={noop} onDismiss={onDismiss} />);
@@ -399,6 +410,50 @@ describe("Composer", () => {
     await waitFor(() => expect(input.value).toBe("see "));
     fireEvent.keyDown(input, { key: "Enter" });
     expect(props.onSubmit).toHaveBeenCalledWith("see", [], "send");
+  });
+
+  it("offers the live editor selection and sends it with the next message", async () => {
+    const selection = { label: "@src/a.ts#2-7", text: "From `src/a.ts` lines 2-7:\n\n```ts\ncode\n```\n\n", lineCount: 6 };
+    const { input, props } = renderComposer({ selection });
+    expect(screen.getByRole("button", { name: /6 lines selected/ })).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "Explain", selectionStart: 7 } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("Explain @src/a.ts#2-7\n\nFrom `src/a.ts` lines 2-7:\n\n```ts\ncode\n```", [], "send");
+    // Sent once: the indicator waits for a new selection.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /lines selected/ })).not.toBeInTheDocument());
+  });
+
+  it("skips the live selection for slash commands and when dismissed", () => {
+    const selection = { label: "@a.ts#1", text: "From `a.ts` line 1:\n\n```ts\nx\n```\n\n", lineCount: 1 };
+    const { input, props } = renderComposer({ selection });
+    fireEvent.change(input, { target: { value: "/compact", selectionStart: 8 } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("/compact", [], "send");
+    fireEvent.click(screen.getByRole("button", { name: "Don't send this selection" }));
+    expect(screen.queryByRole("button", { name: /1 line selected/ })).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "hi", selectionStart: 2 } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("hi", [], "send");
+  });
+
+  it("places the live selection in the text as a chip when clicked", async () => {
+    const selection = { label: "@a.ts#1", text: "ctx", lineCount: 1 };
+    const { input, container } = renderComposer({ selection });
+    fireEvent.click(screen.getByRole("button", { name: /1 line selected/ }));
+    await waitFor(() => expect(input.value).toBe("@a.ts#1 "));
+    expect(container.querySelector("mark.composer-reference")).toHaveTextContent("@a.ts#1");
+    expect(screen.queryByRole("button", { name: /1 line selected/ })).not.toBeInTheDocument();
+  });
+
+  it("turns attached selections back into chips when recalling history", () => {
+    const sent = "Explain @a.ts#1\n\nFrom `a.ts` line 1:\n\n```ts\nx\n```";
+    const { input, props, container } = renderComposer({ history: [sent] });
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("Explain @a.ts#1");
+    expect(container.querySelector("mark.composer-reference")).toHaveTextContent("@a.ts#1");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith(sent, [], "send");
   });
 
   it("asks the host to pick attachments", () => {

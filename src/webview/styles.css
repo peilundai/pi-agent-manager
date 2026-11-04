@@ -1416,7 +1416,83 @@ body.vscode-high-contrast-light .diff-del {
   color: var(--pi-dim);
 }
 
+.selection-indicator {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin-left: 4px;
+  border-left: 1px solid var(--pi-hairline);
+  padding-left: 6px;
+  color: var(--pi-muted);
+}
+
+.selection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.selection-chip:hover,
+.selection-dismiss:hover {
+  background: var(--pi-hover);
+  color: var(--pi-text);
+}
+
+/* Narrow sidebars drop "selected" so the model name keeps its room. */
+@container composer-toolbar (max-width: 460px) {
+  .selection-chip-suffix {
+    display: none;
+  }
+}
+
+.selection-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-dismiss {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.reference-chip {
+  display: inline;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--pi-accent) 24%, transparent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.reference-chip:hover {
+  background: color-mix(in srgb, var(--pi-accent) 38%, transparent);
+}
+
 .composer-toolbar {
+  container: composer-toolbar / inline-size;
   display: flex;
   align-items: center;
   gap: 4px;

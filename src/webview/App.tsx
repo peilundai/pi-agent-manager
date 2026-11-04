@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
-import { isHostMessage, type HostToWebviewMessage, type ImageAttachment, type PromptMode, type WebviewToHostMessage } from "../shared/protocol";
+import { parseReferencedPrompt } from "../shared/context-references";
+import { isHostMessage, type EditorSelection, type HostToWebviewMessage, type ImageAttachment, type PromptMode, type WebviewToHostMessage } from "../shared/protocol";
 import { chatReducer, initialChatState, type ChatState } from "./chat-state";
 import { Composer, type ComposerDraft, type ComposerHandle, type LocalCommand } from "./components/Composer";
 import { ChatContext } from "./components/context";
@@ -56,7 +57,7 @@ function QueueChips({ queue }: { queue: ChatState["queue"] }) {
       {entries.map((entry, index) => (
         <div key={index} className="queue-chip" title={entry.text}>
           <span className="badge">{entry.kind}</span>
-          <span className="queue-text">{entry.text}</span>
+          <span className="queue-text">{parseReferencedPrompt(entry.text).message}</span>
         </div>
       ))}
     </div>
@@ -129,6 +130,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [files, setFiles] = useState<{ requestId: number; files: string[] }>({ requestId: -1, files: [] });
+  const [editorSelection, setEditorSelection] = useState<EditorSelection | undefined>(undefined);
   // Persisted webview state is read once; the ref is only touched from callbacks.
   const [initialPersisted] = useState(() => transport.getState());
   const persisted = useRef(initialPersisted);
@@ -165,6 +167,9 @@ export function App({ transport }: { transport: WebviewTransport }) {
           return;
         case "files.result":
           setFiles({ requestId: message.requestId, files: message.files });
+          return;
+        case "editor.selection":
+          setEditorSelection(message.selection);
           return;
         default:
           // Batch streaming updates to one render per animation frame.
@@ -325,6 +330,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
                 onSubmit={submit}
                 onAbort={() => post({ version: 1, type: "abort" })}
                 files={files}
+                selection={editorSelection}
               />
             </div>
           </>

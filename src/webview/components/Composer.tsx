@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
-import type { ContextReference, ImageAttachment, PromptMode } from "../../shared/protocol";
+import { expandReferences, findReferenceTokens, parseReferencedPrompt } from "../../shared/context-references";
+import type { ContextReference, EditorSelection, ImageAttachment, PromptMode } from "../../shared/protocol";
 import type { PiCommand, PiModel, PiSessionStats, ThinkingLevel } from "../../pi/rpc-types";
 import { useChat } from "./context";
 import { ModelPicker, modelLabel, supportedLevels, thinkingLabel } from "./ModelPicker";
@@ -14,41 +15,6 @@ export interface ComposerHandle {
 export interface ComposerDraft {
   text: string;
   references: ContextReference[];
-}
-
-export interface ReferenceToken {
-  start: number;
-  end: number;
-  label: string;
-}
-
-/** Finds each reference label that stands as a whitespace-delimited token in `text`. */
-export function findReferenceTokens(text: string, labels: readonly string[]): ReferenceToken[] {
-  const found: ReferenceToken[] = [];
-  for (const label of new Set(labels)) {
-    if (!label) continue;
-    for (let start = text.indexOf(label); start !== -1; start = text.indexOf(label, start + 1)) {
-      const end = start + label.length;
-      if ((start === 0 || /\s/.test(text.charAt(start - 1))) && (end === text.length || /\s/.test(text.charAt(end)))) {
-        found.push({ start, end, label });
-      }
-    }
-  }
-  found.sort((left, right) => left.start - right.start || right.end - left.end);
-  const tokens: ReferenceToken[] = [];
-  for (const token of found) {
-    if (token.start >= (tokens.at(-1)?.end ?? 0)) tokens.push(token);
-  }
-  return tokens;
-}
-
-/** Appends the context of every reference still present in `text`, in the order they appear. */
-export function expandReferences(text: string, references: readonly ContextReference[]): string {
-  const byLabel = new Map(references.map((reference) => [reference.label, reference.text]));
-  const labels = [...new Set(findReferenceTokens(text, [...byLabel.keys()]).map((token) => token.label))];
-  const context = labels.map((label) => (byLabel.get(label) ?? "").trim()).filter(Boolean).join("\n\n");
-  if (!context) return text;
-  return text ? `${text}\n\n${context}` : context;
 }
 
 export interface LocalCommand {
@@ -223,6 +189,12 @@ export interface ComposerProps {
   onSubmit(text: string, images: ImageAttachment[], mode: PromptMode): void;
   onAbort(): void;
   files: { requestId: number; files: string[] };
+  /** The active editor's selection, offered as context for the next message. */
+  selection?: EditorSelection | undefined;
+}
+
+function selectionKey(selection: EditorSelection): string {
+  return `${selection.label}\0${selection.text}`;
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(props, ref) {
@@ -246,6 +218,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const isMac = props.platform === "darwin";
 
   const tokens = useMemo(() => findReferenceTokens(text, references.map((reference) => reference.label)), [text, references]);
+  /** The live selection the user dismissed with ×; it comes back once the selection changes. */
+  const [dismissedSelection, setDismissedSelection] = useState<string | undefined>(undefined);
+  const { selection } = props;
+  const liveSelection =
+    selection && selectionKey(selection) !== dismissedSelection && !tokens.some((token) => token.label === selection.label)
+      ? selection
+      : undefined;
 
   const syncHighlights = useCallback(() => {
     if (highlightsRef.current && textareaRef.current) highlightsRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -371,14 +350,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const activeIndex = menu.length ? Math.min(menuIndex, menu.length - 1) : 0;
 
   const submit = (mode: PromptMode) => {
-    const value = expandReferences(text.trim(), references);
-    if (!value && !images.length) return;
+    const typed = text.trim();
+    if (!typed && !images.length) return;
+    // The live selection rides along as a chip at the end, except on /commands, which take raw arguments.
+    const attach = liveSelection && !typed.startsWith("/") ? liveSelection : undefined;
+    const withSelection = attach ? (typed ? `${typed} ${attach.label}` : attach.label) : typed;
+    const value = expandReferences(withSelection, attach ? [...references, attach] : references);
     props.onSubmit(value, images, mode);
     setText("");
     setImages([]);
     setReferences([]);
+    // Sent once; the indicator returns when the selection changes.
+    if (attach) setDismissedSelection(selectionKey(attach));
     setHistoryIndex(-1);
     setMenuDismissed(false);
+  };
+
+  /** Puts a past prompt back, turning its attached selections into chips again. */
+  const recall = (value: string) => {
+    const parsed = parseReferencedPrompt(value);
+    setText(parsed.message);
+    setReferences(parsed.references.map(({ label, text: context }) => ({ label, text: context })));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -428,7 +420,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (value !== undefined) {
         event.preventDefault();
         setHistoryIndex(next);
-        setText(value);
+        recall(value);
       }
       return;
     }
@@ -436,7 +428,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       event.preventDefault();
       const next = historyIndex - 1;
       setHistoryIndex(next);
-      setText(next < 0 ? "" : props.history[props.history.length - 1 - next] ?? "");
+      recall(next < 0 ? "" : props.history[props.history.length - 1 - next] ?? "");
     }
   };
 
@@ -612,6 +604,35 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <span className={`model-level level-${props.thinkingLevel}`}>{thinkingLabel(props.thinkingLevel)}</span>
           )}
         </button>
+        {liveSelection && (
+          <span className="selection-indicator">
+            <button
+              type="button"
+              className="selection-chip"
+              aria-label={`${liveSelection.lineCount} ${liveSelection.lineCount === 1 ? "line" : "lines"} selected`}
+              title={`${liveSelection.label.slice(1)} is sent with your next message. Click to place it in the text.`}
+              onClick={() => {
+                insert(`${liveSelection.label} `, undefined, [{ label: liveSelection.label, text: liveSelection.text }]);
+                textareaRef.current?.focus();
+              }}
+            >
+              <span className="codicon codicon-file" aria-hidden="true" />
+              <span className="selection-chip-text">
+                {liveSelection.lineCount} {liveSelection.lineCount === 1 ? "line" : "lines"}
+                <span className="selection-chip-suffix"> selected</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="selection-dismiss"
+              title="Don't send this selection"
+              aria-label="Don't send this selection"
+              onClick={() => setDismissedSelection(selectionKey(liveSelection))}
+            >
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </button>
+          </span>
+        )}
         <span className="toolbar-spacer" />
         <ContextRing stats={props.stats} />
         {props.busy && !canSend ? (

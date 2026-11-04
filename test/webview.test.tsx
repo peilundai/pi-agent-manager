@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { HostToWebviewMessage, WebviewToHostMessage } from "../src/shared/protocol";
 import { App } from "../src/webview/App";
-import { expandReferences, findReferenceTokens, mentionAt, slashQuery } from "../src/webview/components/Composer";
+import { expandReferences, findReferenceTokens } from "../src/shared/context-references";
+import { mentionAt, slashQuery } from "../src/webview/components/Composer";
 import type { WebviewTransport } from "../src/webview/vscode";
 
 function setup() {

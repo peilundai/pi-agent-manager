@@ -28,6 +28,11 @@ export interface ContextReference {
   text: string;
 }
 
+/** The active editor's non-empty selection, which the composer offers to send along. */
+export interface EditorSelection extends ContextReference {
+  lineCount: number;
+}
+
 export type DialogResponse =
   | { id: string; value: string }
   | { id: string; confirmed: boolean }
@@ -93,6 +98,7 @@ export type HostToWebviewMessage =
   | { version: 1; type: "composer.focus" }
   | { version: 1; type: "history.toggle" }
   | { version: 1; type: "files.result"; requestId: number; files: string[] }
+  | { version: 1; type: "editor.selection"; selection?: EditorSelection }
   | { version: 1; type: "notice"; level: "info" | "warning" | "error"; message: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -191,6 +197,7 @@ const HOST_TYPES = new Set<HostToWebviewMessage["type"]>([
   "composer.focus",
   "history.toggle",
   "files.result",
+  "editor.selection",
   "notice",
 ]);
 

@@ -39,7 +39,7 @@ describe("extension activation", () => {
       "piAgentManager.reloadEnvironment",
       "piAgentManager.showEnvironmentDiagnostics",
     ]);
-    expect(subscriptions).toHaveLength(16);
+    expect(subscriptions).toHaveLength(17);
     expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeConfiguration).toHaveBeenCalledOnce();
