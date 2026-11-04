@@ -4,7 +4,29 @@ import { useChat } from "./context";
 /** URLs at least this long get their own chip instead of an inline link. */
 const CHIP_MIN_LENGTH = 48;
 const URL_PATTERN = /https?:\/\/[^\s<>"'`]+/gi;
-const TRAILING_PUNCTUATION = /[.,;:!?)\]}]+$/;
+const TRAILING_PUNCTUATION = ".,;:!?'\"";
+const CLOSING_BRACKETS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+
+function count(text: string, char: string): number {
+  return text.split(char).length - 1;
+}
+
+/**
+ * Drops prose punctuation that ends a URL, as GitHub's autolinks do: trailing marks
+ * such as "." or "," and closing brackets without a matching opener in the URL,
+ * so "(see https://x.io/a_(b))" keeps "a_(b)".
+ */
+export function trimUrl(url: string): string {
+  let end = url.length;
+  while (end > 0) {
+    const char = url[end - 1] ?? "";
+    const opener = CLOSING_BRACKETS[char];
+    const body = url.slice(0, end);
+    if (TRAILING_PUNCTUATION.includes(char) || (opener && count(body, char) > count(body, opener))) end -= 1;
+    else break;
+  }
+  return url.slice(0, end);
+}
 
 export type TextSegment = { type: "text"; text: string } | { type: "url"; url: string; block: boolean };
 
@@ -17,7 +39,7 @@ export function splitLinks(text: string): TextSegment[] {
   let last = 0;
   for (const match of text.matchAll(URL_PATTERN)) {
     const start = match.index;
-    const url = match[0].replace(TRAILING_PUNCTUATION, "");
+    const url = trimUrl(match[0]);
     if (start > last) segments.push({ type: "text", text: text.slice(last, start) });
     segments.push({ type: "url", url, block: url.length >= CHIP_MIN_LENGTH });
     last = start + url.length;

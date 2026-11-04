@@ -5,7 +5,7 @@ import type { ToolState } from "../src/webview/chat-state";
 import { Composer, type ComposerProps } from "../src/webview/components/Composer";
 import { ChatContext } from "../src/webview/components/context";
 import { Header, relativeTime, SessionPicker } from "../src/webview/components/Header";
-import { LinkText, splitLinks } from "../src/webview/components/LinkText";
+import { LinkText, splitLinks, trimUrl } from "../src/webview/components/LinkText";
 import { Markdown } from "../src/webview/components/Markdown";
 import { modelLabel, ModelPicker, supportedLevels, thinkingLabel } from "../src/webview/components/ModelPicker";
 import { ToolCard } from "../src/webview/components/ToolCard";
@@ -263,6 +263,18 @@ describe("LinkText", () => {
       { type: "url", url: long, block: true },
     ]);
     expect(splitLinks("no links")).toEqual([{ type: "text", text: "no links" }]);
+  });
+
+  it("keeps brackets that belong to the URL and drops prose punctuation", () => {
+    expect(trimUrl("https://en.wikipedia.org/wiki/Function_(mathematics)")).toBe("https://en.wikipedia.org/wiki/Function_(mathematics)");
+    expect(trimUrl("https://en.wikipedia.org/wiki/Function_(mathematics))")).toBe("https://en.wikipedia.org/wiki/Function_(mathematics)");
+    expect(trimUrl("https://x.io/docs).")).toBe("https://x.io/docs");
+    expect(trimUrl("https://x.io/a?q=[1]")).toBe("https://x.io/a?q=[1]");
+    expect(splitLinks("(see https://x.io/a_(b)).")).toEqual([
+      { type: "text", text: "(see " },
+      { type: "url", url: "https://x.io/a_(b)", block: false },
+      { type: "text", text: ")." },
+    ]);
   });
 
   it("opens and copies links", async () => {
