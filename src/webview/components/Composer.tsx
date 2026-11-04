@@ -193,9 +193,6 @@ export interface ComposerProps {
   selection?: EditorSelection | undefined;
 }
 
-function selectionKey(selection: EditorSelection): string {
-  return `${selection.label}\0${selection.text}`;
-}
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(props, ref) {
   const { post } = useChat();
@@ -218,11 +215,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const isMac = props.platform === "darwin";
 
   const tokens = useMemo(() => findReferenceTokens(text, references.map((reference) => reference.label)), [text, references]);
-  /** The live selection the user dismissed with ×; it comes back once the selection changes. */
-  const [dismissedSelection, setDismissedSelection] = useState<string | undefined>(undefined);
+  /**
+   * The live selection that was dismissed with × or already sent. The host posts a new object on every
+   * change, clearing included, so selecting the same lines again offers them again.
+   */
+  const [dismissedSelection, setDismissedSelection] = useState<EditorSelection | undefined>(undefined);
   const { selection } = props;
   const liveSelection =
-    selection && selectionKey(selection) !== dismissedSelection && !tokens.some((token) => token.label === selection.label)
+    selection && selection !== dismissedSelection && !tokens.some((token) => token.label === selection.label)
       ? selection
       : undefined;
 
@@ -360,8 +360,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setText("");
     setImages([]);
     setReferences([]);
-    // Sent once; the indicator returns when the selection changes.
-    if (attach) setDismissedSelection(selectionKey(attach));
+    // Sent once, whether attached here or placed in the text; it returns when the selection changes.
+    if (selection && (attach || tokens.some((token) => token.label === selection.label))) setDismissedSelection(selection);
     setHistoryIndex(-1);
     setMenuDismissed(false);
   };
@@ -627,7 +627,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               className="selection-dismiss"
               title="Don't send this selection"
               aria-label="Don't send this selection"
-              onClick={() => setDismissedSelection(selectionKey(liveSelection))}
+              onClick={() => setDismissedSelection(liveSelection)}
             >
               <span className="codicon codicon-close" aria-hidden="true" />
             </button>

@@ -437,6 +437,34 @@ describe("Composer", () => {
     expect(props.onSubmit).toHaveBeenLastCalledWith("hi", [], "send");
   });
 
+  it("offers a selection again only after it changes, and not after sending it inline", async () => {
+    const make = () => ({ label: "@a.ts#1", text: "From `a.ts` line 1:\n\n```ts\nx\n```\n\n", lineCount: 1 });
+    const { input, props, posted, rerender } = renderComposer({ selection: make() });
+    const render = (selection: ComposerProps["selection"]) =>
+      rerender(
+        <ChatContext.Provider value={{ post: (message) => posted.push(message) }}>
+          <Composer {...props} selection={selection} />
+        </ChatContext.Provider>,
+      );
+    const indicator = () => screen.queryByRole("button", { name: /1 line selected/ });
+    fireEvent.click(screen.getByRole("button", { name: "Don't send this selection" }));
+    expect(indicator()).not.toBeInTheDocument();
+    // Cleared, then the same lines selected again.
+    render(undefined);
+    render(make());
+    expect(indicator()).toBeInTheDocument();
+    // Sent as an inline chip: not attached again to the next message.
+    fireEvent.click(indicator()!);
+    await waitFor(() => expect(input.value).toBe("@a.ts#1 "));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("@a.ts#1\n\nFrom `a.ts` line 1:\n\n```ts\nx\n```", [], "send");
+    await waitFor(() => expect(input.value).toBe(""));
+    expect(indicator()).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "next", selectionStart: 4 } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("next", [], "send");
+  });
+
   it("places the live selection in the text as a chip when clicked", async () => {
     const selection = { label: "@a.ts#1", text: "ctx", lineCount: 1 };
     const { input, container } = renderComposer({ selection });
