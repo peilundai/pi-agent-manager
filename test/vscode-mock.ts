@@ -89,6 +89,7 @@ export const workspace = {
 export const commands = {
   registerCommand: vi.fn(),
   executeCommand: vi.fn(),
+  getCommands: vi.fn(),
 };
 
 export const env = {
@@ -128,6 +129,7 @@ export function resetVscodeMock(): void {
   workspace.fs.stat.mockReset().mockResolvedValue({});
   commands.registerCommand.mockReset().mockImplementation(disposable);
   commands.executeCommand.mockReset().mockResolvedValue(undefined);
+  commands.getCommands.mockReset().mockResolvedValue(["workbench.view.extension.piAgentManager"]);
   env.openExternal.mockReset().mockResolvedValue(true);
 }
 
