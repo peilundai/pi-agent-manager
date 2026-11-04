@@ -1,7 +1,9 @@
-import type { WebviewToHostMessage } from "../shared/protocol";
+import type { ContextReference, WebviewToHostMessage } from "../shared/protocol";
 
 export interface PersistedWebviewState {
   draft?: string;
+  /** Selections referenced by tokens in `draft`. */
+  draftReferences?: ContextReference[];
   history?: string[];
 }
 

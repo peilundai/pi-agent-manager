@@ -51,7 +51,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("piAgentManager.sendSelection", () => provider.sendSelection()),
     vscode.commands.registerCommand("piAgentManager.focusInput", () => provider.focusInput()),
     vscode.commands.registerCommand("piAgentManager.switchFolder", () => provider.pickFolder()),
-    vscode.window.onDidChangeActiveTextEditor((editor) => provider.followEditor(editor)),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      provider.followEditor(editor);
+      provider.editorSelectionChanged(editor);
+    }),
+    vscode.window.onDidChangeTextEditorSelection((event) => provider.editorSelectionChanged(event.textEditor)),
     vscode.workspace.onDidChangeWorkspaceFolders(() => provider.workspaceFoldersChanged()),
     vscode.workspace.onDidChangeConfiguration((event) => provider.configurationChanged(event)),
     ...registerEnvironmentCommands({

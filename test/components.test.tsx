@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { WebviewToHostMessage } from "../src/shared/protocol";
 import type { ToolState } from "../src/webview/chat-state";
-import { Composer, type ComposerProps } from "../src/webview/components/Composer";
+import { Composer, type ComposerHandle, type ComposerProps } from "../src/webview/components/Composer";
 import { ChatContext } from "../src/webview/components/context";
 import { Header, relativeTime, SessionPicker } from "../src/webview/components/Header";
+import { LinkText, splitLinks, trimUrl } from "../src/webview/components/LinkText";
 import { Markdown } from "../src/webview/components/Markdown";
 import { modelLabel, ModelPicker, supportedLevels, thinkingLabel } from "../src/webview/components/ModelPicker";
 import { ToolCard } from "../src/webview/components/ToolCard";
@@ -195,6 +197,19 @@ describe("ToolCard", () => {
     );
     expect(screen.getByText("exit 1: boom")).toHaveClass("tool-summary", "error");
   });
+
+  it("summarizes a failed command by its exit code and keeps its stdout neutral", () => {
+    const output = "/Users/me/work\nfatal: not a git repository\n\nCommand exited with code 128";
+    withContext(<ToolCard tool={{ ...base, name: "bash", args: { command: "pwd; git remote -v" }, status: "error", output }} />);
+    expect(screen.getByText("Exit code 128")).toHaveClass("tool-summary", "error");
+    expect(screen.queryByText(/\/Users\/me\/work/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    const status = screen.getByText("Command exited with code 128");
+    expect(status).toHaveClass("tool-output-status", "error");
+    expect(status.closest("pre")).toHaveClass("tool-output");
+    expect(status.closest("pre")).not.toHaveClass("error");
+    expect(status.closest("pre")).toHaveTextContent("/Users/me/work");
+  });
 });
 
 describe("TranscriptItem", () => {
@@ -204,6 +219,17 @@ describe("TranscriptItem", () => {
     withContext(<TranscriptItem item={{ kind: "user", id: "u", text: "x\n".repeat(30), images: [] }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />);
     fireEvent.click(screen.getByText("Show more"));
     expect(screen.getByText("Show less")).toBeInTheDocument();
+  });
+
+  it("shows attached selections in sent messages as chips that open the file", () => {
+    const text = "Explain @src/a.ts#43-48 please\n\nFrom `src/a.ts` lines 43-48:\n\n```ts\nconst secret = 1;\n```";
+    const { posted } = withContext(<TranscriptItem item={{ kind: "user", id: "u", text, images: [] }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />);
+    const chip = screen.getByRole("button", { name: "@src/a.ts#43-48" });
+    expect(chip.closest(".user-text")).toHaveTextContent(/^Explain @src\/a\.ts#43-48 please$/);
+    expect(chip).toHaveAttribute("title", "src/a.ts lines 43-48\n\nconst secret = 1;");
+    expect(screen.queryByText("Show more")).not.toBeInTheDocument();
+    fireEvent.click(chip);
+    expect(posted.at(-1)).toEqual({ version: 1, type: "file.open", path: "src/a.ts", line: 42 });
   });
 
   it("dismisses notices and renders compaction dividers", () => {
@@ -248,6 +274,63 @@ describe("TranscriptItem", () => {
   });
 });
 
+describe("LinkText", () => {
+  const long = "https://auth.example.com/authorize?response_type=code&client_id=abc&state=0123456789";
+
+  it("splits short URLs inline and long URLs into blocks", () => {
+    expect(splitLinks("See https://x.io/docs, then retry.")).toEqual([
+      { type: "text", text: "See " },
+      { type: "url", url: "https://x.io/docs", block: false },
+      { type: "text", text: ", then retry." },
+    ]);
+    expect(splitLinks(`Sign in:\n${long}\n`)).toEqual([
+      { type: "text", text: "Sign in:" },
+      { type: "url", url: long, block: true },
+    ]);
+    expect(splitLinks("no links")).toEqual([{ type: "text", text: "no links" }]);
+  });
+
+  it("keeps brackets that belong to the URL and drops prose punctuation", () => {
+    expect(trimUrl("https://en.wikipedia.org/wiki/Function_(mathematics)")).toBe("https://en.wikipedia.org/wiki/Function_(mathematics)");
+    expect(trimUrl("https://en.wikipedia.org/wiki/Function_(mathematics))")).toBe("https://en.wikipedia.org/wiki/Function_(mathematics)");
+    expect(trimUrl("https://x.io/docs).")).toBe("https://x.io/docs");
+    expect(trimUrl("https://x.io/a?q=[1]")).toBe("https://x.io/a?q=[1]");
+    expect(splitLinks("(see https://x.io/a_(b)).")).toEqual([
+      { type: "text", text: "(see " },
+      { type: "url", url: "https://x.io/a_(b)", block: false },
+      { type: "text", text: ")." },
+    ]);
+  });
+
+  it("opens and copies links", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const { posted } = withContext(<LinkText text={`Open https://x.io or ${long}`} />);
+    fireEvent.click(screen.getByText("https://x.io"));
+    expect(posted.at(-1)).toEqual({ version: 1, type: "url.open", url: "https://x.io" });
+    fireEvent.click(screen.getByTitle(long));
+    expect(posted.at(-1)).toEqual({ version: 1, type: "url.open", url: long });
+    expect(screen.getByText("auth.example.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Copy link"));
+    expect(writeText).toHaveBeenCalledWith(long);
+    await waitFor(() => expect(screen.getByLabelText("Copied")).toBeInTheDocument());
+  });
+
+  it("links URLs in notices and shows URL answers in a receipt", () => {
+    const noop = () => undefined;
+    const { rerender } = withContext(
+      <TranscriptItem item={{ kind: "notice", id: "n", level: "info", text: `Sign in:\n${long}` }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />,
+    );
+    expect(screen.getByLabelText("Copy link")).toBeInTheDocument();
+    rerender(
+      <ChatContext.Provider value={{ post: noop }}>
+        <TranscriptItem item={{ kind: "dialog", id: "d", request: { id: "q", method: "input", title: "Paste the URL" }, answer: long }} tools={{}} onDialogAnswer={noop} onDismiss={noop} />
+      </ChatContext.Provider>,
+    );
+    expect(screen.getByTitle(long)).toHaveClass("dialog-receipt-answer", "mono");
+  });
+});
+
 describe("Composer", () => {
   function renderComposer(overrides: Partial<ComposerProps> = {}) {
     const props: ComposerProps = {
@@ -260,7 +343,7 @@ describe("Composer", () => {
       commands: [],
       localCommands: [],
       stats: { contextUsage: { percent: 85, tokens: 170_000, contextWindow: 200_000 }, cost: 1.234 },
-      loadDraft: () => "",
+      loadDraft: () => ({ text: "", references: [] }),
       history: ["first prompt", "second prompt"],
       onDraftChange: vi.fn(),
       onSubmit: vi.fn(),
@@ -352,6 +435,124 @@ describe("Composer", () => {
     fireEvent.click(screen.getByTitle("Choose model and thinking level"));
     fireEvent.click(screen.getByText("GPT"));
     expect(posted.at(-1)).toEqual({ version: 1, type: "model.set", provider: "openai", modelId: "gpt" });
+  });
+
+  it("inserts an editor selection as a chip and expands it on send", async () => {
+    const ref = createRef<ComposerHandle>();
+    const props: ComposerProps = {
+      busy: false,
+      disabled: false,
+      platform: "darwin",
+      models,
+      model: models[0],
+      thinkingLevel: "medium",
+      commands: [],
+      localCommands: [],
+      stats: undefined,
+      loadDraft: () => ({ text: "Explain", references: [] }),
+      history: [],
+      onDraftChange: vi.fn(),
+      onSubmit: vi.fn(),
+      onAbort: vi.fn(),
+      files: { requestId: -1, files: [] },
+    };
+    const { container } = withContext(<Composer ref={ref} {...props} />);
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    input.setSelectionRange(7, 7);
+    const reference = { label: "@CLAUDE.md#43-48", text: "From `CLAUDE.md` lines 43-48:\n\n```md\nbody\n```\n\n" };
+    act(() => ref.current?.insert(`${reference.label} `, undefined, [reference]));
+    expect(input.value).toBe("Explain @CLAUDE.md#43-48 ");
+    expect(container.querySelector("mark.composer-reference")).toHaveTextContent("@CLAUDE.md#43-48");
+    expect(props.onDraftChange).toHaveBeenLastCalledWith({ text: "Explain @CLAUDE.md#43-48 ", references: [reference] });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      "Explain @CLAUDE.md#43-48\n\nFrom `CLAUDE.md` lines 43-48:\n\n```md\nbody\n```",
+      [],
+      "send",
+    );
+    await waitFor(() => expect(container.querySelector("mark.composer-reference")).not.toBeInTheDocument());
+  });
+
+  it("removes a whole chip with one Backspace", async () => {
+    const reference = { label: "@src/a.ts#3", text: "context" };
+    const { input, props } = renderComposer({ loadDraft: () => ({ text: "see @src/a.ts#3", references: [reference] }) });
+    input.setSelectionRange(15, 15);
+    fireEvent.keyDown(input, { key: "Backspace" });
+    await waitFor(() => expect(input.value).toBe("see "));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenCalledWith("see", [], "send");
+  });
+
+  it("offers the live editor selection and sends it with the next message", async () => {
+    const selection = { label: "@src/a.ts#2-7", text: "From `src/a.ts` lines 2-7:\n\n```ts\ncode\n```\n\n", lineCount: 6 };
+    const { input, props } = renderComposer({ selection });
+    expect(screen.getByRole("button", { name: /6 lines selected/ })).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "Explain", selectionStart: 7 } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("Explain @src/a.ts#2-7\n\nFrom `src/a.ts` lines 2-7:\n\n```ts\ncode\n```", [], "send");
+    // Sent once: the indicator waits for a new selection.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /lines selected/ })).not.toBeInTheDocument());
+  });
+
+  it("skips the live selection for slash commands and when dismissed", () => {
+    const selection = { label: "@a.ts#1", text: "From `a.ts` line 1:\n\n```ts\nx\n```\n\n", lineCount: 1 };
+    const { input, props } = renderComposer({ selection });
+    fireEvent.change(input, { target: { value: "/compact", selectionStart: 8 } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("/compact", [], "send");
+    fireEvent.click(screen.getByRole("button", { name: "Don't send this selection" }));
+    expect(screen.queryByRole("button", { name: /1 line selected/ })).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "hi", selectionStart: 2 } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("hi", [], "send");
+  });
+
+  it("offers a selection again only after it changes, and not after sending it inline", async () => {
+    const make = () => ({ label: "@a.ts#1", text: "From `a.ts` line 1:\n\n```ts\nx\n```\n\n", lineCount: 1 });
+    const { input, props, posted, rerender } = renderComposer({ selection: make() });
+    const render = (selection: ComposerProps["selection"]) =>
+      rerender(
+        <ChatContext.Provider value={{ post: (message) => posted.push(message) }}>
+          <Composer {...props} selection={selection} />
+        </ChatContext.Provider>,
+      );
+    const indicator = () => screen.queryByRole("button", { name: /1 line selected/ });
+    fireEvent.click(screen.getByRole("button", { name: "Don't send this selection" }));
+    expect(indicator()).not.toBeInTheDocument();
+    // Cleared, then the same lines selected again.
+    render(undefined);
+    render(make());
+    expect(indicator()).toBeInTheDocument();
+    // Sent as an inline chip: not attached again to the next message.
+    fireEvent.click(indicator()!);
+    await waitFor(() => expect(input.value).toBe("@a.ts#1 "));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("@a.ts#1\n\nFrom `a.ts` line 1:\n\n```ts\nx\n```", [], "send");
+    await waitFor(() => expect(input.value).toBe(""));
+    expect(indicator()).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "next", selectionStart: 4 } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith("next", [], "send");
+  });
+
+  it("places the live selection in the text as a chip when clicked", async () => {
+    const selection = { label: "@a.ts#1", text: "ctx", lineCount: 1 };
+    const { input, container } = renderComposer({ selection });
+    fireEvent.click(screen.getByRole("button", { name: /1 line selected/ }));
+    await waitFor(() => expect(input.value).toBe("@a.ts#1 "));
+    expect(container.querySelector("mark.composer-reference")).toHaveTextContent("@a.ts#1");
+    expect(screen.queryByRole("button", { name: /1 line selected/ })).not.toBeInTheDocument();
+  });
+
+  it("turns attached selections back into chips when recalling history", () => {
+    const sent = "Explain @a.ts#1\n\nFrom `a.ts` line 1:\n\n```ts\nx\n```";
+    const { input, props, container } = renderComposer({ history: [sent] });
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("Explain @a.ts#1");
+    expect(container.querySelector("mark.composer-reference")).toHaveTextContent("@a.ts#1");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSubmit).toHaveBeenLastCalledWith(sent, [], "send");
   });
 
   it("asks the host to pick attachments", () => {

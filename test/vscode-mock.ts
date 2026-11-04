@@ -64,6 +64,7 @@ function disposable() {
 export const window = {
   activeTextEditor: undefined as unknown,
   onDidChangeActiveTextEditor: vi.fn(),
+  onDidChangeTextEditorSelection: vi.fn(),
   registerWebviewViewProvider: vi.fn(),
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
@@ -100,6 +101,7 @@ export function resetVscodeMock(): void {
   configuration.clear();
   window.activeTextEditor = undefined;
   window.onDidChangeActiveTextEditor.mockReset().mockImplementation(disposable);
+  window.onDidChangeTextEditorSelection.mockReset().mockImplementation(disposable);
   window.registerWebviewViewProvider.mockReset().mockImplementation(disposable);
   window.showInformationMessage.mockReset().mockResolvedValue(undefined);
   window.showWarningMessage.mockReset().mockResolvedValue(undefined);

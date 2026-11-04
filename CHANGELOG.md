@@ -4,6 +4,15 @@ All notable changes to Pi Agent Manager are documented here. (During development
 
 ## Unreleased
 
+### Added
+
+- **Live selection.** While code is selected in the editor, the composer shows **N lines selected**. That selection is sent with your next message; click it to place it in the text, or × to leave it out.
+- Selections in sent messages show as `@file#lines` chips. Click one to open the file at those lines, or hover to preview the code. Recalling a past prompt with ↑ brings its chips back.
+
+### Changed
+
+- **Add Selection to Chat** inserts a compact `@file#43-48` chip instead of pasting the whole code block. The code is still sent to Pi, and one Backspace removes the chip.
+
 ### Fixed
 
 - In Cursor, Pi opens from the left activity bar. Cursor does not register the Secondary Side Bar, so opening Pi failed with `command 'workbench.view.extension.piAgentManager' not found`. VS Code still opens Pi in the Secondary Side Bar, and only one panel is shown.

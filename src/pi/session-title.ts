@@ -1,7 +1,23 @@
+import { findReferenceTokens, parseReferencedPrompt } from "../shared/context-references";
+
 const DEFAULT_MAX_LENGTH = 52;
 
+/** Drops attached selections and names each `@path#lines` chip by its file name. */
+function removeSelectionChips(prompt: string): string {
+  const { message, references } = parseReferencedPrompt(prompt);
+  if (!references.length) return prompt;
+  const names = new Map(references.map((reference) => [reference.label, reference.path.slice(reference.path.lastIndexOf("/") + 1)]));
+  let output = "";
+  let cursor = 0;
+  for (const token of findReferenceTokens(message, [...names.keys()])) {
+    output += message.slice(cursor, token.start) + (names.get(token.label) ?? "");
+    cursor = token.end;
+  }
+  return output + message.slice(cursor);
+}
+
 function removeEditorContext(prompt: string): string {
-  return stripFencedBlocks(prompt)
+  return stripFencedBlocks(removeSelectionChips(prompt))
     .replace(/^\s*From\s+`?[^`\n]+`?\s+lines?\s+\d+(?:-\d+)?:\s*/i, " ");
 }
 

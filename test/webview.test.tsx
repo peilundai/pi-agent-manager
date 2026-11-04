@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { HostToWebviewMessage, WebviewToHostMessage } from "../src/shared/protocol";
 import { App } from "../src/webview/App";
+import { expandReferences, findReferenceTokens } from "../src/shared/context-references";
 import { mentionAt, slashQuery } from "../src/webview/components/Composer";
 import type { WebviewTransport } from "../src/webview/vscode";
 
@@ -15,7 +16,7 @@ function setup() {
       await new Promise((resolve) => setTimeout(resolve, 40));
     });
   };
-  return { posted, send, view };
+  return { posted, send, view, transport };
 }
 
 const snapshot: HostToWebviewMessage = {
@@ -38,6 +39,28 @@ describe("composer helpers", () => {
     expect(mentionAt("email a@b", 9)).toBeUndefined();
     expect(slashQuery("/rev", 4)).toBe("rev");
     expect(slashQuery("hi /rev", 7)).toBeUndefined();
+  });
+});
+
+describe("reference tokens", () => {
+  it("finds labels only as whole whitespace-delimited tokens", () => {
+    const labels = ["@a.ts#1", "@a.ts#1-2", "@my file.ts#4"];
+    expect(findReferenceTokens("x @a.ts#1-2 @a.ts#1\n@my file.ts#4 y@a.ts#1", labels)).toEqual([
+      { start: 2, end: 11, label: "@a.ts#1-2" },
+      { start: 12, end: 19, label: "@a.ts#1" },
+      { start: 20, end: 33, label: "@my file.ts#4" },
+    ]);
+  });
+
+  it("appends the context of references still in the text, once each, in order", () => {
+    const references = [
+      { label: "@b.ts#2", text: "B\n\n" },
+      { label: "@a.ts#1", text: "A\n\n" },
+      { label: "@gone.ts#9", text: "G" },
+    ];
+    expect(expandReferences("@a.ts#1 vs @b.ts#2 and @a.ts#1", references)).toBe("@a.ts#1 vs @b.ts#2 and @a.ts#1\n\nA\n\nB");
+    expect(expandReferences("@b.ts#2", references)).toBe("@b.ts#2\n\nB");
+    expect(expandReferences("plain", references)).toBe("plain");
   });
 });
 
@@ -146,6 +169,15 @@ describe("App", () => {
     expect(screen.queryByLabelText("Message Pi")).not.toBeInTheDocument();
     await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin" });
     expect(screen.getByLabelText("Message Pi")).toHaveValue("half-written prompt");
+  });
+
+  it("inserts selections from the host as chips and persists them with the draft", async () => {
+    const { send, transport } = setup();
+    await send({ version: 1, type: "init", workspaceName: "demo", platform: "darwin" }, snapshot);
+    const reference = { label: "@src/app.ts#5", text: "From `src/app.ts` line 5:\n\n```ts\nx\n```\n\n" };
+    await send({ version: 1, type: "composer.insert", text: "@src/app.ts#5 ", references: [reference] });
+    expect(screen.getByLabelText("Message Pi")).toHaveValue("@src/app.ts#5 ");
+    expect(transport.setState).toHaveBeenLastCalledWith(expect.objectContaining({ draft: "@src/app.ts#5 ", draftReferences: [reference] }));
   });
 
   it("offers a restart when Pi exits", async () => {

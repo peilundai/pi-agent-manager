@@ -1,14 +1,51 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { findReferenceTokens, parseReferencedPrompt, type ParsedReference } from "../../shared/context-references";
 import type { DialogResponse } from "../../shared/protocol";
 import type { AssistantBlock, ChatItem, DialogRequest, ToolState } from "../chat-state";
 import { useChat } from "./context";
+import { isUrl, LinkText } from "./LinkText";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 
 const COLLAPSE_USER_CHARS = 900;
 
+const PREVIEW_LINES = 12;
+
+function ReferenceChip({ reference }: { reference: ParsedReference }) {
+  const { post } = useChat();
+  const lines = reference.code.split("\n");
+  const range = reference.startLine === reference.endLine ? `line ${reference.startLine}` : `lines ${reference.startLine}-${reference.endLine}`;
+  const preview = lines.slice(0, PREVIEW_LINES).join("\n") + (lines.length > PREVIEW_LINES ? "\n…" : "");
+  return (
+    <button
+      type="button"
+      className="reference-chip"
+      title={`${reference.path} ${range}\n\n${preview}`}
+      onClick={() => post({ version: 1, type: "file.open", path: reference.path, line: reference.startLine - 1 })}
+    >
+      {reference.label}
+    </button>
+  );
+}
+
+/** The typed message with its attached selections drawn as chips. */
+function MessageWithReferences({ message, references }: { message: string; references: ParsedReference[] }) {
+  const byLabel = new Map(references.map((reference) => [reference.label, reference]));
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const token of findReferenceTokens(message, [...byLabel.keys()])) {
+    const reference = byLabel.get(token.label);
+    if (!reference) continue;
+    parts.push(message.slice(cursor, token.start), <ReferenceChip key={token.start} reference={reference} />);
+    cursor = token.end;
+  }
+  parts.push(message.slice(cursor));
+  return <>{parts}</>;
+}
+
 export const UserMessage = memo(function UserMessage({ item }: { item: Extract<ChatItem, { kind: "user" }> }) {
-  const long = item.text.length > COLLAPSE_USER_CHARS || item.text.split("\n").length > 14;
+  const { message, references } = useMemo(() => parseReferencedPrompt(item.text), [item.text]);
+  const long = message.length > COLLAPSE_USER_CHARS || message.split("\n").length > 14;
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`user-message${item.pending ? " pending" : ""}`}>
@@ -19,7 +56,11 @@ export const UserMessage = memo(function UserMessage({ item }: { item: Extract<C
           ))}
         </div>
       )}
-      {item.text && <div className={`user-text${long && !expanded ? " clamped" : ""}`}>{item.text}</div>}
+      {message && (
+        <div className={`user-text${long && !expanded ? " clamped" : ""}`}>
+          {references.length ? <MessageWithReferences message={message} references={references} /> : message}
+        </div>
+      )}
       {long && (
         <button type="button" className="link-button" onClick={() => setExpanded(!expanded)}>
           {expanded ? "Show less" : "Show more"}
@@ -131,10 +172,14 @@ export function DialogCard({
   };
   if (answer || expired) {
     return (
-      <div className="dialog-receipt">
-        <span className="codicon codicon-pass" aria-hidden="true" />
-        <span className="dialog-receipt-title">{request.title}</span>
-        <span className="dialog-receipt-answer">{answer ?? "Timed out"}</span>
+      <div className={`dialog-receipt${answer ? "" : " timed-out"}`}>
+        <span className={`codicon codicon-${answer ? "pass" : "clock"}`} aria-hidden="true" />
+        <div className="dialog-receipt-body">
+          <span className="dialog-receipt-title">{request.title}</span>
+          <span className={`dialog-receipt-answer${answer && isUrl(answer) ? " mono" : ""}`} title={answer ?? "Timed out"}>
+            {answer ?? "Timed out"}
+          </span>
+        </div>
       </div>
     );
   }
@@ -142,10 +187,16 @@ export function DialogCard({
     <div className="dialog-card" role="group" aria-label={request.title}>
       <div className="dialog-title">
         <span className="codicon codicon-question" aria-hidden="true" />
-        {request.title}
+        <span className="dialog-title-text">
+          <LinkText text={request.title} />
+        </span>
         {remaining !== undefined && <span className="dialog-timer">{remaining}s</span>}
       </div>
-      {request.message && <div className="dialog-message">{request.message}</div>}
+      {request.message && (
+        <div className="dialog-message">
+          <LinkText text={request.message} />
+        </div>
+      )}
       {request.method === "confirm" && (
         <div className="dialog-actions">
           <button type="button" className="button primary" onClick={() => respond("Yes", { confirmed: true })} autoFocus>
@@ -238,7 +289,9 @@ export function TranscriptItem({
             className={`codicon codicon-${item.level === "error" ? "error" : item.level === "warning" ? "warning" : "info"}`}
             aria-hidden="true"
           />
-          <span className="notice-text">{item.text}</span>
+          <span className="notice-text">
+            <LinkText text={item.text} />
+          </span>
           <button type="button" className="icon-button small" aria-label="Dismiss" onClick={() => onDismiss(item.id)}>
             <span className="codicon codicon-close" />
           </button>

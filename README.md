@@ -16,7 +16,7 @@
 |---|---|
 | switch between a terminal and the editor to check what Pi did | shows each step in the side bar: files read, **inline diffs**, command output. Click a path to open the file. |
 | want to stay in control of what Pi does | lets you <kbd>Esc</kbd> to interrupt Pi and <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> to steer it mid-run. Prompts from your Pi extensions, such as a bash confirmation, appear as inline **Yes / No cards**. |
-| copy and paste code and paths into the agent | uses <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> to send the current selection, `@` to mention files, and paste or drop to attach screenshots. |
+| copy and paste code and paths into the agent | sends your editor selection with the next message (or <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> adds it as an `@file#lines` chip), `@` to mention files, and paste or drop to attach screenshots. |
 | lose earlier conversations | keeps **past chats** per workspace, searchable and grouped by day, so you can resume one in a click. |
 | use a company gateway or MCP server keyed through env vars | loads your **login-shell environment**, names any variable that's missing, and stores secrets in VS Code's encrypted storage. |
 | develop on a remote box over SSH or a tunnel | runs on the **remote host**, next to your code and your remote `pi`. See [Remote development](#remote-development). |
