@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { generateSessionTitle } from "../src/pi/session-title";
 
 describe("generateSessionTitle", () => {
+  it("names selection chips by file and ignores their attached code", () => {
+    expect(generateSessionTitle("Summarize @docs/CLAUDE.md#43-48\n\nFrom `docs/CLAUDE.md` lines 43-48:\n\n```md\n# Install\n```")).toBe(
+      "Summarize CLAUDE.md",
+    );
+  });
+
   it("removes injected editor context before deriving the request", () => {
     expect(
       generateSessionTitle(

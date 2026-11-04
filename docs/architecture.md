@@ -47,6 +47,8 @@ The probe never reads the shell's stderr, because startup files can trace export
 - Extension UI dialogs become dialog items, and `notify` becomes a notice.
 - A snapshot (`get_messages`) rehydrates the same structures, so reloading the webview or resuming a chat renders the same way as live streaming.
 
+Editor selections travel as `ContextReference`s (`src/shared/context-references.ts`). The composer shows a compact `@path#lines` token, painted as a chip by an overlay behind the textarea, and `expandReferences` appends each referenced code block when the prompt is sent. `parseReferencedPrompt` reverses that, so sent messages, recalled history and session titles show the chip again, even after a reload. The host posts the active editor's selection (`editor.selection`, debounced) for the composer's **N lines selected** indicator.
+
 Host messages are applied once per animation frame. Markdown is split into blank-line-separated blocks (fences kept intact), so only the growing tail is re-parsed while text streams.
 
 ## Theme

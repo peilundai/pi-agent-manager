@@ -85,6 +85,56 @@ test.describe("Pi Agent Manager webview", () => {
     await expect(input).toHaveValue("look at @src/greet.ts ");
   });
 
+  test("shows editor selections as chips and sends their content", async ({ chat }) => {
+    const { page } = chat;
+    await expect(page.locator(".model-pill .model-name")).toHaveText("Mock Sonnet");
+    const input = page.getByLabel("Message Pi");
+    await input.fill("Explain ");
+    const reference = { label: "@src/greet.ts#1-3", text: "From `src/greet.ts` lines 1-3:\n\n```typescript\nexport const greet = () => 'hi';\n```\n\n" };
+    await page.evaluate(
+      (value) => window.postMessage({ version: 1, type: "composer.insert", text: `${value.label} `, references: [value] }, "*"),
+      reference,
+    );
+    await expect(input).toHaveValue("Explain @src/greet.ts#1-3 ");
+    await expect(page.locator("mark.composer-reference")).toHaveText("@src/greet.ts#1-3");
+    await input.pressSequentially("briefly");
+    await chat.screenshot("selection-chip-dark");
+    await chat.setTheme("light");
+    await chat.screenshot("selection-chip-light");
+    await input.press("Enter");
+    await expect.poll(() => chat.received.find((message) => message.type === "prompt")).toMatchObject({
+      text: "Explain @src/greet.ts#1-3 briefly\n\nFrom `src/greet.ts` lines 1-3:\n\n```typescript\nexport const greet = () => 'hi';\n```",
+    });
+    await expect(page.locator("mark.composer-reference")).toHaveCount(0);
+    // The sent message keeps the compact chip instead of the pasted code.
+    const sent = page.locator(".user-message").last();
+    await expect(sent.getByRole("button", { name: "@src/greet.ts#1-3" })).toBeVisible();
+    await expect(sent).not.toContainText("export const greet");
+  });
+
+  test("sends the live editor selection with the next message", async ({ chat }) => {
+    const { page } = chat;
+    await expect(page.locator(".model-pill .model-name")).toHaveText("Mock Sonnet");
+    const selection = {
+      label: "@CLAUDE.md#43-48",
+      text: "From `CLAUDE.md` lines 43-48:\n\n```markdown\n# Install\n```\n\n",
+      lineCount: 6,
+    };
+    await page.evaluate((value) => window.postMessage({ version: 1, type: "editor.selection", selection: value }, "*"), selection);
+    const indicator = page.getByRole("button", { name: /6 lines selected/ });
+    await expect(indicator).toBeVisible();
+    const input = page.getByLabel("Message Pi");
+    await input.fill("Summarize this");
+    await chat.screenshot("live-selection-dark");
+    await input.press("Enter");
+    await expect.poll(() => chat.received.find((message) => message.type === "prompt")).toMatchObject({
+      text: "Summarize this @CLAUDE.md#43-48\n\nFrom `CLAUDE.md` lines 43-48:\n\n```markdown\n# Install\n```",
+    });
+    await expect(indicator).toHaveCount(0);
+    await expect(page.locator(".user-message").last().getByRole("button", { name: "@CLAUDE.md#43-48" })).toBeVisible();
+    await chat.screenshot("sent-chip-dark");
+  });
+
   test("lists and resumes past chats", async ({ chat }) => {
     const { page } = chat;
     const input = page.getByLabel("Message Pi");

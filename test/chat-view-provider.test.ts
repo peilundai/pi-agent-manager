@@ -278,9 +278,54 @@ describe("ChatViewProvider", () => {
     await ready();
     await provider.sendSelection();
     expect(posted.slice(-2)).toEqual([
-      { version: 1, type: "composer.insert", text: "From `src/app.ts` line 5:\n\n```typescript\nconst a = 1;\n```\n\n" },
+      {
+        version: 1,
+        type: "composer.insert",
+        text: "@src/app.ts#5 ",
+        references: [{ label: "@src/app.ts#5", text: "From `src/app.ts` line 5:\n\n```typescript\nconst a = 1;\n```\n\n" }],
+      },
       { version: 1, type: "composer.focus" },
     ]);
+  });
+
+  it("tracks the live editor selection for the composer", async () => {
+    const editor = (start: number, end: number, scheme = "file") => ({
+      document: {
+        uri: { ...mock.Uri.file("/work/src/app.ts"), scheme },
+        fileName: "/work/src/app.ts",
+        languageId: "typescript",
+        lineAt: () => ({ text: "" }),
+        getText: () => "a\nb",
+      },
+      selection: { isEmpty: start === end, active: { line: end }, start: { line: start }, end: { line: end, character: 3 } },
+    });
+    mock.workspace.asRelativePath.mockReturnValue("src/app.ts");
+    mock.window.activeTextEditor = editor(1, 2);
+    const { provider, posted, ready } = setup();
+    await ready();
+    const selections = () => posted.filter((message) => message.type === "editor.selection");
+    expect(selections()).toEqual([
+      {
+        version: 1,
+        type: "editor.selection",
+        selection: { label: "@src/app.ts#2-3", text: "From `src/app.ts` lines 2-3:\n\n```typescript\na\nb\n```\n\n", lineCount: 2 },
+      },
+    ]);
+    vi.useFakeTimers();
+    try {
+      provider.editorSelectionChanged(editor(1, 2) as never);
+      vi.advanceTimersByTime(200);
+      expect(selections()).toHaveLength(1);
+      provider.editorSelectionChanged(editor(4, 4) as never);
+      vi.advanceTimersByTime(200);
+      expect(selections().at(-1)).toEqual({ version: 1, type: "editor.selection" });
+      provider.editorSelectionChanged(editor(0, 1, "output") as never);
+      provider.editorSelectionChanged(undefined);
+      vi.advanceTimersByTime(200);
+      expect(selections()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("replays composer insertions queued before the webview was ready", async () => {

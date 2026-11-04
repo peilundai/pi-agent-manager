@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import * as vscode from "vscode";
 import { boundFilePosition, imageMimeType, searchFiles, selectionFromEditor } from "../editor/editor-context";
-import { formatEditorSelection } from "../editor/selection";
+import { formatEditorSelection, isSupportedDocumentScheme, selectionLabel } from "../editor/selection";
 import { ChatSession, type ChatSessionOptions } from "../pi/chat-session";
 import { augmentPath, buildPiInvocation, buildRpcArgs, resolvePiCommand } from "../pi/command-resolver";
 import { PiRpcClient } from "../pi/rpc-client";
@@ -13,6 +13,7 @@ import type { SessionSummary, SetupErrorState } from "../shared/model";
 import {
   isWebviewMessage,
   TOOL_EXPANSIONS,
+  type EditorSelection,
   type HostToWebviewMessage,
   type ImageAttachment,
   type ToolExpansion,
@@ -81,6 +82,10 @@ export function webviewHtml(webview: Pick<vscode.Webview, "cspSource" | "asWebvi
 </html>`;
 }
 
+function editorPath(document: vscode.TextDocument): string {
+  return document.uri.scheme === "untitled" ? document.fileName : vscode.workspace.asRelativePath(document.uri, false);
+}
+
 function toolExpansionSetting(): ToolExpansion {
   const value = vscode.workspace.getConfiguration("piAgentManager").get<unknown>("expandToolCards", "edits");
   return TOOL_EXPANSIONS.includes(value as ToolExpansion) ? (value as ToolExpansion) : "edits";
@@ -92,6 +97,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private outbox: HostToWebviewMessage[] = [];
   private readonly disposables: vscode.Disposable[] = [];
   private sessionsTimer: ReturnType<typeof setTimeout> | undefined;
+  private selectionTimer: ReturnType<typeof setTimeout> | undefined;
+  /** What the webview last heard about the editor selection, so unchanged selections aren't re-sent. */
+  private postedSelection = "";
   private sessions: SessionSummary[] = [];
   private watcher: { dispose(): void } | undefined;
   private fileCache: { at: number; cwd: string; files: string[] } | undefined;
@@ -240,19 +248,52 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this.post({ version: 1, type: "composer.focus" });
   }
 
+  /** Tells the webview about the active editor's selection, debounced while the user drags. */
+  editorSelectionChanged(editor: vscode.TextEditor | undefined): void {
+    if (this.selectionTimer) clearTimeout(this.selectionTimer);
+    this.selectionTimer = setTimeout(() => {
+      this.selectionTimer = undefined;
+      this.postEditorSelection(editor);
+    }, 150);
+  }
+
+  private postEditorSelection(editor: vscode.TextEditor | undefined): void {
+    if (!this.view || !this.ready) return;
+    const selection = this.liveSelection(editor);
+    const key = selection ? `${selection.label}\0${selection.text}` : "";
+    if (key === this.postedSelection) return;
+    this.postedSelection = key;
+    this.post({ version: 1, type: "editor.selection", ...(selection ? { selection } : {}) });
+  }
+
+  private liveSelection(editor: vscode.TextEditor | undefined): EditorSelection | undefined {
+    if (!editor || editor.selection.isEmpty || !isSupportedDocumentScheme(editor.document.uri.scheme)) return undefined;
+    try {
+      const context = selectionFromEditor(editor, editorPath(editor.document));
+      if (!context.text.trim()) return undefined;
+      return {
+        label: selectionLabel(context),
+        text: formatEditorSelection(context),
+        lineCount: context.endLine - context.startLine + 1,
+      };
+    } catch {
+      // Too large or unsafe to send; the indicator just stays hidden.
+      return undefined;
+    }
+  }
+
   async sendSelection(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
       void vscode.window.showInformationMessage("Open a file and select code to add it to Pi Agent Manager.");
       return;
     }
-    const document = editor.document;
-    const relativePath =
-      document.uri.scheme === "untitled" ? document.fileName : vscode.workspace.asRelativePath(document.uri, false);
     try {
-      const text = formatEditorSelection(selectionFromEditor(editor, relativePath));
+      const selection = selectionFromEditor(editor, editorPath(editor.document));
+      const label = selectionLabel(selection);
+      const text = formatEditorSelection(selection);
       await this.reveal();
-      this.post({ version: 1, type: "composer.insert", text });
+      this.post({ version: 1, type: "composer.insert", text: `${label} `, references: [{ label, text }] });
       this.post({ version: 1, type: "composer.focus" });
     } catch (error) {
       void vscode.window.showWarningMessage(errorMessage(error));
@@ -261,6 +302,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   dispose(): void {
     if (this.sessionsTimer) clearTimeout(this.sessionsTimer);
+    if (this.selectionTimer) clearTimeout(this.selectionTimer);
     this.watcher?.dispose();
     for (const disposable of this.disposables.splice(0)) disposable.dispose();
     void this.session.dispose();
@@ -286,6 +328,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this.ready = true;
         this.postInit();
         this.flushOutbox();
+        // A freshly loaded webview shows no selection, so only a real one needs posting.
+        this.postedSelection = "";
+        this.postEditorSelection(vscode.window.activeTextEditor);
         if (this.setupError) return;
         void this.refreshSessions();
         if (this.session.running) {

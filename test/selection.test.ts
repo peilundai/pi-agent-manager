@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   formatEditorSelection,
   isSupportedDocumentScheme,
+  selectionLabel,
 } from "../src/editor/selection";
+
+describe("selectionLabel", () => {
+  it("names a one-based line or line range", () => {
+    expect(selectionLabel({ relativePath: "CLAUDE.md", startLine: 42, endLine: 47 })).toBe("@CLAUDE.md#43-48");
+    expect(selectionLabel({ relativePath: "src/a.ts", startLine: 4, endLine: 4 })).toBe("@src/a.ts#5");
+  });
+});
 
 describe("formatEditorSelection", () => {
   it("formats selected code with a one-based range", () => {
