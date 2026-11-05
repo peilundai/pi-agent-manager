@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    # Dependabot branches are tested through their pull requests; running both
-    # doubles the macOS jobs and exhausts the runner quota.
-    branches-ignore: ["dependabot/**"]
+    # Other branches are tested through their pull requests; running both
+    # doubles the macOS jobs and exhausts the runner quota. Use "Run workflow"
+    # to test a branch that has no pull request.
+    branches: [main]
     tags-ignore: ["**"]
   pull_request:
     branches: [main]
@@ -44,6 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # macos-latest runs on Apple Silicon (arm64), like most Mac users.
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22]
         include:
