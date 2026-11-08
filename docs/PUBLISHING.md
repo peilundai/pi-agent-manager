@@ -12,20 +12,14 @@ Open VSX is skipped with a warning while `OVSX_PAT` is missing. The Marketplace 
 
 Extension ID: **`peilundai.pi-agent-manager`**. The ID can never change after the first publish.
 
-## Status and what's left
+## Status
 
 | Store | State |
 | --- | --- |
 | VS Code Marketplace | Live as `peilundai.pi-agent-manager` since 0.2.2, published with Trusted Publishing. |
-| Open VSX | Workflow ready. Waiting on the owner-only steps below; 0.2.2 was skipped with a warning. |
+| Open VSX | Live as [`peilundai/pi-agent-manager`](https://open-vsx.org/extension/peilundai/pi-agent-manager) since 0.2.4, published with the `OVSX_PAT` secret. |
 
-Only the repository owner can do these, because they need your Open VSX and GitHub accounts:
-
-- [ ] Sign in at <https://open-vsx.org> with GitHub, link an Eclipse account and sign the publisher agreement ([step 1](#open-vsx)).
-- [ ] Create an Open VSX access token ([step 2](#open-vsx)).
-- [ ] Create the `peilundai` namespace with that token ([step 3](#open-vsx)).
-- [ ] Add the token as the repository secret `OVSX_PAT` at <https://github.com/peilundai/pi-agent-manager/settings/secrets/actions> ([step 4](#open-vsx)).
-- [ ] Publish the current version to Open VSX ([step 5](#open-vsx)). Later releases go there automatically.
+Both stores are set up, so every release goes to both automatically. The one-time setup below stays here as a reference for renewing tokens or moving to a new account.
 
 ## One-time setup
 
