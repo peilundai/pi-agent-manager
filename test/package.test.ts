@@ -4,6 +4,7 @@ import { validateVsixManifest, verifyRequiredFiles } from "../scripts/verify-vsi
 
 const required = [
   "extension/dist/extension.js",
+  "extension/dist/relay.js",
   "extension/dist/webview.js",
   "extension/dist/webview.css",
   "extension/dist/codicon.ttf",

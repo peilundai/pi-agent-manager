@@ -1,6 +1,7 @@
 import type { ChatSnapshot, DialogResponse, HostToWebviewMessage, ImageAttachment, PromptMode } from "../shared/protocol";
 import type { RpcClientListener } from "./rpc-client";
 import type { PiCommand, PiEvent, PiMessage, PiModel, PiSessionStats, PiState, ThinkingLevel } from "./rpc-types";
+import { RunReplay } from "./run-replay";
 import { sanitizeEvent, sanitizeMessages } from "./sanitize";
 
 const EVENT_FLUSH_MS = 16;
@@ -15,6 +16,10 @@ export interface RpcClientLike {
   send(record: Record<string, unknown>): void;
   stderr(): string;
   stop(): Promise<void>;
+  /** True when start() reattached to a Pi process that outlived the previous window. */
+  readonly reattached?: boolean;
+  /** Lets go of Pi without stopping it, so the next window can reattach. */
+  detach?(): Promise<void>;
 }
 
 export interface ChatSessionOptions {
@@ -58,9 +63,14 @@ export class ChatSession {
   private snapshotGate: "idle" | "before" | "after" = "idle";
   private beforeEvents: PiEvent[] = [];
   private afterEvents: PiEvent[] = [];
+  /** The live run state at the snapshot boundary, replayed after the snapshot. */
+  private boundaryReplay: PiEvent[] | undefined;
   private snapshotInFlight: Promise<void> | undefined;
-  /** Extension dialogs Pi is still waiting on; re-sent after each snapshot. */
-  private readonly pendingDialogs = new Map<string, { event: PiEvent; expiresAt: number | undefined }>();
+  /**
+   * What a snapshot cannot show: the streaming message, running tools, unanswered dialogs.
+   * Replayed after each snapshot, so a reloaded webview or reattached window sees a run in progress.
+   */
+  private readonly run = new RunReplay();
 
   constructor(private readonly options: ChatSessionOptions) {}
 
@@ -193,7 +203,7 @@ export class ChatSession {
   }
 
   respondToDialog(response: DialogResponse): void {
-    this.pendingDialogs.delete(response.id);
+    this.run.respond(response.id);
     this.client?.send({ type: "extension_ui_response", ...response });
   }
 
@@ -213,13 +223,14 @@ export class ChatSession {
     this.beforeEvents = this.takeQueue();
     this.afterEvents = [];
     this.snapshotGate = "before";
+    this.boundaryReplay = undefined;
     let posted = false;
     try {
       const [state, messages, models, commands, stats] = await Promise.all([
         client.request<PiState>({ type: "get_state" }),
         client.request<{ messages?: PiMessage[] }>({ type: "get_messages" }).then((data) => {
           // Fallback for clients that do not report responses synchronously.
-          if (this.snapshotGate === "before") this.snapshotGate = "after";
+          this.markBoundary();
           return data?.messages ?? [];
         }),
         client.request<{ models?: PiModel[] }>({ type: "get_available_models" }).then((data) => data?.models ?? []).catch(() => []),
@@ -240,29 +251,39 @@ export class ChatSession {
     } finally {
       const before = this.beforeEvents;
       const after = this.afterEvents;
+      const boundary = this.boundaryReplay ?? this.run.replay();
       this.snapshotGate = "idle";
       this.beforeEvents = [];
       this.afterEvents = [];
+      this.boundaryReplay = undefined;
       if (generation === this.generation) {
         // Without a snapshot nothing is covered: replay everything in order.
-        const replay = [...(posted ? withoutSnapshotCoverage(before) : before), ...after];
-        if (posted) replay.push(...this.livePendingDialogs());
+        const replay = posted ? [...boundary, ...withoutSnapshotCoverage(before), ...after] : [...before, ...after];
         for (const event of replay) this.enqueueSanitized(event);
         this.flush();
       }
     }
   }
 
-  private livePendingDialogs(): PiEvent[] {
-    const now = Date.now();
-    const live: PiEvent[] = [];
-    for (const [id, entry] of this.pendingDialogs) {
-      if (entry.expiresAt === undefined) live.push(entry.event);
-      else if (entry.expiresAt <= now) this.pendingDialogs.delete(id);
-      // Re-send with the time Pi has left before it auto-resolves the dialog.
-      else live.push({ ...entry.event, timeout: entry.expiresAt - now });
-    }
-    return live;
+  /** Marks the point in Pi's stream where `get_messages` was answered. */
+  private markBoundary(): void {
+    if (this.snapshotGate !== "before") return;
+    this.snapshotGate = "after";
+    this.boundaryReplay = this.run.replay();
+  }
+
+  /**
+   * Lets go of Pi without stopping it (window reload or close). A relay-backed Pi keeps running
+   * and the next window reattaches; a plain child process simply stops.
+   */
+  async detach(): Promise<void> {
+    this.disposed = true;
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    const client = this.client;
+    this.client = undefined;
+    this.generation += 1;
+    if (client?.detach) await client.detach();
+    else await client?.stop();
   }
 
   async dispose(): Promise<void> {
@@ -276,6 +297,7 @@ export class ChatSession {
     this.generation += 1;
     const generation = this.generation;
     this.busy = false;
+    this.run.reset();
     this.options.post({ version: 1, type: "process", status: "starting" });
     let client: RpcClientLike;
     try {
@@ -285,7 +307,7 @@ export class ChatSession {
         },
         onResponse: ({ command }) => {
           if (generation === this.generation && command === "get_messages" && this.snapshotGate === "before") {
-            this.snapshotGate = "after";
+            this.markBoundary();
           }
         },
         onExit: ({ code, signal, stderr, expected }) => {
@@ -316,7 +338,7 @@ export class ChatSession {
     }
     this.client = client;
     try {
-      if (sessionPath) {
+      if (sessionPath && !client.reattached) {
         // Switching through RPC avoids racing Pi's startup session selection.
         await client.request({ type: "switch_session", sessionPath });
       }
@@ -341,7 +363,7 @@ export class ChatSession {
     this.client = undefined;
     this.generation += 1;
     this.busy = false;
-    this.pendingDialogs.clear();
+    this.run.reset();
     await client?.stop();
   }
 
@@ -370,10 +392,6 @@ export class ChatSession {
           this.options.post({ version: 1, type: "composer.insert", text: event.text });
           return;
         }
-        if (typeof event.id === "string" && DIALOG_METHODS.has(String(event.method))) {
-          const timeout = typeof event.timeout === "number" && event.timeout > 0 ? event.timeout : undefined;
-          this.pendingDialogs.set(event.id, { event, expiresAt: timeout ? Date.now() + timeout : undefined });
-        }
         break;
     }
     this.enqueue(event);
@@ -382,6 +400,7 @@ export class ChatSession {
   private enqueue(event: PiEvent): void {
     const sanitized = sanitizeEvent(event);
     if (!sanitized) return;
+    this.run.track(sanitized);
     if (this.snapshotGate === "before") this.beforeEvents.push(sanitized);
     else if (this.snapshotGate === "after") this.afterEvents.push(sanitized);
     else this.enqueueSanitized(sanitized);
@@ -452,31 +471,17 @@ export class ChatSession {
   }
 }
 
-const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
-const MESSAGE_EVENTS = new Set(["message_start", "message_update", "message_end"]);
-
 /**
- * Removes events whose effect a `get_messages` snapshot already contains: the lifecycle of every
- * message that completed (`message_end`) before the boundary, and compaction results (the
- * snapshot holds the compaction summary). A message still streaming at the boundary is not in
- * the snapshot, so its `message_start`/`message_update` events are kept. Everything else
- * (tool progress, dialogs, queue and status changes) is not part of the transcript and is kept.
+ * Of the events queued before a snapshot's boundary, keeps those that neither the snapshot nor
+ * the boundary's `RunReplay` reproduce: notices, errors, finished tools and other one-off events.
+ * Completed messages are in the transcript, the live run is in the replay, and `agent_settled` is
+ * implied by the snapshot's state. Compaction results are in the transcript too, so only the end
+ * marker is kept.
  */
 export function withoutSnapshotCoverage(events: readonly PiEvent[]): PiEvent[] {
   const kept: PiEvent[] = [];
-  let message: PiEvent[] = [];
   for (const event of events) {
-    if (MESSAGE_EVENTS.has(event.type)) {
-      if (event.type === "message_start") {
-        kept.push(...message);
-        message = [event];
-      } else if (event.type === "message_update") {
-        message.push(event);
-      } else {
-        message = [];
-      }
-      continue;
-    }
+    if (RunReplay.covers(event) || event.type === "agent_settled") continue;
     if (event.type === "compaction_end") {
       const { result: _covered, ...rest } = event;
       void _covered;
@@ -485,7 +490,6 @@ export function withoutSnapshotCoverage(events: readonly PiEvent[]): PiEvent[] {
     }
     kept.push(event);
   }
-  kept.push(...message);
   return kept;
 }
 

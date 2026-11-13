@@ -19,6 +19,20 @@ process.stdin.on("data", (chunk) => {
         process.stdout.write(`${record.slice(10)}\r\n`);
         write({ type: "agent_settled", aborted: false });
       }, 10);
+    } else if (command.type === "stream") {
+      // A run that stays open until "finish", to test reattaching mid-run.
+      write({ id: command.id, type: "response", command: "stream", success: true });
+      write({ type: "agent_start" });
+      write({ type: "message_start", message: { role: "assistant", content: [] } });
+      write({ type: "message_update", message: { role: "assistant", content: [{ type: "text", text: "Hel" }] }, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hel", partial: {} } });
+      write({ type: "extension_ui_request", id: "d1", method: "confirm", title: "Allow?" });
+    } else if (command.type === "finish") {
+      write({ id: command.id, type: "response", command: "finish", success: true });
+      write({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "lo" } });
+      write({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Hello" }] } });
+      write({ type: "agent_settled", aborted: false });
+    } else if (command.type === "extension_ui_response") {
+      write({ type: "dialog_answered", id: command.id });
     } else if (command.type === "crash") {
       process.stderr.write("boom\n");
       process.exit(3);

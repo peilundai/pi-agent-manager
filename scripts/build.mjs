@@ -19,6 +19,17 @@ await Promise.all([
     minify: production,
   }),
   build({
+    // The detached process that keeps Pi running across window reloads.
+    entryPoints: ["src/relay.ts"],
+    outfile: "dist/relay.js",
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    target: "node20",
+    sourcemap: true,
+    minify: production,
+  }),
+  build({
     entryPoints: ["src/webview/main.tsx"],
     outfile: "dist/webview.js",
     bundle: true,
