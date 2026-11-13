@@ -64,6 +64,23 @@ export interface ChatViewProviderOptions {
   environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
   /** Test seam: replaces spawning the real `pi --mode rpc` process. */
   createClient?: ChatSessionOptions["createClient"];
+  /** Workspace-scoped storage that remembers the open chat, so a window reload resumes it. */
+  memento?: Pick<vscode.Memento, "get" | "update">;
+}
+
+export const ACTIVE_CHAT_KEY = "piAgentManager.activeChat";
+
+/** The chat that was open when the window last ran, keyed by the folder Pi ran in. */
+interface ActiveChat {
+  folder: string;
+  sessionFile: string;
+}
+
+function readActiveChat(memento: ChatViewProviderOptions["memento"]): ActiveChat | undefined {
+  const value = memento?.get<unknown>(ACTIVE_CHAT_KEY);
+  if (!value || typeof value !== "object") return undefined;
+  const { folder, sessionFile } = value as Record<string, unknown>;
+  return typeof folder === "string" && typeof sessionFile === "string" ? { folder, sessionFile } : undefined;
 }
 
 function sameFolder(left: vscode.WorkspaceFolder | undefined, right: vscode.WorkspaceFolder | undefined): boolean {
@@ -137,15 +154,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly surface: ChatSurface;
   /** Serializes folder switches so rapid editor changes cannot interleave Pi restarts. */
   private switching: Promise<void> = Promise.resolve();
+  /** The chat to resume on the first start after activation; consumed by that start. */
+  private restore: ActiveChat | undefined;
 
   constructor(private readonly options: ChatViewProviderOptions) {
     this.surface = options.surface ?? "secondarySidebar";
-    this.folder = options.workspaceFolder;
+    this.restore = readActiveChat(options.memento);
+    // Reopen in the folder the chat was in, if it is still part of the workspace.
+    const restoredFolder = this.restore
+      ? vscode.workspace.workspaceFolders?.find((candidate) => candidate.uri.fsPath === this.restore?.folder)
+      : undefined;
+    this.folder = restoredFolder ?? options.workspaceFolder;
     this.setupError = options.workspaceFolder ? undefined : { kind: "workspace" };
     this.session = new ChatSession({
       createClient: options.createClient ?? ((listener) => this.createClient(listener)),
       post: (message) => this.post(message),
       onSessionsChanged: () => this.scheduleSessions(),
+      onActiveSessionChanged: (sessionFile) => this.rememberActiveChat(sessionFile),
     });
     this.watchSessions();
   }
@@ -441,9 +466,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
   }
 
+  private rememberActiveChat(sessionFile: string | undefined): void {
+    const memento = this.options.memento;
+    const folder = this.cwd;
+    if (!memento || !folder) return;
+    const value: ActiveChat | undefined = sessionFile ? { folder, sessionFile } : undefined;
+    void Promise.resolve(memento.update(ACTIVE_CHAT_KEY, value)).catch(() => undefined);
+  }
+
+  /**
+   * The transcript to resume after a window reload: the chat that was open last time, if it
+   * belongs to this folder and is still in its history. Only the first start may resume.
+   */
+  private async takeRestoredSession(): Promise<string | undefined> {
+    const restore = this.restore;
+    this.restore = undefined;
+    const cwd = this.cwd;
+    if (!restore || restore.folder !== cwd) return undefined;
+    if (!this.sessions.some((session) => session.path === restore.sessionFile)) await this.refreshSessions();
+    if (cwd !== this.cwd) return undefined;
+    return this.sessions.some((session) => session.path === restore.sessionFile) ? restore.sessionFile : undefined;
+  }
+
   private async startSession(): Promise<void> {
     try {
-      await this.session.ensureStarted();
+      await this.session.ensureStarted(await this.takeRestoredSession());
       this.setupError = undefined;
     } catch (error) {
       if (error instanceof Error && error.name === "PiCommandNotFoundError") {

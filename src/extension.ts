@@ -39,6 +39,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     environment,
     surface,
     repository: new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) }),
+    memento: context.workspaceState,
   });
   activeProvider = provider;
   context.subscriptions.push(

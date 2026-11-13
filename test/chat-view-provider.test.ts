@@ -5,7 +5,7 @@ import type { Uri, WebviewView, WorkspaceFolder } from "vscode";
 import { PiCommandNotFoundError } from "../src/pi/command-resolver";
 import type { SessionSummary } from "../src/shared/model";
 import type { HostToWebviewMessage } from "../src/shared/protocol";
-import { ChatViewProvider, webviewHtml } from "../src/view/chat-view-provider";
+import { ACTIVE_CHAT_KEY, ChatViewProvider, webviewHtml } from "../src/view/chat-view-provider";
 import { resetVscodeMock } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 import { FakeClient } from "./support/fake-client";
@@ -31,6 +31,7 @@ function setup(
   options: {
     workspace?: boolean;
     createClient?: (listener: ConstructorParameters<typeof FakeClient>[0]) => Promise<FakeClient>;
+    memento?: { get(key: string): unknown; update(key: string, value: unknown): Promise<void> };
   } = {},
 ) {
   const posted: HostToWebviewMessage[] = [];
@@ -46,6 +47,7 @@ function setup(
     extensionUri: mock.Uri.file("/ext") as unknown as Uri,
     workspaceFolder: options.workspace === false ? undefined : folder(),
     repository,
+    ...(options.memento ? { memento: options.memento } : {}),
     createClient: async (listener) => {
       client = options.createClient ? await options.createClient(listener) : new FakeClient(listener);
       clients.push(client);
@@ -384,6 +386,54 @@ describe("ChatViewProvider", () => {
   });
 });
 
+function memoryMemento(initial: Record<string, unknown> = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    values,
+    get: (key: string) => values.get(key),
+    update: vi.fn(async (key: string, value: unknown) => {
+      values.set(key, value);
+    }),
+  };
+}
+
+describe("ChatViewProvider chat restore", () => {
+  it("remembers the open chat and resumes it after a window reload", async () => {
+    const memento = memoryMemento();
+    const first = setup({ memento });
+    await first.ready();
+    expect(memento.values.get(ACTIVE_CHAT_KEY)).toEqual({ folder: "/work", sessionFile: "/s/one.jsonl" });
+
+    // The chat in history is /s/two.jsonl; pretend it was the open one when the window closed.
+    memento.values.set(ACTIVE_CHAT_KEY, { folder: "/work", sessionFile: "/s/two.jsonl" });
+    const second = setup({ memento });
+    await second.ready();
+    expect(second.client().requests).toContainEqual({ type: "switch_session", sessionPath: "/s/two.jsonl" });
+  });
+
+  it("starts fresh when the remembered chat is gone or belongs to another folder", async () => {
+    for (const remembered of [
+      { folder: "/work", sessionFile: "/s/deleted.jsonl" },
+      { folder: "/elsewhere", sessionFile: "/s/two.jsonl" },
+      "garbage",
+    ]) {
+      const { ready, client } = setup({ memento: memoryMemento({ [ACTIVE_CHAT_KEY]: remembered }) });
+      await ready();
+      expect(client().requests.some((request) => request.type === "switch_session")).toBe(false);
+    }
+  });
+
+  it("resumes only on the first start, not on a later new chat", async () => {
+    const memento = memoryMemento({ [ACTIVE_CHAT_KEY]: { folder: "/work", sessionFile: "/s/two.jsonl" } });
+    const { ready, send, clients } = setup({ memento });
+    await ready();
+    await send({ version: 1, type: "chat.new" });
+    expect(clients).toHaveLength(1);
+    expect(clients[0]?.requests.filter((request) => request.type === "switch_session")).toHaveLength(1);
+    expect(clients[0]?.requests.at(-1)?.type).not.toBe("switch_session");
+  });
+});
+
 describe("ChatViewProvider multi-root folders", () => {
   const work = folder("/work", "work", 0);
   const other = folder("/other", "other", 1);
@@ -396,6 +446,14 @@ describe("ChatViewProvider multi-root folders", () => {
     mock.workspace.getWorkspaceFolder.mockImplementation((uri: { fsPath: string }) =>
       [work, other].find((candidate) => uri.fsPath.startsWith(`${candidate.uri.fsPath}/`)),
     );
+  });
+
+  it("reopens in the folder the remembered chat belongs to", async () => {
+    const memento = memoryMemento({ [ACTIVE_CHAT_KEY]: { folder: "/other", sessionFile: "/s/two.jsonl" } });
+    const { provider, ready, client } = setup({ memento });
+    expect(provider.workspaceFolder).toBe(other);
+    await ready();
+    expect(client().requests).toContainEqual({ type: "switch_session", sessionPath: "/s/two.jsonl" });
   });
 
   it("marks the init message as multi-root", async () => {

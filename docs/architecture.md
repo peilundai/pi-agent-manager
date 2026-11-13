@@ -20,6 +20,7 @@ Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. Hosts that d
   - `src/pi/jsonl.ts` splits stdout strictly on LF, not with `readline`, so U+2028/U+2029 inside JSON strings stay intact.
   - Requests carry an `id` and are matched to their `response`. Everything else is an event.
   - Closing stdin shuts Pi down gracefully. A process that is still alive after 2 s is killed.
+  - The open chat (folder and transcript path) is kept in `workspaceState` under `piAgentManager.activeChat`. The first start after activation reopens that folder and resumes the transcript with `switch_session`, as long as it is still in the folder's history, so a window reload brings the chat back.
 - `src/pi/chat-session.ts`:
   - **Startup:** posts a snapshot built from `get_state`, `get_messages`, `get_available_models`, `get_commands` and `get_session_stats`.
   - **Chat commands:** prompts (`streamingBehavior` is `followUp` or `steer` while busy), `abort`, `new_session` and `switch_session`.
