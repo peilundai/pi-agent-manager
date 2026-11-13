@@ -156,3 +156,104 @@ describe("chat reducer: host messages", () => {
     expect(state.multiRoot).toBe(false);
   });
 });
+
+describe("chat reducer: nested tool calls", () => {
+  const script = "// @options: {\"timeout_ms\": 1000}\nconst a = await tools.read({ path: \"a.ts\" });";
+  const codemodeTurn: PiEvent[] = [
+    { type: "agent_start" },
+    { type: "message_start", message: { role: "assistant", content: [] } },
+    { type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "codemode", arguments: { code: script } }], stopReason: "toolUse" } },
+    { type: "tool_execution_start", toolCallId: "c1", toolName: "codemode", args: { code: script } },
+  ];
+
+  it("keeps calls a script makes under the script instead of the transcript", () => {
+    let state = applyPiEvents(initialChatState, codemodeTurn, 1);
+    const parentBefore = state.tools.c1;
+    state = applyPiEvents(state, [
+      { type: "tool_execution_start", toolCallId: "c1/1", toolName: "read", args: { path: "a.ts" }, parentToolCallId: "c1" },
+      { type: "tool_execution_end", toolCallId: "c1/1", toolName: "read", result: { content: [{ type: "text", text: "x" }] }, isError: false, parentToolCallId: "c1" },
+      { type: "tool_execution_start", toolCallId: "c1/2", toolName: "edit", args: { path: "a.ts", oldText: "x", newText: "y" }, parentToolCallId: "c1" },
+    ], 2);
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]).toMatchObject({ blocks: [{ type: "tool", id: "c1" }] });
+    expect(state.tools.c1?.children).toEqual(["c1/1", "c1/2"]);
+    expect(state.tools["c1/1"]).toMatchObject({ parentId: "c1", status: "success", output: "x" });
+    // The parent is replaced so its memoized card re-renders.
+    expect(state.tools.c1).not.toBe(parentBefore);
+    state = applyPiEvents(state, [
+      { type: "tool_execution_end", toolCallId: "c1", toolName: "codemode", result: { content: [{ type: "text", text: "Script completed" }] }, isError: false },
+      { type: "agent_settled", aborted: true },
+    ], 3);
+    expect(state.tools.c1).toMatchObject({ status: "success", children: ["c1/1", "c1/2"] });
+    expect(state.tools["c1/2"]?.status).toBe("interrupted");
+  });
+
+  it("falls back to the transcript when the parent is unknown", () => {
+    const state = applyPiEvents(initialChatState, [
+      { type: "tool_execution_start", toolCallId: "x/1", toolName: "read", args: { path: "a.ts" }, parentToolCallId: "x" },
+    ], 1);
+    expect(state.items[0]).toMatchObject({ kind: "assistant", blocks: [{ type: "tool", id: "x/1" }] });
+    expect(state.tools["x/1"]?.parentId).toBeUndefined();
+  });
+
+  it("rebuilds the nested calls from the tool result when a chat is reloaded", () => {
+    const state = host(initialChatState, {
+      version: 1,
+      type: "snapshot",
+      snapshot: {
+        state: { isStreaming: false },
+        models: [],
+        commands: [],
+        messages: [
+          { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "codemode", arguments: { code: script } }], stopReason: "toolUse" },
+          {
+            role: "toolResult",
+            toolCallId: "c1",
+            toolName: "codemode",
+            content: [{ type: "text", text: "Script failed" }],
+            isError: true,
+            nestedCalls: {
+              complete: false,
+              calls: [
+                { id: "c1/1", name: "read", arguments: { path: "a.ts" }, status: "ok", durationMs: 5 },
+                { id: "c1/1/1", name: "ls", arguments: {}, status: "ok" },
+                { id: "c1/2", name: "bash", argumentsBytes: 900_000, status: "error", error: "boom" },
+                { id: "c1/3", name: "read", arguments: { path: "b.ts" }, status: "unfinished" },
+              ],
+            },
+          },
+        ],
+      },
+    } as HostToWebviewMessage);
+    expect(state.items).toHaveLength(1);
+    expect(state.tools.c1).toMatchObject({ status: "error", children: ["c1/1", "c1/2", "c1/3"], childrenIncomplete: true });
+    expect(state.tools["c1/1"]).toMatchObject({ parentId: "c1", status: "success", durationMs: 5, children: ["c1/1/1"] });
+    expect(state.tools["c1/1/1"]).toMatchObject({ parentId: "c1/1" });
+    expect(state.tools["c1/2"]).toMatchObject({ status: "error", output: "boom", args: {} });
+    expect(state.tools["c1/3"]?.status).toBe("interrupted");
+  });
+
+  it("keeps live output when the result's record arrives", () => {
+    let state = applyPiEvents(initialChatState, [
+      ...codemodeTurn,
+      { type: "tool_execution_start", toolCallId: "c1/1", toolName: "read", args: { path: "a.ts" }, parentToolCallId: "c1" },
+      { type: "tool_execution_end", toolCallId: "c1/1", toolName: "read", result: { content: [{ type: "text", text: "live" }] }, isError: false, parentToolCallId: "c1" },
+    ], 1);
+    state = applyPiEvents(state, [
+      {
+        type: "message_end",
+        message: {
+          role: "toolResult",
+          toolCallId: "c1",
+          toolName: "codemode",
+          content: [{ type: "text", text: "Script completed" }],
+          isError: false,
+          nestedCalls: { complete: true, calls: [{ id: "c1/1", name: "read", arguments: { path: "a.ts" }, status: "ok" }] },
+        },
+      },
+    ], 2);
+    expect(state.tools.c1).toMatchObject({ status: "success", children: ["c1/1"] });
+    expect(state.tools.c1?.childrenIncomplete).toBeUndefined();
+    expect(state.tools["c1/1"]?.output).toBe("live");
+  });
+});

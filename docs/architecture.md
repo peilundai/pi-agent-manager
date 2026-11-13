@@ -59,6 +59,7 @@ The probe never reads the shell's stderr, because startup files can trace export
 
 - `message_start` for an assistant opens an empty streaming item. Pi's snapshot may already contain the first delta, so content is rebuilt from `text_*`, `thinking_*` and `toolcall_*` deltas. `*_end` and `message_end` then replace it with the authoritative content.
 - Tool calls are blocks inside the assistant message. They point into a `tools` map that `tool_execution_*` events and `toolResult` messages update.
+- Calls a tool makes while it runs, such as a `codemode` script's `tools.read(...)`, carry `parentToolCallId` and ids of the form `<parentId>/<n>`. They are stored in `tools` with `parentId` and listed in the parent's `children`, not added as blocks. `ToolCard` renders them inside the parent. A `toolResult`'s `nestedCalls` record (name, arguments, status, error; no results) rebuilds them on reload. When a nested call changes, its ancestors' states are replaced so their memoized cards re-render. A call whose parent is unknown falls back to a top-level block.
 - Extension UI dialogs become dialog items, and `notify` becomes a notice.
 - A snapshot (`get_messages`) rehydrates the same structures, so reloading the webview or resuming a chat renders the same way as live streaming.
 

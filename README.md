@@ -112,7 +112,7 @@ The executable's directory is added to Pi's `PATH`, so nvm-managed Node installs
 | `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]`. Mode and session flags are managed for you. |
 | `piAgentManager.loadShellEnvironment` | `true` | Add your login shell's variables (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |
 | `piAgentManager.environment` | `{}` | Extra variables for Pi, such as a gateway base URL. Put keys in **Set Environment Secret…** instead. |
-| `piAgentManager.expandToolCards` | `edits` | Which tool cards start expanded: `edits`, `all` or `none`. |
+| `piAgentManager.expandToolCards` | `edits` | Which tool cards start expanded: `edits`, `all` or `none`. With `edits`, a codemode script that edited files opens to show those diffs. |
 | `piAgentManager.maxContentWidth` | `800` | Maximum transcript width in pixels. `0` fills the view. |
 
 </details>

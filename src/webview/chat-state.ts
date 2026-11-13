@@ -1,6 +1,16 @@
 import type { SessionSummary, SetupErrorState } from "../shared/model";
 import type { ChatSnapshot, HostToWebviewMessage, ImageAttachment, ProcessStatus, ToolExpansion } from "../shared/protocol";
-import type { PiCommand, PiContent, PiEvent, PiMessage, PiModel, PiSessionStats, PiState, ThinkingLevel } from "../pi/rpc-types";
+import type {
+  PiCommand,
+  PiContent,
+  PiEvent,
+  PiMessage,
+  PiModel,
+  PiNestedToolCallRecord,
+  PiSessionStats,
+  PiState,
+  ThinkingLevel,
+} from "../pi/rpc-types";
 
 export type ToolStatus = "streaming" | "running" | "success" | "error" | "interrupted";
 
@@ -12,6 +22,12 @@ export interface ToolState {
   output: string;
   details?: Record<string, unknown>;
   durationMs?: number;
+  /** The tool call that made this call (for example a codemode script). */
+  parentId?: string;
+  /** Ids of the calls this tool made, in start order. */
+  children?: string[];
+  /** Pi dropped some of this tool's calls or their arguments from its record. */
+  childrenIncomplete?: boolean;
 }
 
 export type AssistantBlock =
@@ -130,6 +146,93 @@ function nextId(draft: Draft, prefix: string): string {
   return `${prefix}${draft.seq}`;
 }
 
+/** Fields that link a tool to its parent and children; kept when a tool's state is rebuilt. */
+function treeFields(tool: ToolState | undefined): Pick<ToolState, "parentId" | "children" | "childrenIncomplete"> {
+  if (!tool) return {};
+  return {
+    ...(tool.parentId !== undefined ? { parentId: tool.parentId } : {}),
+    ...(tool.children ? { children: tool.children } : {}),
+    ...(tool.childrenIncomplete ? { childrenIncomplete: true } : {}),
+  };
+}
+
+const MAX_NESTING = 16;
+
+/**
+ * Replaces each ancestor of `id` with a copy, so memoized cards of the parents re-render when a
+ * nested call changes.
+ */
+function touchAncestors(draft: Draft, id: string): void {
+  let parentId = draft.tools[id]?.parentId;
+  for (let depth = 0; parentId !== undefined && depth < MAX_NESTING; depth += 1) {
+    const parent = draft.tools[parentId];
+    if (!parent) return;
+    draft.tools[parentId] = { ...parent };
+    parentId = parent.parentId;
+  }
+}
+
+/** Records `childId` as a call `parentId` made. */
+function attachChild(draft: Draft, parentId: string, childId: string): void {
+  const parent = draft.tools[parentId];
+  if (!parent || parent.children?.includes(childId)) return;
+  draft.tools[parentId] = { ...parent, children: [...(parent.children ?? []), childId] };
+}
+
+/** True when `id` is `ancestorId` or one of its ancestors, which would make a cycle. */
+function isSelfOrAncestor(draft: Draft, id: string, ancestorId: string): boolean {
+  let cursor: string | undefined = ancestorId;
+  for (let depth = 0; cursor !== undefined && depth <= MAX_NESTING; depth += 1) {
+    if (cursor === id) return true;
+    cursor = draft.tools[cursor]?.parentId;
+  }
+  return false;
+}
+
+const NESTED_STATUS: Record<PiNestedToolCallRecord["status"], ToolStatus> = {
+  ok: "success",
+  error: "error",
+  unfinished: "interrupted",
+};
+
+/**
+ * Rebuilds the calls a tool made from the record Pi keeps on its result (`nestedCalls`), so a
+ * reloaded or resumed chat shows the same tree as live streaming. Pi records no results, so calls
+ * seen live keep their output. Nested ids are `<callerId>/<n>`, which gives deeper nesting.
+ */
+function applyNestedCalls(draft: Draft, rootId: string, message: PiMessage): void {
+  const record = message.nestedCalls;
+  if (!record || !Array.isArray(record.calls)) return;
+  for (const call of record.calls) {
+    if (!call || typeof call.id !== "string" || typeof call.name !== "string" || call.id === rootId) continue;
+    const slash = call.id.lastIndexOf("/");
+    const callerId = slash > 0 ? call.id.slice(0, slash) : rootId;
+    const parentId = draft.tools[callerId] && !isSelfOrAncestor(draft, call.id, callerId) ? callerId : rootId;
+    const existing = draft.tools[call.id];
+    const status = NESTED_STATUS[call.status] ?? "success";
+    draft.tools[call.id] = existing
+      ? {
+          ...existing,
+          parentId: existing.parentId ?? parentId,
+          ...(existing.status === "running" || existing.status === "streaming" ? { status } : {}),
+        }
+      : {
+          id: call.id,
+          name: call.name,
+          args: asRecord(call.arguments),
+          output: typeof call.error === "string" ? call.error : "",
+          status,
+          parentId,
+          ...(typeof call.durationMs === "number" ? { durationMs: call.durationMs } : {}),
+        };
+    attachChild(draft, draft.tools[call.id]!.parentId!, call.id);
+    touchAncestors(draft, call.id);
+  }
+  if (record.complete === false && draft.tools[rootId]) {
+    draft.tools[rootId] = { ...draft.tools[rootId]!, childrenIncomplete: true };
+  }
+}
+
 function assistantBlocks(content: PiMessage["content"], draft: Draft, finalStatus?: ToolStatus): AssistantBlock[] {
   if (!Array.isArray(content)) return typeof content === "string" && content ? [{ type: "text", text: content }] : [];
   const blocks: AssistantBlock[] = [];
@@ -169,7 +272,10 @@ function applyToolResult(draft: Draft, message: PiMessage): void {
     status: message.isError ? "error" : "success",
     ...(message.details ? { details: message.details } : existing?.details ? { details: existing.details } : {}),
     ...(existing?.durationMs !== undefined ? { durationMs: existing.durationMs } : {}),
+    ...treeFields(existing),
   };
+  applyNestedCalls(draft, id, message);
+  touchAncestors(draft, id);
 }
 
 function abortedError(stopReason: string | undefined, errorMessage: string | undefined): string | undefined {
@@ -349,6 +455,7 @@ function applyMessageUpdate(draft: Draft, update: Record<string, unknown>): void
         output: existing?.output ?? "",
         status: existing && existing.status !== "streaming" ? existing.status : "running",
         ...(existing?.details ? { details: existing.details } : {}),
+        ...treeFields(existing),
         args: asRecord(call.arguments),
       };
       return;
@@ -409,11 +516,14 @@ function dialogFrom(event: PiEvent, now: number): DialogRequest | undefined {
 
 function finishRun(draft: Draft, aborted: boolean): void {
   draft.items = draft.items.map((item) => (item.kind === "assistant" && item.streaming ? { ...item, streaming: false } : item));
+  const finished: string[] = [];
   for (const [id, tool] of Object.entries(draft.tools)) {
     if (tool.status === "running" || tool.status === "streaming") {
       draft.tools[id] = { ...tool, status: aborted ? "interrupted" : "success" };
+      finished.push(id);
     }
   }
+  for (const id of finished) touchAncestors(draft, id);
 }
 
 export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now: number): ChatState {
@@ -460,6 +570,11 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
         const isEnd = event.type === "tool_execution_end";
         const output = event.type === "tool_execution_start" ? existing?.output ?? "" : toolOutput(result.content);
         const details = Object.keys(result).length ? asRecord(result.details) : existing?.details;
+        // Calls a tool makes while it runs (codemode scripts) belong under that tool, not in the transcript.
+        const claimedParent = typeof event.parentToolCallId === "string" ? event.parentToolCallId : undefined;
+        const parentId =
+          existing?.parentId ??
+          (claimedParent && draft.tools[claimedParent] && !isSelfOrAncestor(draft, id, claimedParent) ? claimedParent : undefined);
         draft.tools[id] = {
           id,
           name: typeof event.toolName === "string" ? event.toolName : existing?.name ?? "tool",
@@ -468,8 +583,13 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
           status: isEnd ? (event.isError ? "error" : "success") : "running",
           ...(details && Object.keys(details).length ? { details } : {}),
           ...(typeof event.durationMs === "number" ? { durationMs: event.durationMs } : {}),
+          ...treeFields(existing),
+          ...(parentId !== undefined ? { parentId } : {}),
         };
-        if (!draft.items.some((item) => item.kind === "assistant" && item.blocks.some((block) => block.type === "tool" && block.id === id))) {
+        if (parentId !== undefined) {
+          attachChild(draft, parentId, id);
+          touchAncestors(draft, id);
+        } else if (!draft.items.some((item) => item.kind === "assistant" && item.blocks.some((block) => block.type === "tool" && block.id === id))) {
           const item = currentAssistant(draft);
           item.blocks.push({ type: "tool", id });
         }

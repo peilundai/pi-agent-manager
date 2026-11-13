@@ -90,9 +90,15 @@ export class RunReplay {
         if (toolId && start) this.tools.set(toolId, [start, event]);
         return;
       }
-      case "tool_execution_end":
-        if (toolId) this.tools.delete(toolId);
+      case "tool_execution_end": {
+        if (!toolId) return;
+        const start = this.tools.get(toolId)?.[0];
+        const parent = typeof start?.parentToolCallId === "string" ? start.parentToolCallId : undefined;
+        // A call made by a tool that is still running (a codemode script) stays under its card.
+        if (start && parent && this.tools.has(parent)) this.tools.set(toolId, [start, event]);
+        else this.dropTool(toolId);
         return;
+      }
       case "queue_update":
         this.queue = event;
         return;
@@ -146,6 +152,15 @@ export class RunReplay {
       else events.push({ ...entry.event, timeout: entry.expiresAt - now });
     }
     return events;
+  }
+
+  /** Forgets a finished tool and the calls it made; its result is in the transcript. */
+  private dropTool(id: string, depth = 0): void {
+    this.tools.delete(id);
+    if (depth >= 16) return;
+    for (const [childId, [start]] of this.tools) {
+      if (start?.parentToolCallId === id) this.dropTool(childId, depth + 1);
+    }
   }
 
   private clearRun(): void {

@@ -35,9 +35,10 @@ export interface PiTestEnv {
   workspace: string;
   env: NodeJS.ProcessEnv;
   repository: PiSessionRepository;
-  createClient(listener: RpcClientListener): Promise<PiRpcClient>;
+  /** `extraArgs` go after the provider flags, for example `["--tools", "+codemode"]`. */
+  createClient(listener: RpcClientListener, extraArgs?: string[]): Promise<PiRpcClient>;
   /** How to spawn Pi for this environment (for relay-backed clients). */
-  spawnOptions(): RpcSpawnOptions;
+  spawnOptions(extraArgs?: string[]): RpcSpawnOptions;
   readGreet(): Promise<string>;
   resetGreet(): Promise<void>;
   cleanup(): Promise<void>;
@@ -82,8 +83,11 @@ export async function createPiTestEnv(llmUrl: string): Promise<PiTestEnv> {
   delete env.PI_CODING_AGENT_SESSION_DIR;
   const pi = piExecutable();
   const repository = new PiSessionRepository({ agentDir, env });
-  const spawnOptions = (): RpcSpawnOptions => {
-    const invocation = buildPiInvocation(pi, buildRpcArgs({ extraArgs: ["--provider", "mock", "--model", "mock-1", "--offline"] }));
+  const spawnOptions = (extraArgs: string[] = []): RpcSpawnOptions => {
+    const invocation = buildPiInvocation(
+      pi,
+      buildRpcArgs({ extraArgs: ["--provider", "mock", "--model", "mock-1", "--offline", ...extraArgs] }),
+    );
     return { file: invocation.file, args: invocation.args, cwd: workspace, env: { ...env, ...invocation.env } };
   };
 
@@ -94,8 +98,8 @@ export async function createPiTestEnv(llmUrl: string): Promise<PiTestEnv> {
     env,
     repository,
     spawnOptions,
-    async createClient(listener) {
-      return new PiRpcClient(spawnOptions(), listener);
+    async createClient(listener, extraArgs = []) {
+      return new PiRpcClient(spawnOptions(extraArgs), listener);
     },
     readGreet: () => readFile(join(workspace, "src", "greet.ts"), "utf8"),
     resetGreet: () => writeFile(join(workspace, "src", "greet.ts"), GREET_SOURCE),

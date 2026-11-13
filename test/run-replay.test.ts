@@ -61,6 +61,24 @@ describe("RunReplay", () => {
     expect(replay.replay()).toEqual([]);
   });
 
+  it("keeps finished calls under a tool that is still running, until it ends", () => {
+    const replay = new RunReplay();
+    replay.track({ type: "agent_start" });
+    replay.track({ type: "tool_execution_start", toolCallId: "script", toolName: "codemode" });
+    replay.track({ type: "tool_execution_start", toolCallId: "read1", toolName: "read", parentToolCallId: "script" });
+    replay.track({ type: "tool_execution_end", toolCallId: "read1", parentToolCallId: "script" });
+    replay.track({ type: "tool_execution_start", toolCallId: "bash1", toolName: "bash", parentToolCallId: "script" });
+    expect(replay.replay().map((event) => `${event.type}:${String(event.toolCallId ?? "")}`)).toEqual([
+      "agent_start:",
+      "tool_execution_start:script",
+      "tool_execution_start:read1",
+      "tool_execution_end:read1",
+      "tool_execution_start:bash1",
+    ]);
+    replay.track({ type: "tool_execution_end", toolCallId: "script" });
+    expect(replay.replay()).toEqual([{ type: "agent_start" }]);
+  });
+
   it("starts over on reset", () => {
     const replay = new RunReplay();
     replay.track({ type: "agent_start" });

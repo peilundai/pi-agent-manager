@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { ToolState } from "../src/webview/chat-state";
-import { describeTool, diffStats, editArgsDiff, languageForPath, parsePiDiff, splitShellStatus, summarizeTool } from "../src/webview/tool-format";
+import {
+  autoExpands,
+  describeTool,
+  descendants,
+  diffStats,
+  editArgsDiff,
+  languageForPath,
+  nestedDiffStats,
+  parsePiDiff,
+  scriptSource,
+  splitShellStatus,
+  summarizeCalls,
+  summarizeTool,
+} from "../src/webview/tool-format";
 
 const tool = (overrides: Partial<ToolState>): ToolState => ({ id: "t", name: "read", args: {}, status: "success", output: "", ...overrides });
 
@@ -59,5 +72,28 @@ describe("tool formatting", () => {
   it("maps file extensions to languages", () => {
     expect(languageForPath("src/a.tsx")).toBe("typescript");
     expect(languageForPath("Makefile")).toBeUndefined();
+  });
+});
+
+describe("codemode formatting", () => {
+  it("describes a script by its first line of code", () => {
+    expect(describeTool({ name: "codemode", args: { code: "// @options: {}\n\n  const x = 1;\nreturn x;" } })).toEqual({
+      verb: "Codemode",
+      target: "const x = 1;",
+    });
+    expect(scriptSource({ code: "// @options: {}\nreturn 1;\n" })).toBe("return 1;");
+    expect(scriptSource({ code: "return 1;" })).toBe("return 1;");
+  });
+
+  it("walks nested calls once even if the tree has a cycle", () => {
+    const tools: Record<string, ToolState> = {
+      a: { id: "a", name: "codemode", args: {}, status: "success", output: "", children: ["b"] },
+      b: { id: "b", name: "write", args: { path: "f", content: "1\n2\n" }, status: "success", output: "", children: ["a"] },
+    };
+    expect(descendants(tools.a!, tools).map((tool) => tool.id)).toEqual(["b"]);
+    expect(nestedDiffStats(tools.a!, tools)).toEqual({ added: 2, removed: 0 });
+    expect(autoExpands(tools.a!, tools, "edits")).toBe(false);
+    expect(autoExpands(tools.a!, tools, "all")).toBe(true);
+    expect(summarizeCalls(tools.a!, tools)).toBe("1 tool call");
   });
 });

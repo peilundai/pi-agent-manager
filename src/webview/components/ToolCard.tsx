@@ -1,7 +1,18 @@
 import { memo, useState, type MouseEvent } from "react";
 import type { ToolState } from "../chat-state";
-import { describeTool, diffStats, splitShellStatus, summarizeTool, toolDiffRows, type DiffRow } from "../tool-format";
+import {
+  autoExpands,
+  describeTool,
+  diffStats,
+  nestedDiffStats,
+  scriptSource,
+  splitShellStatus,
+  summarizeCalls,
+  toolDiffRows,
+  type DiffRow,
+} from "../tool-format";
 import { useChat } from "./context";
+import { Markdown } from "./Markdown";
 
 const MAX_DIFF_ROWS = 400;
 const MAX_OUTPUT_CHARS = 20_000;
@@ -23,6 +34,49 @@ export function DiffView({ rows }: { rows: DiffRow[] }) {
       ))}
       {rows.length > shown.length && <div className="diff-row diff-skip">… {rows.length - shown.length} more lines</div>}
     </div>
+  );
+}
+
+const MAX_DEPTH = 8;
+const NO_TOOLS: Record<string, ToolState> = {};
+
+/** Wraps a script in a code fence longer than any backtick run inside it. */
+function fenced(code: string, language: string): string {
+  const longest = Math.max(2, ...Array.from(code.matchAll(/`+/g), (match) => match[0].length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence}${language}\n${code}\n${fence}`;
+}
+
+function ScriptBody({ tool }: { tool: ToolState }) {
+  const code = scriptSource(tool.args);
+  if (!code) return null;
+  return (
+    <section className="tool-section" aria-label="Script">
+      <div className="tool-section-label">Script</div>
+      <Markdown text={fenced(code, "javascript")} />
+    </section>
+  );
+}
+
+function NestedCalls({ tool, tools, depth }: { tool: ToolState; tools: Record<string, ToolState>; depth: number }) {
+  const calls = (tool.children ?? []).map((id) => tools[id]).filter((child): child is ToolState => Boolean(child));
+  if (!calls.length) return null;
+  return (
+    <section className="tool-section" aria-label="Tool calls">
+      <div className="tool-section-label">Tool calls</div>
+      <ul className="tool-children">
+        {calls.map((child) => (
+          <li key={child.id} className={`tool-child tool-child-${child.status}`}>
+            {depth < MAX_DEPTH ? (
+              <ToolCard tool={child} tools={tools} depth={depth + 1} />
+            ) : (
+              <span className="tool-verb">{describeTool(child).verb}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {tool.childrenIncomplete && <div className="tool-section-note">Pi did not record every call or its arguments.</div>}
+    </section>
   );
 }
 
@@ -52,18 +106,28 @@ function ToolBody({ tool }: { tool: ToolState }) {
       ) : output ? (
         <pre className={`tool-output${tool.status === "error" ? " error" : ""}`}>{output}</pre>
       ) : (
-        !command && <pre className="tool-output muted">{JSON.stringify(tool.args, null, 2)}</pre>
+        !command && tool.name !== "codemode" && <pre className="tool-output muted">{JSON.stringify(tool.args, null, 2)}</pre>
       )}
     </>
   );
 }
 
-export const ToolCard = memo(function ToolCard({ tool }: { tool: ToolState }) {
+interface ToolCardProps {
+  tool: ToolState;
+  /** Every tool in the chat, to look up the calls this tool made. */
+  tools?: Record<string, ToolState>;
+  depth?: number;
+}
+
+function ToolCardView({ tool, tools = NO_TOOLS, depth = 0 }: ToolCardProps) {
   const { post, toolExpansion = "edits" } = useChat();
   const description = describeTool(tool);
-  const summary = summarizeTool(tool);
-  const stats = tool.status === "success" || tool.status === "running" ? diffStats(tool) : undefined;
-  const autoOpen = toolExpansion === "all" || (toolExpansion === "edits" && tool.name === "edit");
+  const summary = summarizeCalls(tool, tools);
+  const ownStats = tool.status === "success" || tool.status === "running" ? diffStats(tool) : undefined;
+  // Calls a script made are real even when the script fails afterwards, so their edits always count.
+  const stats = ownStats ?? nestedDiffStats(tool, tools);
+  const autoOpen = autoExpands(tool, tools, toolExpansion);
+  const hasCalls = Boolean(tool.children?.length);
   const [open, setOpen] = useState<boolean | undefined>(undefined);
   const expanded = open ?? (autoOpen && tool.status !== "streaming");
   const live = tool.status === "running" || tool.status === "streaming";
@@ -110,9 +174,29 @@ export const ToolCard = memo(function ToolCard({ tool }: { tool: ToolState }) {
       )}
       {expanded && (
         <div className="tool-body">
-          <ToolBody tool={tool} />
+          {tool.name === "codemode" && <ScriptBody tool={tool} />}
+          {hasCalls && <NestedCalls tool={tool} tools={tools} depth={depth} />}
+          {hasCalls || tool.name === "codemode" ? (
+            tool.output && (
+              <section className="tool-section" aria-label="Output">
+                <div className="tool-section-label">Output</div>
+                <ToolBody tool={tool} />
+              </section>
+            )
+          ) : (
+            <ToolBody tool={tool} />
+          )}
         </div>
       )}
     </div>
   );
-});
+}
+
+/**
+ * A tool call and, nested inside it, the calls it made. The reducer replaces a parent's state
+ * whenever one of its calls changes, so comparing `tool` alone is enough to re-render.
+ */
+export const ToolCard = memo(
+  ToolCardView,
+  (previous, next) => previous.tool === next.tool && previous.depth === next.depth,
+);

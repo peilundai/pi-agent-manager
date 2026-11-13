@@ -2,6 +2,16 @@
 
 All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
+## Unreleased
+
+### Changed
+
+- **Codemode calls are grouped.** A `codemode` script shows as one card: the script, the tool calls it made, and its output. Before, the calls were listed beside the script as if Pi had made them directly. The card shows the lines its edits changed, and it follows `piAgentManager.expandToolCards`: with the default `edits` it opens when the script edited files, showing those diffs. Any tool that calls other tools is grouped the same way.
+
+### Fixed
+
+- Tool calls made by a codemode script disappeared when a chat was reloaded or resumed. They are rebuilt from the record Pi keeps with the script's result.
+
 ## 0.2.4 — 2026-11-04
 
 ### Added
