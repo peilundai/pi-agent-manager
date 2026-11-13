@@ -212,7 +212,7 @@
             "none"
           ],
           "enumDescriptions": [
-            "Expand edits to show their diff; fold other tools, including writes.",
+            "Expand edits to show their diff, and codemode scripts that made edits; fold other tools, including writes.",
             "Expand every tool card.",
             "Fold every tool card, showing only its header and summary."
           ],

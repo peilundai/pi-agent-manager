@@ -21,11 +21,11 @@ afterAll(async () => {
 });
 
 /** A ChatSession wired to a reducer, mirroring what the webview does. */
-function harness() {
+function harness(extraArgs: string[] = []) {
   const posted: HostToWebviewMessage[] = [];
   let state: ChatState = initialChatState;
   const session = new ChatSession({
-    createClient: (listener) => pi.createClient(listener),
+    createClient: (listener) => pi.createClient(listener, extraArgs),
     post: (message) => {
       posted.push(message);
       state = chatReducer(state, { type: "host", message, now: Date.now() });
@@ -180,6 +180,35 @@ describe("Pi conversation", () => {
     const shape = (items: ChatItem[]) => items.map((item) => (item.kind === "assistant" ? { kind: item.kind, blocks: item.blocks } : { kind: item.kind, text: (item as { text?: string }).text }));
     expect(shape(resumed.items)).toEqual(shape(live.items));
     expect(resumed.pi.sessionFile).toBe(sessionFile);
+  });
+
+  it("groups the calls of a codemode script under it, live and after a resume", async () => {
+    const first = track(harness(["--tools", "+codemode"]));
+    await first.session.ensureStarted();
+    await first.send("Use codemode to read the module");
+    const live = await first.settled("codemode turn");
+    const blocks = live.items.flatMap((item) => (item.kind === "assistant" ? item.blocks : []));
+    expect(blocks.filter((block) => block.type === "tool").map((block) => (block as { id: string }).id)).toEqual(["call_code_1"]);
+    const script = live.tools.call_code_1!;
+    expect(script).toMatchObject({ name: "codemode", status: "success" });
+    expect(script.children).toHaveLength(2);
+    const [read, missing] = script.children!.map((id) => live.tools[id]!);
+    expect(read).toMatchObject({ name: "read", parentId: "call_code_1", status: "success", args: { path: "src/greet.ts" } });
+    expect(read!.output).toContain("hello");
+    expect(missing).toMatchObject({ name: "read", parentId: "call_code_1", status: "error" });
+
+    const sessionFile = live.pi.sessionFile;
+    await first.session.dispose();
+    const second = track(harness(["--tools", "+codemode"]));
+    await second.session.ensureStarted(sessionFile);
+    const resumed = await waitFor(() => second.state.tools.call_code_1 && second.state, 15_000, "hydrated codemode");
+    const tree = (state: ChatState) =>
+      state.tools.call_code_1!.children!.map((id) => {
+        const { name, args, status, parentId } = state.tools[id]!;
+        return { id, name, args, status, parentId };
+      });
+    expect(tree(resumed)).toEqual(tree(live));
+    expect(resumed.items.flatMap((item) => (item.kind === "assistant" ? item.blocks : [])).filter((block) => block.type === "tool")).toHaveLength(1);
   });
 
   it("switches models and thinking levels", async () => {

@@ -103,7 +103,7 @@ function Block({
       <div className="timeline-row">
         <span className={`dot dot-${tool.status}`} aria-hidden="true" />
         <div className="timeline-content">
-          <ToolCard tool={tool} />
+          <ToolCard tool={tool} tools={tools} />
         </div>
       </div>
     );

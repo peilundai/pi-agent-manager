@@ -73,7 +73,7 @@ export const test = base.extend<{ chat: ChatFixture }, { llm: MockLlm }>({
     const post = (message: HostToWebviewMessage) =>
       page.evaluate((value) => window.postMessage(value, "*"), message).catch(() => undefined);
     const sendSessions = async () => post({ version: 1, type: "sessions", sessions: await pi.repository.list(pi.workspace) });
-    const session = new ChatSession({ createClient: (listener) => pi.createClient(listener), post, onSessionsChanged: () => void sendSessions() });
+    const session = new ChatSession({ createClient: (listener) => pi.createClient(listener, ["--tools", "+codemode"]), post, onSessionsChanged: () => void sendSessions() });
 
     page.on("pageerror", (error) => {
       throw error;
