@@ -77,6 +77,14 @@ function respond(req: IncomingMessage, res: ServerResponse, body: string, reques
     stream(res, words("tick ".repeat(400)).map((content) => ({ content })), "stop", 50);
     return;
   }
+  if (/codemode/i.test(prompt)) {
+    if (toolResults === 0) {
+      stream(res, [{ tool_calls: [{ index: 0, id: "call_code_1", type: "function", function: { name: "codemode", arguments: JSON.stringify({ code: CODEMODE_SCRIPT }) } }] }], "tool_calls", delayMs);
+    } else {
+      stream(res, words("The script read the module.").map((content) => ({ content })), "stop", delayMs);
+    }
+    return;
+  }
   if (toolResults === 0) {
     stream(
       res,
@@ -112,6 +120,12 @@ function respond(req: IncomingMessage, res: ServerResponse, body: string, reques
   }
   stream(res, words(FINAL_ANSWER).map((content) => ({ content })), "stop", delayMs);
 }
+
+/** A script that calls two tools; one of them fails. */
+export const CODEMODE_SCRIPT =
+  '// @options: {"timeout_ms": 20000}\nconst source = await tools.read({ path: "src/greet.ts" });\n' +
+  'const missing = await tools.read({ path: "src/missing.ts" }).catch((error) => error.message);\n' +
+  'text(source.length > 0 ? "read ok" : "empty");\ntext(missing);';
 
 export const GATEWAY_REJECTION = "Invalid API Key format: Must start with pre-defined prefix";
 

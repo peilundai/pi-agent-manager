@@ -1,4 +1,5 @@
 import type { ToolState } from "./chat-state";
+import type { ToolExpansion } from "../shared/protocol";
 
 export interface ToolDescription {
   verb: string;
@@ -64,6 +65,10 @@ export function describeTool(tool: Pick<ToolState, "name" | "args">): ToolDescri
       return { verb: "Find", target: `${str(args.pattern) ?? ""}${str(args.path) ? ` in ${str(args.path)}` : ""}` };
     case "ls":
       return { verb: "List", target: str(args.path) ?? "." };
+    case "codemode": {
+      const line = scriptSource(args).split("\n").find((text) => text.trim()) ?? "";
+      return { verb: "Codemode", target: firstLine(line.trim(), 120) };
+    }
     default: {
       const firstString = Object.values(args).find((value): value is string => typeof value === "string" && value.length > 0);
       return { verb: capitalize(tool.name.replace(/[_-]+/g, " ")), target: firstString ? firstLine(firstString, 80) : "" };
@@ -250,4 +255,67 @@ export function languageForPath(path: string | undefined): string | undefined {
   if (!path) return undefined;
   const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   return LANGUAGE_BY_EXTENSION[extension];
+}
+
+const OPTIONS_LINE = /^\s*\/\/\s*@options:/;
+
+/** A codemode script without its `// @options:` line, which only tunes limits. */
+export function scriptSource(args: Record<string, unknown>): string {
+  const code = str(args.code) ?? "";
+  const [first = "", ...rest] = code.split("\n");
+  return (OPTIONS_LINE.test(first) ? rest.join("\n") : code).replace(/^\n+/, "").replace(/\s+$/, "");
+}
+
+const MAX_TREE_DEPTH = 16;
+
+/** The calls `tool` made, then the calls those made, depth first. */
+export function descendants(tool: ToolState, tools: Record<string, ToolState>): ToolState[] {
+  const found: ToolState[] = [];
+  const seen = new Set<string>([tool.id]);
+  const visit = (parent: ToolState, depth: number): void => {
+    if (depth > MAX_TREE_DEPTH) return;
+    for (const id of parent.children ?? []) {
+      const child = tools[id];
+      if (!child || seen.has(id)) continue;
+      seen.add(id);
+      found.push(child);
+      visit(child, depth + 1);
+    }
+  };
+  visit(tool, 0);
+  return found;
+}
+
+/** Lines changed by the edits and writes among a tool's nested calls that were applied. */
+export function nestedDiffStats(tool: ToolState, tools: Record<string, ToolState>): DiffStats | undefined {
+  let added = 0;
+  let removed = 0;
+  for (const child of descendants(tool, tools)) {
+    if (child.status !== "success" && child.status !== "running") continue;
+    const stats = diffStats(child);
+    added += stats?.added ?? 0;
+    removed += stats?.removed ?? 0;
+  }
+  return added || removed ? { added, removed } : undefined;
+}
+
+/** Whether a tool's card starts open under the `toolExpansion` setting. */
+export function autoExpands(tool: ToolState, tools: Record<string, ToolState>, expansion: ToolExpansion): boolean {
+  if (expansion === "all") return true;
+  if (expansion !== "edits") return false;
+  // An edit opens to show its diff; a tool whose calls made edits opens so those diffs are visible too.
+  return tool.name === "edit" || descendants(tool, tools).some((child) => child.name === "edit");
+}
+
+/** The "⎿" summary of a tool that made calls: its own result, the call count and failures. */
+export function summarizeCalls(tool: ToolState, tools: Record<string, ToolState>): string | undefined {
+  const calls = (tool.children ?? []).map((id) => tools[id]).filter((child): child is ToolState => Boolean(child));
+  if (!calls.length) return summarizeTool(tool);
+  if (tool.status === "running") {
+    const current = [...calls].reverse().find((child) => child.status === "running");
+    return current ? `${describeTool(current).verb}…` : `${plural(calls.length, "tool call")}…`;
+  }
+  const failed = calls.filter((child) => child.status === "error").length;
+  const own = tool.name === "codemode" ? (tool.status === "error" ? "Script failed" : tool.status === "interrupted" ? "Interrupted" : undefined) : summarizeTool(tool);
+  return [own, plural(calls.length, "tool call"), failed ? `${failed} failed` : undefined].filter(Boolean).join(" · ");
 }

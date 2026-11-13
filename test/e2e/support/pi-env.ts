@@ -35,7 +35,8 @@ export interface PiTestEnv {
   workspace: string;
   env: NodeJS.ProcessEnv;
   repository: PiSessionRepository;
-  createClient(listener: RpcClientListener): Promise<PiRpcClient>;
+  /** `extraArgs` go after the provider flags, for example `["--tools", "+codemode"]`. */
+  createClient(listener: RpcClientListener, extraArgs?: string[]): Promise<PiRpcClient>;
   readGreet(): Promise<string>;
   resetGreet(): Promise<void>;
   cleanup(): Promise<void>;
@@ -87,8 +88,11 @@ export async function createPiTestEnv(llmUrl: string): Promise<PiTestEnv> {
     workspace,
     env,
     repository,
-    async createClient(listener) {
-      const invocation = buildPiInvocation(pi, buildRpcArgs({ extraArgs: ["--provider", "mock", "--model", "mock-1", "--offline"] }));
+    async createClient(listener, extraArgs = []) {
+      const invocation = buildPiInvocation(
+        pi,
+        buildRpcArgs({ extraArgs: ["--provider", "mock", "--model", "mock-1", "--offline", ...extraArgs] }),
+      );
       return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd: workspace, env: { ...env, ...invocation.env } }, listener);
     },
     readGreet: () => readFile(join(workspace, "src", "greet.ts"), "utf8"),

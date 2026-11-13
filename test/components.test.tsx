@@ -212,6 +212,65 @@ describe("ToolCard", () => {
   });
 });
 
+describe("ToolCard: nested calls", () => {
+  const code = "// @options: {\"timeout_ms\": 1000}\nconst a = await tools.read({ path: \"a.ts\" });\nawait tools.edit({ path: \"a.ts\" });";
+  const tools: Record<string, ToolState> = {
+    c1: { id: "c1", name: "codemode", args: { code }, status: "success", output: "Script completed", children: ["c1/1", "c1/2", "c1/3"] },
+    "c1/1": { id: "c1/1", name: "read", args: { path: "a.ts" }, status: "success", output: "one\ntwo", parentId: "c1" },
+    "c1/2": { id: "c1/2", name: "edit", args: { path: "a.ts", oldText: "old", newText: "new" }, status: "success", output: "", parentId: "c1" },
+    "c1/3": { id: "c1/3", name: "bash", args: { command: "false" }, status: "error", output: "nope", parentId: "c1" },
+  };
+  const renderWith = (toolExpansion: "edits" | "all" | "none", map = tools) =>
+    render(
+      <ChatContext.Provider value={{ post: () => undefined, toolExpansion }}>
+        <ToolCard tool={map.c1!} tools={map} />
+      </ChatContext.Provider>,
+    );
+
+  it("shows the script once with its calls nested inside", () => {
+    renderWith("none");
+    expect(screen.getByText("Codemode")).toBeInTheDocument();
+    expect(screen.getByText("const a = await tools.read({ path: \"a.ts\" });")).toHaveClass("tool-target");
+    expect(screen.getByText("3 tool calls · 1 failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 added, 1 removed")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByRole("region", { name: "Script" })).not.toHaveTextContent("@options");
+    const calls = screen.getByRole("region", { name: "Tool calls" });
+    expect(calls.querySelectorAll(".tool-child")).toHaveLength(3);
+    expect(screen.getByRole("region", { name: "Output" })).toHaveTextContent("Script completed");
+    // Nested cards stay collapsed under "none", like top-level ones.
+    expect(screen.queryByText("old")).not.toBeInTheDocument();
+  });
+
+  it("opens a script that edited files and only its edits under the default setting", () => {
+    renderWith("edits");
+    expect(screen.getByRole("region", { name: "Tool calls" })).toBeInTheDocument();
+    expect(screen.getByText("old")).toBeInTheDocument();
+    expect(screen.queryByText(/two/)).not.toBeInTheDocument();
+    expect(screen.getByText("Read 2 lines")).toBeInTheDocument();
+  });
+
+  it("keeps a script without edits closed under the default setting and opens everything with all", () => {
+    const readOnly = { ...tools, c1: { ...tools.c1!, children: ["c1/1"] } };
+    const { unmount } = renderWith("edits", readOnly);
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+    unmount();
+    renderWith("all");
+    expect(screen.getByText(/two/)).toBeInTheDocument();
+    expect(screen.getByText("$ false")).toBeInTheDocument();
+  });
+
+  it("names the running call while the script runs", () => {
+    const running = {
+      ...tools,
+      c1: { ...tools.c1!, status: "running" as const, output: "" },
+      "c1/3": { ...tools["c1/3"]!, status: "running" as const, output: "" },
+    };
+    renderWith("none", running);
+    expect(screen.getByText("Bash…")).toBeInTheDocument();
+  });
+});
+
 describe("TranscriptItem", () => {
   const noop = () => undefined;
 

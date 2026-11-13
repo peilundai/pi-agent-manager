@@ -866,6 +866,60 @@ pre,
   margin-top: 6px;
 }
 
+.tool-section + .tool-section {
+  margin-top: 8px;
+}
+
+.tool-section-label {
+  margin-bottom: 4px;
+  color: var(--pi-dim);
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tool-section-note {
+  margin-top: 4px;
+  color: var(--pi-dim);
+  font-size: 0.9em;
+}
+
+/* Calls a tool made (codemode scripts) hang off a rail under it. */
+.tool-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid var(--pi-hairline);
+  list-style: none;
+}
+
+.tool-child {
+  position: relative;
+  min-width: 0;
+}
+
+.tool-child::before {
+  content: "";
+  position: absolute;
+  top: 0.6em;
+  left: -13px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pi-dim);
+}
+
+.tool-child-running::before {
+  background: var(--pi-accent);
+}
+
+.tool-child-error::before {
+  background: var(--pi-error);
+}
+
 .tool-command,
 .tool-output {
   margin: 0;

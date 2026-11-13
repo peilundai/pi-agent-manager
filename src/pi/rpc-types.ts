@@ -81,6 +81,23 @@ export interface PiToolResult {
   details?: Record<string, unknown>;
 }
 
+export interface PiNestedToolCallRecord {
+  id: string;
+  name: string;
+  /** Omitted when over Pi's size limits; `argumentsBytes` then gives their size. */
+  arguments?: Record<string, unknown>;
+  argumentsBytes?: number;
+  status: "ok" | "error" | "unfinished";
+  durationMs?: number;
+  error?: string;
+}
+
+export interface PiNestedToolCalls {
+  calls: PiNestedToolCallRecord[];
+  /** False when Pi dropped calls, omitted arguments, or calls had not finished. */
+  complete: boolean;
+}
+
 export interface PiMessage {
   role: string;
   content?: string | PiContent[];
@@ -95,6 +112,8 @@ export interface PiMessage {
   toolName?: string;
   details?: Record<string, unknown>;
   isError?: boolean;
+  /** Calls the tool made to other tools (for example from a codemode script). Results are not recorded. */
+  nestedCalls?: PiNestedToolCalls;
   // bashExecution
   command?: string;
   output?: string;

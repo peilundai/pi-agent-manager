@@ -51,6 +51,28 @@ test.describe("Pi Agent Manager webview", () => {
     await chat.screenshot("done-light");
   });
 
+  test("groups a codemode script's tool calls in one card", async ({ chat }) => {
+    const { page } = chat;
+    const input = page.getByLabel("Message Pi");
+    await input.fill("Use codemode to read the module");
+    await input.press("Enter");
+
+    await expect(page.getByText("The script read the module.")).toBeVisible();
+    const card = page.locator(".tool").filter({ has: page.locator(".tool-verb", { hasText: "Codemode" }) });
+    await expect(page.locator(".timeline-row > .timeline-content > .tool")).toHaveCount(1);
+    await expect(card.locator(".tool-target").first()).toHaveText("const source = await tools.read({ path: \"src/greet.ts\" });");
+    await expect(card.locator(".tool-summary").first()).toHaveText("⎿2 tool calls · 1 failed");
+    await chat.screenshot("codemode-collapsed-dark");
+
+    await card.locator(".tool-header").first().click();
+    await expect(card.getByRole("region", { name: "Script" })).not.toContainText("@options");
+    await expect(card.getByRole("region", { name: "Tool calls" }).locator(".tool-child")).toHaveCount(2);
+    await expect(card.getByRole("region", { name: "Output" })).toContainText("read ok");
+    await chat.screenshot("codemode-expanded-dark");
+    await chat.setTheme("light");
+    await chat.screenshot("codemode-expanded-light");
+  });
+
   test("opens the model picker and switches thinking level", async ({ chat }) => {
     const { page } = chat;
     await page.getByTitle("Choose model and thinking level").click();
