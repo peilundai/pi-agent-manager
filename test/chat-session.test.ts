@@ -274,6 +274,29 @@ describe("ChatSession races", () => {
     ]);
   });
 
+  it("replays a run in progress after a later snapshot, including what was already posted", async () => {
+    const { session, posted, fake } = await snapshotHarness([], []);
+    fake.listener.onEvent({ type: "agent_start" });
+    fake.listener.onEvent({ type: "tool_execution_start", toolCallId: "t1", toolName: "bash", args: { command: "ls" } });
+    fake.listener.onEvent({ type: "tool_execution_update", toolCallId: "t1", partialResult: { content: [{ type: "text", text: "a" }] } });
+    fake.listener.onEvent({ type: "tool_execution_update", toolCallId: "t1", partialResult: { content: [{ type: "text", text: "a\nb" }] } });
+    fake.listener.onEvent({ type: "message_start", message: { role: "assistant", content: [] } });
+    fake.listener.onEvent({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hel" } });
+    await new Promise((resolve) => setTimeout(resolve, 30)); // flushed to the webview
+    // The webview reloads: a new snapshot must bring back the live run, not just new events.
+    posted.length = 0;
+    await session.postSnapshot();
+    expect(posted[0]?.type).toBe("snapshot");
+    expect(replayed(posted).map((event) => event.type)).toEqual([
+      "agent_start",
+      "tool_execution_start",
+      "tool_execution_update",
+      "message_start",
+      "message_update",
+    ]);
+    expect(replayed(posted)[2]).toMatchObject({ partialResult: { content: [{ text: "a\nb" }] } });
+  });
+
   it("keeps a message that is still streaming at the boundary", async () => {
     const { session, posted } = await snapshotHarness(
       [
@@ -292,8 +315,8 @@ describe("ChatSession races", () => {
     const { session, posted, fake } = await snapshotHarness([dialog], []);
     posted.length = 0;
     await session.postSnapshot();
-    // Once from the replayed stream and once as a pending dialog; the webview dedupes by id.
-    expect(replayed(posted).filter((event) => event.id === "d1")).toHaveLength(2);
+    // Re-sent once, as a pending dialog.
+    expect(replayed(posted).filter((event) => event.id === "d1")).toHaveLength(1);
 
     posted.length = 0;
     await session.postSnapshot();
@@ -337,7 +360,7 @@ describe("ChatSession races", () => {
 });
 
 describe("withoutSnapshotCoverage", () => {
-  it("drops orphan message ends and keeps unrelated events", () => {
+  it("keeps only events that neither the snapshot nor the run replay reproduce", () => {
     expect(
       withoutSnapshotCoverage([
         { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "x" } },
@@ -345,11 +368,12 @@ describe("withoutSnapshotCoverage", () => {
         { type: "tool_execution_start", toolCallId: "t" },
         { type: "tool_execution_end", toolCallId: "t" },
         { type: "queue_update", steering: [], followUp: ["next"] },
+        { type: "agent_settled", aborted: false },
+        { type: "extension_ui_request", id: "n", method: "notify", message: "hi" },
       ]),
     ).toEqual([
-      { type: "tool_execution_start", toolCallId: "t" },
       { type: "tool_execution_end", toolCallId: "t" },
-      { type: "queue_update", steering: [], followUp: ["next"] },
+      { type: "extension_ui_request", id: "n", method: "notify", message: "hi" },
     ]);
   });
 });

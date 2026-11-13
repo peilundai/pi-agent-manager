@@ -27,7 +27,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const workspaceFolder = resolveWorkspaceFolder(vscode.workspace, vscode.window.activeTextEditor);
   const log = vscode.window.createOutputChannel("Pi Agent Manager", { log: true });
   const environment = new PiEnvironment({ secrets: context.secrets, log });
-  environment.preload();
   const knownCommands = await vscode.commands.getCommands(true);
   const surface = chatSurface(knownCommands);
   if (surface === "activitybar") {
@@ -40,6 +39,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     surface,
     repository: new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) }),
     memento: context.workspaceState,
+    relay: { script: vscode.Uri.joinPath(context.extensionUri, "dist", "relay.js").fsPath, nodePath: process.execPath },
   });
   activeProvider = provider;
   context.subscriptions.push(
@@ -67,6 +67,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     log,
   );
+  // A reload left Pi running behind its relay: pick it back up straight away.
+  provider.resumeRunningPi();
 }
 
 export async function deactivate(): Promise<void> {

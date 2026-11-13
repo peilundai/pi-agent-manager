@@ -6,7 +6,8 @@ import { boundFilePosition, imageMimeType, searchFiles, selectionFromEditor } fr
 import { formatEditorSelection, isSupportedDocumentScheme, selectionLabel } from "../editor/selection";
 import { ChatSession, type ChatSessionOptions } from "../pi/chat-session";
 import { augmentPath, buildPiInvocation, buildRpcArgs, resolvePiCommand } from "../pi/command-resolver";
-import { PiRpcClient } from "../pi/rpc-client";
+import { isRelayEndpoint, RelayClient, type RelayEndpoint } from "../pi/relay-client";
+import { PiRpcClient, type RpcSpawnOptions } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
 import type { PiEnvironment } from "./pi-environment";
 import type { SessionSummary, SetupErrorState } from "../shared/model";
@@ -61,7 +62,12 @@ export interface ChatViewProviderOptions {
   surface?: ChatSurface;
   repository: Pick<PiSessionRepository, "list" | "watch" | "delete"> & Partial<Pick<PiSessionRepository, "useEnvironment">>;
   /** Builds Pi's environment (login shell, settings, secrets); defaults to VS Code's own. */
-  environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
+  environment?: Pick<PiEnvironment, "resolve" | "checkMissing"> & Partial<Pick<PiEnvironment, "preload">>;
+  /**
+   * Runs Pi behind a detached relay so it keeps working through a window reload. Without it
+   * (tests, or if the relay is unavailable) Pi is a plain child of the extension host.
+   */
+  relay?: { script: string; nodePath: string; graceMs?: number };
   /** Test seam: replaces spawning the real `pi --mode rpc` process. */
   createClient?: ChatSessionOptions["createClient"];
   /** Workspace-scoped storage that remembers the open chat, so a window reload resumes it. */
@@ -69,6 +75,8 @@ export interface ChatViewProviderOptions {
 }
 
 export const ACTIVE_CHAT_KEY = "piAgentManager.activeChat";
+/** Where the relay that owns this window's Pi listens, so a reloaded window can reattach. */
+export const RELAY_KEY = "piAgentManager.relay";
 
 /** The chat that was open when the window last ran, keyed by the folder Pi ran in. */
 interface ActiveChat {
@@ -193,6 +201,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   resolveWebviewView(view: vscode.WebviewView): void {
     if (!ownsView(this.surface, view.viewType)) return;
+    // Start loading the login-shell environment as soon as the chat is on screen.
+    this.options.environment?.preload?.();
     this.view = view;
     this.ready = false;
     const distUri = vscode.Uri.joinPath(this.options.extensionUri, "dist");
@@ -361,11 +371,30 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     if (this.selectionTimer) clearTimeout(this.selectionTimer);
     this.watcher?.dispose();
     for (const disposable of this.disposables.splice(0)) disposable.dispose();
-    void this.session.dispose();
+    void this.session.detach();
   }
 
+  /**
+   * Called when the window closes or reloads. Pi is left running behind its relay, so a reload
+   * reattaches to it mid-run; if nothing reattaches, the relay stops Pi after a short grace period.
+   */
   async shutdown(): Promise<void> {
-    await this.session.dispose();
+    await this.session.detach();
+  }
+
+  /**
+   * Reattaches to a Pi that kept running through a window reload, without waiting for the chat
+   * view to be shown, so the relay's grace period does not run out while the view is hidden.
+   */
+  resumeRunningPi(): void {
+    const endpoint = this.relayEndpoint();
+    if (!this.options.relay || !endpoint || endpoint.cwd !== this.cwd || this.setupError) return;
+    void this.startSession();
+  }
+
+  private relayEndpoint(): RelayEndpoint | undefined {
+    const value = this.options.memento?.get<unknown>(RELAY_KEY);
+    return isRelayEndpoint(value) ? value : undefined;
   }
 
   /** Restarts Pi on the current chat so it picks up a changed environment. */
@@ -500,11 +529,42 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
   }
 
-  private async createClient(listener: ConstructorParameters<typeof PiRpcClient>[1]): Promise<PiRpcClient> {
+  private async createClient(listener: ConstructorParameters<typeof PiRpcClient>[1]): Promise<RelayClient | PiRpcClient> {
     const cwd = this.cwd;
     if (!cwd) throw new Error("Open a folder to chat with Pi.");
-    const config = vscode.workspace.getConfiguration("piAgentManager");
+    const relay = this.options.relay;
+    if (!relay) return new PiRpcClient(await this.spawnOptions(cwd), listener);
+    const endpoint = this.relayEndpoint();
+    // Reattaching needs no environment; load it in the background for the history location.
+    if (endpoint?.cwd === cwd) void this.loadEnvironment().catch(() => undefined);
+    const memento = this.options.memento;
+    return new RelayClient(
+      {
+        spawnOptions: () => this.spawnOptions(cwd),
+        script: relay.script,
+        nodePath: relay.nodePath,
+        cwd,
+        ...(endpoint ? { endpoint } : {}),
+        ...(relay.graceMs !== undefined ? { graceMs: relay.graceMs } : {}),
+        onEndpoint: (next) => void Promise.resolve(memento?.update(RELAY_KEY, next)).catch(() => undefined),
+      },
+      listener,
+    );
+  }
+
+  private async loadEnvironment(): Promise<NodeJS.ProcessEnv> {
     const environment = this.options.environment ? await this.options.environment.resolve() : process.env;
+    if (this.options.repository.useEnvironment?.(environment)) {
+      // Pi will write transcripts where its environment says; list and watch the same place.
+      this.watchSessions();
+      this.scheduleSessions();
+    }
+    return environment;
+  }
+
+  private async spawnOptions(cwd: string): Promise<RpcSpawnOptions> {
+    const config = vscode.workspace.getConfiguration("piAgentManager");
+    const environment = await this.loadEnvironment();
     const command = await resolvePiCommand({ configured: config.get<string>("command", "pi"), env: environment });
     const extraArgs = config.get<unknown>("extraArgs", []);
     const args = buildRpcArgs({
@@ -513,12 +573,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const invocation = buildPiInvocation(command.path, args);
     const env: NodeJS.ProcessEnv = { ...environment, ...invocation.env, PATH: augmentPath(command.path, environment) };
     void this.options.environment?.checkMissing(cwd, env).catch(() => undefined);
-    if (this.options.repository.useEnvironment?.(environment)) {
-      // Pi will write transcripts where its environment says; list and watch the same place.
-      this.watchSessions();
-      this.scheduleSessions();
-    }
-    return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd, env }, listener);
+    return { file: invocation.file, args: invocation.args, cwd, env };
   }
 
   /** New chats start in the active editor's folder, so "+" always means "here". */

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPiInvocation, buildRpcArgs } from "../../../src/pi/command-resolver";
-import { PiRpcClient, type RpcClientListener } from "../../../src/pi/rpc-client";
+import { PiRpcClient, type RpcClientListener, type RpcSpawnOptions } from "../../../src/pi/rpc-client";
 import { PiSessionRepository } from "../../../src/pi/session-repository";
 
 export const GREET_SOURCE = 'export function greet(name: string): string {\n  return "hello " + name;\n}\n';
@@ -36,6 +36,8 @@ export interface PiTestEnv {
   env: NodeJS.ProcessEnv;
   repository: PiSessionRepository;
   createClient(listener: RpcClientListener): Promise<PiRpcClient>;
+  /** How to spawn Pi for this environment (for relay-backed clients). */
+  spawnOptions(): RpcSpawnOptions;
   readGreet(): Promise<string>;
   resetGreet(): Promise<void>;
   cleanup(): Promise<void>;
@@ -80,6 +82,10 @@ export async function createPiTestEnv(llmUrl: string): Promise<PiTestEnv> {
   delete env.PI_CODING_AGENT_SESSION_DIR;
   const pi = piExecutable();
   const repository = new PiSessionRepository({ agentDir, env });
+  const spawnOptions = (): RpcSpawnOptions => {
+    const invocation = buildPiInvocation(pi, buildRpcArgs({ extraArgs: ["--provider", "mock", "--model", "mock-1", "--offline"] }));
+    return { file: invocation.file, args: invocation.args, cwd: workspace, env: { ...env, ...invocation.env } };
+  };
 
   return {
     home,
@@ -87,9 +93,9 @@ export async function createPiTestEnv(llmUrl: string): Promise<PiTestEnv> {
     workspace,
     env,
     repository,
+    spawnOptions,
     async createClient(listener) {
-      const invocation = buildPiInvocation(pi, buildRpcArgs({ extraArgs: ["--provider", "mock", "--model", "mock-1", "--offline"] }));
-      return new PiRpcClient({ file: invocation.file, args: invocation.args, cwd: workspace, env: { ...env, ...invocation.env } }, listener);
+      return new PiRpcClient(spawnOptions(), listener);
     },
     readGreet: () => readFile(join(workspace, "src", "greet.ts"), "utf8"),
     resetGreet: () => writeFile(join(workspace, "src", "greet.ts"), GREET_SOURCE),

@@ -7,7 +7,7 @@ Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. Hosts that d
 │ ChatViewProvider ── protocol (validated) ─────────────┼──────▶ │ App → chatReducer(state, event) │
 │   │                                                   │ ◀──────┼── prompt / abort / model.set …  │
 │   ├─ ChatSession   (lifecycle, commands, batching)    │        │ Header · SessionPicker          │
-│   │    └─ PiRpcClient ── JSONL over stdio ──▶ pi      │        │ Transcript · ToolCard · Dialog  │
+│   │    └─ RelayClient ═ socket ═ relay ─ stdio ─▶ pi  │        │ Transcript · ToolCard · Dialog  │
 │   ├─ PiSessionRepository (~/.pi/agent/sessions)       │        │ Composer · ModelPicker          │
 │   └─ editor helpers (selection, @-file search)        │        └─────────────────────────────────┘
 └───────────────────────────────────────────────────────┘
@@ -20,13 +20,27 @@ Pi Agent Manager is a webview view in VS Code's Secondary Side Bar. Hosts that d
   - `src/pi/jsonl.ts` splits stdout strictly on LF, not with `readline`, so U+2028/U+2029 inside JSON strings stay intact.
   - Requests carry an `id` and are matched to their `response`. Everything else is an event.
   - Closing stdin shuts Pi down gracefully. A process that is still alive after 2 s is killed.
-  - The open chat (folder and transcript path) is kept in `workspaceState` under `piAgentManager.activeChat`. The first start after activation reopens that folder and resumes the transcript with `switch_session`, as long as it is still in the folder's history, so a window reload brings the chat back.
 - `src/pi/chat-session.ts`:
   - **Startup:** posts a snapshot built from `get_state`, `get_messages`, `get_available_models`, `get_commands` and `get_session_stats`.
   - **Chat commands:** prompts (`streamingBehavior` is `followUp` or `steer` while busy), `abort`, `new_session` and `switch_session`.
   - **Settings commands:** `set_model`, `set_thinking_level`, `set_session_name`, `compact`, and `extension_ui_response`.
   - **Events:** sanitized by `src/pi/sanitize.ts` (drops `agent_end`/`turn_end` payloads and system messages, bounds string sizes), then batched every 16 ms.
   - **End of a run:** `agent_settled`, not `agent_end`, because retries, compaction and queued messages can follow `agent_end`.
+
+## Surviving a window reload
+
+Reloading the window ends the extension host, so Pi is not its direct child. `src/pi/relay-client.ts` launches `dist/relay.js` (`src/relay.ts` → `src/pi/relay-server.ts`) as a **detached** process with Electron's Node (`ELECTRON_RUN_AS_NODE=1`), and the relay owns `pi --mode rpc`.
+
+```
+extension host ── RelayClient ══ local socket ══ relay (detached) ── stdio ── pi --mode rpc
+```
+
+- **Launch:** the config, including Pi's environment, goes to the relay's stdin, never its command line. The relay answers `relay.ready` and is then on its own. It listens on a Unix socket in a private `mkdtemp` directory, or a named pipe on Windows. Clients must present a random 256-bit token.
+- **Wire format:** JSONL. Pi's records pass through unchanged, except request ids are scoped per connection, so a reloaded window's ids never get another window's answers. Control records are `relay.*`.
+- **Reload:** `deactivate` calls `ChatSession.detach()`, which closes the socket and leaves Pi running. The endpoint (socket path, token, folder) is kept in `workspaceState` under `piAgentManager.relay`. The extension activates `onStartupFinished` and calls `ChatViewProvider.resumeRunningPi()`, so it reattaches even while the view is hidden. A reattached client skips `switch_session`.
+- **Catch-up:** `src/pi/run-replay.ts` tracks the live part of a run that a `get_messages` snapshot cannot show: the run itself, the streaming message's deltas, running tools (latest output only), queue/compaction/retry status and unanswered dialogs (with their remaining timeout). Completed messages are dropped when they end. The relay sends this replay right after `relay.welcome`. `ChatSession` keeps its own `RunReplay` too and posts it after every snapshot, so a reloaded webview also shows a run in progress.
+- **Close:** if nothing reattaches within 30 s (`RELAY_GRACE_MS`), the relay closes Pi's stdin, kills it after 2 s, removes its socket directory and exits. **New Chat** across folders, folder switches and **Restart Pi** stop the relay as before.
+- **Fallback:** if the relay is gone (closed window, reboot), the first start resumes the last open transcript instead. The folder and transcript path are kept under `piAgentManager.activeChat` and resumed with `switch_session` if the transcript is still in that folder's history.
 
 ## Pi's environment
 

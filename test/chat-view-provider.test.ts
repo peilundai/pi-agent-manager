@@ -5,7 +5,7 @@ import type { Uri, WebviewView, WorkspaceFolder } from "vscode";
 import { PiCommandNotFoundError } from "../src/pi/command-resolver";
 import type { SessionSummary } from "../src/shared/model";
 import type { HostToWebviewMessage } from "../src/shared/protocol";
-import { ACTIVE_CHAT_KEY, ChatViewProvider, webviewHtml } from "../src/view/chat-view-provider";
+import { ACTIVE_CHAT_KEY, ChatViewProvider, RELAY_KEY, webviewHtml } from "../src/view/chat-view-provider";
 import { resetVscodeMock } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 import { FakeClient } from "./support/fake-client";
@@ -32,6 +32,7 @@ function setup(
     workspace?: boolean;
     createClient?: (listener: ConstructorParameters<typeof FakeClient>[0]) => Promise<FakeClient>;
     memento?: { get(key: string): unknown; update(key: string, value: unknown): Promise<void> };
+    relay?: boolean;
   } = {},
 ) {
   const posted: HostToWebviewMessage[] = [];
@@ -48,6 +49,7 @@ function setup(
     workspaceFolder: options.workspace === false ? undefined : folder(),
     repository,
     ...(options.memento ? { memento: options.memento } : {}),
+    ...(options.relay ? { relay: { script: "/ext/dist/relay.js", nodePath: "/node" } } : {}),
     createClient: async (listener) => {
       client = options.createClient ? await options.createClient(listener) : new FakeClient(listener);
       clients.push(client);
@@ -431,6 +433,49 @@ describe("ChatViewProvider chat restore", () => {
     expect(clients).toHaveLength(1);
     expect(clients[0]?.requests.filter((request) => request.type === "switch_session")).toHaveLength(1);
     expect(clients[0]?.requests.at(-1)?.type).not.toBe("switch_session");
+  });
+});
+
+describe("ChatViewProvider across window reloads", () => {
+  const endpoint = { socketPath: "/tmp/pi-agent-manager-x/relay.sock", token: "t", cwd: "/work" };
+
+  it("reattaches to Pi as soon as the extension activates, before the view is shown", async () => {
+    const { provider, clients, ready, posted } = setup({ relay: true, memento: memoryMemento({ [RELAY_KEY]: endpoint }) });
+    provider.resumeRunningPi();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(clients).toHaveLength(1);
+    expect(posted).toEqual([]);
+    // When the view shows up it gets a fresh snapshot of the same Pi.
+    await ready();
+    expect(clients).toHaveLength(1);
+    expect(posted.map((message) => message.type)).toEqual(expect.arrayContaining(["init", "process", "snapshot"]));
+  });
+
+  it("does nothing on activation when no Pi was left running for this folder", async () => {
+    for (const memento of [memoryMemento(), memoryMemento({ [RELAY_KEY]: { ...endpoint, cwd: "/other" } }), memoryMemento({ [RELAY_KEY]: "junk" })]) {
+      const { provider, clients } = setup({ relay: true, memento });
+      provider.resumeRunningPi();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(clients).toHaveLength(0);
+    }
+    const { provider, clients } = setup({ memento: memoryMemento({ [RELAY_KEY]: endpoint }) });
+    provider.resumeRunningPi();
+    expect(clients).toHaveLength(0);
+  });
+
+  it("detaches from Pi instead of stopping it when the window goes away", async () => {
+    class DetachableClient extends FakeClient {
+      detached = false;
+      async detach() {
+        this.detached = true;
+      }
+    }
+    const { provider, ready, client } = setup({ createClient: async (listener) => new DetachableClient(listener) });
+    await ready();
+    const fake = client() as DetachableClient;
+    await provider.shutdown();
+    expect(fake.detached).toBe(true);
+    expect(fake.running).toBe(true);
   });
 });
 

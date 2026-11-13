@@ -7,6 +7,7 @@ export const ARTIFACT_NAME = `${manifest.name}-${manifest.version}.vsix`;
 
 const requiredExtensionFiles = [
   "extension/dist/extension.js",
+  "extension/dist/relay.js",
   "extension/dist/webview.js",
   "extension/dist/webview.css",
   "extension/dist/codicon.ttf",

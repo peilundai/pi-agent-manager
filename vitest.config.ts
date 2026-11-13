@@ -17,7 +17,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/webview/main.tsx", "src/**/*.d.ts", "src/pi/rpc-types.ts", "src/shared/model.ts"],
+      exclude: ["src/webview/main.tsx", "src/relay.ts", "src/**/*.d.ts", "src/pi/rpc-types.ts", "src/shared/model.ts"],
       reporter: ["text", "html", "lcov", "json-summary"],
       reportsDirectory: "coverage",
       // Keep just under current coverage; raise as tests are added. Re-baselined for vitest 5, whose
