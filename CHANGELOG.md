@@ -4,6 +4,10 @@ All notable changes to Pi Agent Manager are documented here. (During development
 
 ## Unreleased
 
+### Added
+
+- **The open chat comes back after a reload.** Reloading the window reopens that chat in the same folder when its transcript is still in the folder's history.
+
 ### Changed
 
 - **Codemode calls are grouped.** A `codemode` script shows as one card: the script, the tool calls it made, and its output. Before, the calls were listed beside the script as if Pi had made them directly. The card shows the lines its edits changed, and it follows `piAgentManager.expandToolCards`: with the default `edits` it opens when the script edited files, showing those diffs. Any tool that calls other tools is grouped the same way.
@@ -11,6 +15,7 @@ All notable changes to Pi Agent Manager are documented here. (During development
 ### Fixed
 
 - Tool calls made by a codemode script disappeared when a chat was reloaded or resumed. They are rebuilt from the record Pi keeps with the script's result.
+- The empty-chat tip and the composer placeholder name the current shortcuts. **Add Selection to Chat** is `Alt+L` (`⌥L` on macOS). **Focus Chat Input** is `Ctrl+Alt+P` (`⌃⌘P` on macOS).
 
 ## 0.2.4 — 2026-11-04
 
@@ -26,6 +31,8 @@ All notable changes to Pi Agent Manager are documented here. (During development
 ### Fixed
 
 - In Cursor, Pi opens from the left activity bar. Cursor does not register the Secondary Side Bar, so opening Pi failed with `command 'workbench.view.extension.piAgentManager' not found`. VS Code still opens Pi in the Secondary Side Bar, and only one panel is shown.
+- A failed shell command is summarized by its exit status, such as `Exit code 128`, a timeout, or an abort, instead of the first line of its output. Only that status line is red. The command's own output keeps its normal color.
+- Long notices, dialog answers, and links keep to the width of the transcript. A long URL is a one-line chip you can open or copy. A long answer truncates, and the full value shows on hover. Notices, thinking text, and quotes are rounded cards.
 
 ## 0.2.3 — 2026-11-04
 
