@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { WebviewToHostMessage } from "../src/shared/protocol";
 import type { ToolState } from "../src/webview/chat-state";
 import { Composer, type ComposerHandle, type ComposerProps } from "../src/webview/components/Composer";
+import { tipsFor } from "../src/webview/components/EmptyState";
 import { ChatContext } from "../src/webview/components/context";
 import { Header, relativeTime, SessionPicker } from "../src/webview/components/Header";
 import { LinkText, splitLinks, trimUrl } from "../src/webview/components/LinkText";
@@ -624,5 +625,15 @@ describe("Composer", () => {
     const { props } = renderComposer({ busy: true });
     fireEvent.click(screen.getByLabelText("Stop"));
     expect(props.onAbort).toHaveBeenCalled();
+  });
+
+  it("names the current Add Selection and Focus Chat Input shortcuts on Mac and elsewhere", () => {
+    expect(tipsFor("darwin")).toContain("Select code and press ⌥L to add it to the chat.");
+    expect(tipsFor("linux")).toContain("Select code and press Alt+L to add it to the chat.");
+    const mac = renderComposer({ platform: "darwin" });
+    expect(mac.input.placeholder).toBe("⌃⌘P to focus or unfocus Pi");
+    mac.unmount();
+    const other = renderComposer({ platform: "linux" });
+    expect(other.input.placeholder).toBe("Ctrl+Alt+P to focus or unfocus Pi");
   });
 });
