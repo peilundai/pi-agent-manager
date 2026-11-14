@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { shortcutLabel } from "../../shared/shortcut-label";
 
 /** Pixel-art π mascot: a bar body with two eyes standing on two legs. */
 const MASCOT_PIXELS = [
@@ -29,10 +30,11 @@ export function PiMascot({ size = 7 }: { size?: number }) {
 
 export function tipsFor(platform: string): string[] {
   const mod = platform === "darwin" ? "⌘" : "Ctrl+";
+  const addSelection = shortcutLabel("piAgentManager.sendSelection", platform);
   return [
     "Type / for commands, prompt templates and skills.",
     "Use @ to mention a file from your workspace.",
-    `Select code and press ${mod}L to add it to the chat.`,
+    `Select code and press ${addSelection} to add it to the chat.`,
     "Paste or drop images to show Pi a screenshot.",
     "Press Esc while Pi works to interrupt it.",
     `Messages sent while Pi works are queued. ${mod}Enter steers it immediately.`,

@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { expandReferences, findReferenceTokens, parseReferencedPrompt } from "../../shared/context-references";
+import { shortcutLabel } from "../../shared/shortcut-label";
 import type { ContextReference, EditorSelection, ImageAttachment, PromptMode } from "../../shared/protocol";
 import type { PiCommand, PiModel, PiSessionStats, ThinkingLevel } from "../../pi/rpc-types";
 import { useChat } from "./context";
@@ -473,7 +474,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const canSend = (text.trim().length > 0 || images.length > 0) && !props.disabled;
   const placeholder = props.busy
     ? `Queue a follow-up · ${isMac ? "⌘" : "Ctrl"}+Enter to steer now`
-    : `${isMac ? "⌘" : "Ctrl"} Esc to focus or unfocus Pi`;
+    : `${shortcutLabel("piAgentManager.focusInput", props.platform)} to focus or unfocus Pi`;
 
   return (
     <div
