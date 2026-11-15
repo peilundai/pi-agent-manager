@@ -72,11 +72,31 @@ export interface ChatViewProviderOptions {
   createClient?: ChatSessionOptions["createClient"];
   /** Workspace-scoped storage that remembers the open chat, so a window reload resumes it. */
   memento?: Pick<vscode.Memento, "get" | "update">;
+  /**
+   * Set for an agent in an editor tab. Each agent keeps its own Pi, relay and open chat under
+   * keys suffixed with this id, so several agents in one window never share state.
+   */
+  agentId?: string;
 }
 
 export const ACTIVE_CHAT_KEY = "piAgentManager.activeChat";
 /** Where the relay that owns this window's Pi listens, so a reloaded window can reattach. */
 export const RELAY_KEY = "piAgentManager.relay";
+
+/** The workspace-state key for `base`, scoped to an editor-tab agent when there is one. */
+export function agentStateKey(base: string, agentId: string | undefined): string {
+  return agentId ? `${base}.${agentId}` : base;
+}
+
+/** Tab titles stay short; the full chat name is in the chat header. */
+const MAX_TAB_TITLE = 40;
+export const DEFAULT_AGENT_TITLE = "Pi Agent";
+
+export function agentTabTitle(title: string | undefined): string {
+  const name = title?.replace(/\s+/g, " ").trim();
+  if (!name) return DEFAULT_AGENT_TITLE;
+  return name.length > MAX_TAB_TITLE ? `${name.slice(0, MAX_TAB_TITLE - 1).trimEnd()}…` : name;
+}
 
 /** The chat that was open when the window last ran, keyed by the folder Pi ran in. */
 interface ActiveChat {
@@ -84,8 +104,8 @@ interface ActiveChat {
   sessionFile: string;
 }
 
-function readActiveChat(memento: ChatViewProviderOptions["memento"]): ActiveChat | undefined {
-  const value = memento?.get<unknown>(ACTIVE_CHAT_KEY);
+function readActiveChat(memento: ChatViewProviderOptions["memento"], key: string): ActiveChat | undefined {
+  const value = memento?.get<unknown>(key);
   if (!value || typeof value !== "object") return undefined;
   const { folder, sessionFile } = value as Record<string, unknown>;
   return typeof folder === "string" && typeof sessionFile === "string" ? { folder, sessionFile } : undefined;
@@ -107,7 +127,11 @@ export function maxContentWidth(): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : DEFAULT_MAX_CONTENT_WIDTH;
 }
 
-export function webviewHtml(webview: Pick<vscode.Webview, "cspSource" | "asWebviewUri">, distUri: vscode.Uri): string {
+export function webviewHtml(
+  webview: Pick<vscode.Webview, "cspSource" | "asWebviewUri">,
+  distUri: vscode.Uri,
+  agentId?: string,
+): string {
   const nonce = randomBytes(18).toString("base64url");
   const script = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "webview.js")).toString();
   const style = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "webview.css")).toString();
@@ -124,7 +148,7 @@ export function webviewHtml(webview: Pick<vscode.Webview, "cspSource" | "asWebvi
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="${csp};" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="${style}" />
+${agentId && /^[\w-]+$/.test(agentId) ? `    <meta name="pi-agent-id" content="${agentId}" />\n` : ""}    <link rel="stylesheet" href="${style}" />
     <title>Pi</title>
   </head>
   <body>
@@ -143,8 +167,18 @@ function toolExpansionSetting(): ToolExpansion {
   return TOOL_EXPANSIONS.includes(value as ToolExpansion) ? (value as ToolExpansion) : "edits";
 }
 
+/** What the chat renders into: a sidebar `WebviewView` or an editor-tab `WebviewPanel`. */
+interface ChatHost {
+  readonly webview: vscode.Webview;
+  onDidDispose(listener: () => void): vscode.Disposable;
+}
+
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
-  private view: vscode.WebviewView | undefined;
+  private view: ChatHost | undefined;
+  /** Set when this chat lives in an editor tab rather than the sidebar. */
+  private panel: vscode.WebviewPanel | undefined;
+  private readonly activeChatKey: string;
+  private readonly relayKey: string;
   private ready = false;
   private outbox: HostToWebviewMessage[] = [];
   private readonly disposables: vscode.Disposable[] = [];
@@ -167,7 +201,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   constructor(private readonly options: ChatViewProviderOptions) {
     this.surface = options.surface ?? "secondarySidebar";
-    this.restore = readActiveChat(options.memento);
+    this.activeChatKey = agentStateKey(ACTIVE_CHAT_KEY, options.agentId);
+    this.relayKey = agentStateKey(RELAY_KEY, options.agentId);
+    this.restore = readActiveChat(options.memento, this.activeChatKey);
     // Reopen in the folder the chat was in, if it is still part of the workspace.
     const restoredFolder = this.restore
       ? vscode.workspace.workspaceFolders?.find((candidate) => candidate.uri.fsPath === this.restore?.folder)
@@ -178,7 +214,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       createClient: options.createClient ?? ((listener) => this.createClient(listener)),
       post: (message) => this.post(message),
       onSessionsChanged: () => this.scheduleSessions(),
-      onActiveSessionChanged: (sessionFile) => this.rememberActiveChat(sessionFile),
+      onActiveSessionChanged: (sessionFile) => {
+        this.rememberActiveChat(sessionFile);
+        this.updateTitle();
+      },
     });
     this.watchSessions();
   }
@@ -200,14 +239,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
-    if (!ownsView(this.surface, view.viewType)) return;
+    if (this.options.agentId || !ownsView(this.surface, view.viewType)) return;
+    this.attach(view);
+  }
+
+  /** Shows this agent's chat in an editor tab; the tab title follows the chat's name. */
+  attachPanel(panel: vscode.WebviewPanel): void {
+    this.panel = panel;
+    this.attach(panel);
+    this.updateTitle();
+    this.disposables.push(
+      panel.onDidDispose(() => {
+        if (this.panel === panel) this.panel = undefined;
+      }),
+    );
+  }
+
+  /** Whether an editor tab currently shows this agent. */
+  get hasPanel(): boolean {
+    return this.panel !== undefined;
+  }
+
+  private attach(view: ChatHost): void {
     // Start loading the login-shell environment as soon as the chat is on screen.
     this.options.environment?.preload?.();
     this.view = view;
     this.ready = false;
     const distUri = vscode.Uri.joinPath(this.options.extensionUri, "dist");
     view.webview.options = { enableScripts: true, localResourceRoots: [distUri] };
-    view.webview.html = webviewHtml(view.webview, distUri);
+    view.webview.html = webviewHtml(view.webview, distUri, this.options.agentId);
     this.disposables.push(
       view.webview.onDidReceiveMessage((message: unknown) => {
         if (!isWebviewMessage(message)) return;
@@ -223,9 +283,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   async reveal(): Promise<void> {
+    if (this.options.agentId) {
+      this.panel?.reveal();
+      return;
+    }
     const command = revealCommand(this.surface, await vscode.commands.getCommands(true));
     if (command) await vscode.commands.executeCommand(command);
-    this.view?.show?.(true);
+    (this.view as Partial<Pick<vscode.WebviewView, "show">> | undefined)?.show?.(true);
   }
 
   async newChat(): Promise<void> {
@@ -383,6 +447,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   /**
+   * Ends this agent for good (its editor tab was closed): stops Pi and its relay and forgets the
+   * open chat. The transcript stays in Past Chats.
+   */
+  async close(): Promise<void> {
+    if (this.sessionsTimer) clearTimeout(this.sessionsTimer);
+    if (this.selectionTimer) clearTimeout(this.selectionTimer);
+    this.watcher?.dispose();
+    for (const disposable of this.disposables.splice(0)) disposable.dispose();
+    this.view = undefined;
+    this.panel = undefined;
+    this.ready = false;
+    await this.session.dispose().catch(() => undefined);
+    const memento = this.options.memento;
+    await Promise.all([
+      Promise.resolve(memento?.update(this.activeChatKey, undefined)).catch(() => undefined),
+      Promise.resolve(memento?.update(this.relayKey, undefined)).catch(() => undefined),
+    ]);
+  }
+
+  /** The title for this chat's editor tab: the open chat's name, or a generic one. */
+  get title(): string {
+    const file = this.session.sessionFile;
+    return agentTabTitle(file ? this.sessions.find((session) => session.path === file)?.title : undefined);
+  }
+
+  private updateTitle(): void {
+    const panel = this.panel;
+    if (panel && panel.title !== this.title) panel.title = this.title;
+  }
+
+  /**
    * Reattaches to a Pi that kept running through a window reload, without waiting for the chat
    * view to be shown, so the relay's grace period does not run out while the view is hidden.
    */
@@ -393,7 +488,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private relayEndpoint(): RelayEndpoint | undefined {
-    const value = this.options.memento?.get<unknown>(RELAY_KEY);
+    const value = this.options.memento?.get<unknown>(this.relayKey);
     return isRelayEndpoint(value) ? value : undefined;
   }
 
@@ -500,7 +595,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const folder = this.cwd;
     if (!memento || !folder) return;
     const value: ActiveChat | undefined = sessionFile ? { folder, sessionFile } : undefined;
-    void Promise.resolve(memento.update(ACTIVE_CHAT_KEY, value)).catch(() => undefined);
+    void Promise.resolve(memento.update(this.activeChatKey, value)).catch(() => undefined);
   }
 
   /**
@@ -546,7 +641,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         cwd,
         ...(endpoint ? { endpoint } : {}),
         ...(relay.graceMs !== undefined ? { graceMs: relay.graceMs } : {}),
-        onEndpoint: (next) => void Promise.resolve(memento?.update(RELAY_KEY, next)).catch(() => undefined),
+        onEndpoint: (next) => void Promise.resolve(memento?.update(this.relayKey, next)).catch(() => undefined),
       },
       listener,
     );
@@ -638,6 +733,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       if (cwd !== this.cwd) return; // The folder changed while listing; a newer refresh owns the list.
       this.sessions = sessions;
       this.post({ version: 1, type: "sessions", sessions });
+      this.updateTitle();
     } catch (error) {
       this.notice("warning", `Could not read Pi sessions: ${errorMessage(error)}`);
     }
