@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/peilundai/pi-agent-manager/actions/workflows/ci.yml)
 
-**The [Pi coding agent](https://github.com/earendil-works/pi), in a VS Code side-bar panel.** Chat next to your code, watch every read, edit and command as it happens, and interrupt or steer Pi at any time. Pi Agent for VS Code uses the `pi` you already have, so it needs no new account, key or config.
+**The [Pi coding agent](https://github.com/earendil-works/pi), in VS Code editor tabs.** Each agent opens in its own tab, so several can work side by side; set `piAgentManager.defaultLocation` to `"sidebar"` for a single side-bar chat instead. Chat next to your code, watch every read, edit and command as it happens, and interrupt or steer Pi at any time. Pi Agent for VS Code uses the `pi` you already have, so it needs no new account, key or config.
 
 <p align="center">
   <img src="docs/images/hero.png" width="900" alt="Three Pi Agent for VS Code panels: a tool-using turn with an inline diff, a confirmation card from a Pi extension, and the slash-command menu" />
@@ -14,7 +14,7 @@
 
 | If you… | Pi Agent for VS Code… |
 |---|---|
-| switch between a terminal and the editor to check what Pi did | shows each step in the side bar: files read, **inline diffs**, command output. Click a path to open the file. |
+| switch between a terminal and the editor to check what Pi did | shows each step next to your code: files read, **inline diffs**, command output. Click a path to open the file. |
 | want to stay in control of what Pi does | lets you <kbd>Esc</kbd> to interrupt Pi and <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> to steer it mid-run. Prompts from your Pi extensions, such as a bash confirmation, appear as inline **Yes / No cards**. |
 | copy and paste code and paths into the agent | sends your editor selection with the next message (or <kbd>⌥L</kbd> / <kbd>Alt+L</kbd> adds it as an `@file#lines` chip), `@` to mention files, and paste or drop to attach screenshots. |
 | lose earlier conversations | keeps **past chats** per workspace, searchable and grouped by day, so you can resume one in a click. |
