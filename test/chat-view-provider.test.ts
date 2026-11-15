@@ -332,6 +332,25 @@ describe("ChatViewProvider", () => {
     }
   });
 
+  it("skips editor and config events while it has no resolved view", () => {
+    const provider = new ChatViewProvider({
+      extensionUri: mock.Uri.file("/ext") as unknown as Uri,
+      workspaceFolder: folder(),
+      repository: { list: vi.fn(async () => []), watch: vi.fn(() => ({ dispose: vi.fn() })), delete: vi.fn() },
+    });
+    const affectsConfiguration = vi.fn(() => true);
+    vi.useFakeTimers();
+    try {
+      provider.editorSelectionChanged(undefined);
+      expect(vi.getTimerCount()).toBe(0);
+      provider.configurationChanged({ affectsConfiguration });
+      expect(affectsConfiguration).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      provider.dispose();
+    }
+  });
+
   it("replays composer insertions queued before the webview was ready", async () => {
     mock.window.activeTextEditor = {
       document: { uri: mock.Uri.file("/work/a.py"), fileName: "/work/a.py", languageId: "python", lineAt: () => ({ text: "x = 1" }), getText: () => "" },

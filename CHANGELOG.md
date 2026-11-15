@@ -12,6 +12,11 @@ All notable changes to Pi Agent for VS Code, formerly Pi Agent Manager, are docu
 ### Changed
 
 - **Renamed to Pi Agent for VS Code.** The Marketplace listing, side-bar titles, settings section, output channel and command palette category use the new name. The extension ID `peilundai.pi-agent-manager` and every `piAgentManager.*` command, setting and view ID are unchanged, so existing installs, settings and keybindings keep working.
+- **Marketplace description and README** say agents open in editor tabs by default, several side by side, with a single side-bar chat when `piAgentManager.defaultLocation` is `sidebar`.
+
+### Fixed
+
+- In editor mode, the unused side-bar chat no longer reacts to every editor-selection and settings change.
 
 ## 0.2.5 — 2026-11-14
 

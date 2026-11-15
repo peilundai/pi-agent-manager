@@ -309,10 +309,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     void this.switchFolder(target);
   }
 
-  /** Re-scopes the chat when folders are added, removed or renamed. */
   /** Layout settings only need a fresh init; Pi keeps running. */
   configurationChanged(event: Pick<vscode.ConfigurationChangeEvent, "affectsConfiguration">): void {
-    if (!this.ready) return;
+    // No view (e.g. the unused side-bar chat in editor mode): nothing to re-init.
+    if (!this.view || !this.ready) return;
     if (
       event.affectsConfiguration("piAgentManager.maxContentWidth") ||
       event.affectsConfiguration("piAgentManager.expandToolCards")
@@ -321,6 +321,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
   }
 
+  /** Re-scopes the chat when folders are added, removed or renamed. */
   workspaceFoldersChanged(): void {
     const folders = vscode.workspace.workspaceFolders ?? [];
     const current = folders.find((folder) => sameFolder(folder, this.folder));
@@ -381,6 +382,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   /** Tells the webview about the active editor's selection, debounced while the user drags. */
   editorSelectionChanged(editor: vscode.TextEditor | undefined): void {
     if (this.selectionTimer) clearTimeout(this.selectionTimer);
+    // Without a resolved view (the unused side-bar chat in editor mode) there is nobody to tell.
+    if (!this.view) {
+      this.selectionTimer = undefined;
+      return;
+    }
     this.selectionTimer = setTimeout(() => {
       this.selectionTimer = undefined;
       this.postEditorSelection(editor);
