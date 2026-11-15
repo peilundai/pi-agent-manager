@@ -2,7 +2,7 @@
 
 All notable changes to Pi Agent for VS Code, formerly Pi Agent Manager, are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
-## Unreleased
+## 0.3.0 — 2026-11-15
 
 ### Added
 
