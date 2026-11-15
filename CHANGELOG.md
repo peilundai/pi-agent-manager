@@ -4,6 +4,11 @@ All notable changes to Pi Agent for VS Code, formerly Pi Agent Manager, are docu
 
 ## Unreleased
 
+### Added
+
+- **Pi agents in editor tabs.** **New Pi Agent** (the π button in the editor title bar) opens the chat in an editor tab, and each tab runs its own Pi process and session, so several agents can work at once. Tabs are named after their chat and are restored after a window reload, reattaching to a Pi that kept running. Closing a tab stops that agent; the chat stays in **Past Chats**. Commands such as **Add Selection to Chat** go to the tab you used last. ([#53](https://github.com/peilundai/pi-agent-manager/issues/53))
+- **`piAgentManager.defaultLocation`** chooses where agents open: `editor` (the default) or `sidebar`, which keeps the single side-bar chat, including the activity bar fallback in Cursor. Set it to `sidebar` to keep the previous behaviour.
+
 ### Changed
 
 - **Renamed to Pi Agent for VS Code.** The Marketplace listing, side-bar titles, settings section, output channel and command palette category use the new name. The extension ID `peilundai.pi-agent-manager` and every `piAgentManager.*` command, setting and view ID are unchanged, so existing installs, settings and keybindings keep working.

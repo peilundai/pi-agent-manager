@@ -29,6 +29,7 @@ describe("extension activation", () => {
     });
     expect(mock.commands.registerCommand.mock.calls.map((call) => call[0])).toEqual([
       "piAgentManager.open",
+      "piAgentManager.newAgent",
       "piAgentManager.newChat",
       "piAgentManager.history",
       "piAgentManager.sendSelection",
@@ -39,7 +40,8 @@ describe("extension activation", () => {
       "piAgentManager.reloadEnvironment",
       "piAgentManager.showEnvironmentDiagnostics",
     ]);
-    expect(subscriptions).toHaveLength(18);
+    expect(mock.window.registerWebviewPanelSerializer).toHaveBeenCalledWith("piAgentManager.agent", expect.anything());
+    expect(subscriptions).toHaveLength(21);
     expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
     expect(mock.window.onDidChangeTextEditorSelection).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
@@ -87,6 +89,9 @@ function executed(): unknown[] {
 }
 
 describe("chat placement", () => {
+  // These cover the single-chat sidebar, which `defaultLocation: "sidebar"` keeps.
+  beforeEach(() => configuration.set("defaultLocation", "sidebar"));
+
   it("uses the secondary view when its container command exists", async () => {
     mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER, SECONDARY_FOCUS, SIDEBAR_CONTAINER, SIDEBAR_FOCUS]);
     await activate(hostContext() as never);
@@ -152,12 +157,138 @@ describe("view contributions", () => {
     expect(manifest.contributes.views.piAgentManager?.[0]).toMatchObject({
       id: "piAgentManager.view",
       type: "webview",
-      when: `!${FALLBACK_CONTEXT}`,
+      when: `!${FALLBACK_CONTEXT} && config.piAgentManager.defaultLocation == sidebar`,
     });
     expect(manifest.contributes.views.piAgentManagerSidebar?.[0]).toMatchObject({
       id: "piAgentManager.sidebarView",
       type: "webview",
-      when: FALLBACK_CONTEXT,
+      when: `${FALLBACK_CONTEXT} && config.piAgentManager.defaultLocation == sidebar`,
     });
+  });
+
+  it("defaults new agents to editor tabs and restores them after a reload", async () => {
+    const manifest = (await import("../package.json")).default as {
+      activationEvents: string[];
+      contributes: {
+        configuration: { properties: Record<string, { default?: unknown; enum?: unknown[] }> };
+        menus: Record<string, Array<{ command: string; when?: string }>>;
+      };
+    };
+    expect(manifest.contributes.configuration.properties["piAgentManager.defaultLocation"]).toMatchObject({
+      default: "editor",
+      enum: ["editor", "sidebar"],
+    });
+    expect(manifest.activationEvents).toContain("onWebviewPanel:piAgentManager.agent");
+    expect(manifest.contributes.menus["editor/title"]).toEqual([
+      expect.objectContaining({ command: "piAgentManager.newAgent", when: "config.piAgentManager.defaultLocation != sidebar" }),
+      expect.objectContaining({ command: "piAgentManager.open", when: "config.piAgentManager.defaultLocation == sidebar" }),
+    ]);
+  });
+});
+
+function command(name: string): () => Promise<void> {
+  const handler = mock.commands.registerCommand.mock.calls.find((call) => call[0] === name)?.[1] as (() => Promise<void>) | undefined;
+  if (!handler) throw new Error(`${name} was not registered`);
+  return handler;
+}
+
+function memento(initial: Record<string, unknown> = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    values,
+    get: (key: string) => values.get(key),
+    update: async (key: string, value: unknown) => {
+      if (value === undefined) values.delete(key);
+      else values.set(key, value);
+    },
+  };
+}
+
+describe("editor-tab agents", () => {
+  beforeEach(() => {
+    mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
+    mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER, SECONDARY_FOCUS]);
+  });
+
+  it("opens each new agent in its own editor tab", async () => {
+    const state = memento();
+    await activate({ ...hostContext(), workspaceState: state } as never);
+    await command("piAgentManager.newAgent")();
+    await command("piAgentManager.newAgent")();
+    expect(mock.window.createWebviewPanel).toHaveBeenCalledTimes(2);
+    expect(mock.window.createWebviewPanel).toHaveBeenCalledWith("piAgentManager.agent", "Pi Agent", expect.anything(), {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [expect.objectContaining({ fsPath: "/ext/dist" })],
+    });
+    const [first, second] = mock.window.panels;
+    expect(first?.webview.html).toContain("webview.js");
+    expect(second?.webview.html).toContain("webview.js");
+    const ids = state.values.get("piAgentManager.editorAgents") as string[];
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    // The sidebar is not used, so no view is revealed.
+    expect(executed()).not.toContain(SECONDARY_FOCUS);
+    await deactivate();
+  });
+
+  it("sends commands to the tab the user worked in last, opening one if none is open", async () => {
+    await activate({ ...hostContext(), workspaceState: memento() } as never);
+    await command("piAgentManager.focusInput")();
+    expect(mock.window.panels).toHaveLength(1);
+    await command("piAgentManager.newAgent")();
+    const [first, second] = mock.window.panels;
+    second!.setActive(false);
+    first!.setActive(true);
+    second!.reveal.mockClear();
+    await command("piAgentManager.history")();
+    expect(first!.reveal).toHaveBeenCalled();
+    expect(second!.reveal).not.toHaveBeenCalled();
+    expect(mock.window.panels).toHaveLength(2);
+    await deactivate();
+  });
+
+  it("forgets an agent whose tab is closed, but keeps tabs that close with the window", async () => {
+    const state = memento();
+    await activate({ ...hostContext(), workspaceState: state } as never);
+    await command("piAgentManager.newAgent")();
+    await command("piAgentManager.newAgent")();
+    const [first, second] = mock.window.panels;
+    first!.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.values.get("piAgentManager.editorAgents")).toHaveLength(1);
+    await deactivate();
+    second!.dispose(); // the window reloads
+    expect(state.values.get("piAgentManager.editorAgents")).toHaveLength(1);
+  });
+
+  it("restores a tab with the agent id its webview kept", async () => {
+    const state = memento({ "piAgentManager.editorAgents": ["agent-1"] });
+    await activate({ ...hostContext(), workspaceState: state } as never);
+    const serializer = mock.window.registerWebviewPanelSerializer.mock.calls[0]?.[1] as {
+      deserializeWebviewPanel(panel: unknown, state: unknown): Promise<void>;
+    };
+    const panel = new mock.MockWebviewPanel("piAgentManager.agent", "Fix login");
+    await serializer.deserializeWebviewPanel(panel, { agentId: "agent-1", draft: "hi" });
+    expect(panel.webview.html).toContain('<meta name="pi-agent-id" content="agent-1" />');
+    expect(panel.title).toBe("Pi Agent");
+    // A second copy of an agent that is already on screen is closed.
+    const duplicate = new mock.MockWebviewPanel("piAgentManager.agent", "Pi Agent");
+    await serializer.deserializeWebviewPanel(duplicate, { agentId: "agent-1" });
+    expect(duplicate.disposed).toBe(true);
+    expect(state.values.get("piAgentManager.editorAgents")).toEqual(["agent-1"]);
+    await deactivate();
+  });
+
+  it("forgets the agents when none of their tabs came back", async () => {
+    const state = memento({
+      "piAgentManager.editorAgents": ["agent-1"],
+      "piAgentManager.relay.agent-1": { socketPath: "/tmp/x", token: "t", cwd: "/w" },
+    });
+    await activate({ ...hostContext(), workspaceState: state } as never);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.values.get("piAgentManager.editorAgents")).toEqual([]);
+    expect(state.values.has("piAgentManager.relay.agent-1")).toBe(false);
+    await deactivate();
   });
 });

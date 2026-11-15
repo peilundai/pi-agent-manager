@@ -1,6 +1,11 @@
 # Architecture
 
-Pi Agent for VS Code is a webview view in VS Code's Secondary Side Bar. Hosts that do not register that bar, such as Cursor, show the same chat from the left activity bar instead. VS Code moves a view into Explorer when its container is missing. The secondary view stays hidden while the activity bar fallback is on. The extension host drives one `pi --mode rpc` child process. The webview is a React app that renders Pi's event stream as a chat.
+Pi Agent for VS Code shows a React chat webview in one of two places, chosen by `piAgentManager.defaultLocation`:
+
+- **Editor tabs** (`editor`, the default): every agent is a `WebviewPanel` of type `piAgentManager.agent` with its own `ChatViewProvider`, and so its own `pi --mode rpc` process and session. `src/view/editor-agents.ts` (`EditorAgents`) creates, tracks and restores them.
+- **Side bar** (`sidebar`): one `ChatViewProvider` behind a webview view in VS Code's Secondary Side Bar. Hosts that do not register that bar, such as Cursor, show the same chat from the left activity bar instead. VS Code moves a view into Explorer when its container is missing. The secondary view stays hidden while the activity bar fallback is on. Both views are hidden while agents open in editor tabs.
+
+Each `ChatViewProvider` drives one Pi. The webview renders Pi's event stream as a chat.
 
 ```
 ┌──────────────── Extension host (Node) ────────────────┐        ┌──────── Webview (React) ────────┐
@@ -42,6 +47,14 @@ extension host ── RelayClient ══ local socket ══ relay (detached) �
 - **Close:** if nothing reattaches within 30 s (`RELAY_GRACE_MS`), the relay closes Pi's stdin, kills it after 2 s, removes its socket directory and exits. **New Chat** across folders, folder switches and **Restart Pi** stop the relay as before.
 - **Fallback:** if the relay is gone (closed window, reboot), the first start resumes the last open transcript instead. The folder and transcript path are kept under `piAgentManager.activeChat` and resumed with `switch_session` if the transcript is still in that folder's history.
 
+## Editor-tab agents
+
+- **Identity:** each agent has a random id. The provider puts it in the page as `<meta name="pi-agent-id">`, and the webview transport (`src/webview/vscode.ts`) adds it to every `setState`, so VS Code hands it back to the panel serializer after a reload. The agent's relay endpoint and open chat are kept under `piAgentManager.relay.<id>` and `piAgentManager.activeChat.<id>`; the ids of open agents are in `piAgentManager.editorAgents`.
+- **Commands:** **New Pi Agent** opens a new tab. Other chat commands (**Open**, **New Chat**, **Past Chats**, **Add Selection to Chat**, **Focus Chat Input**, **Switch Workspace Folder**) go to the tab that was active last, opening one if none is open. **Reload Environment and Restart Pi** restarts every agent.
+- **Reload:** `deactivate` detaches every agent; their Pi keeps running behind its relay. VS Code restores a webview tab only when it is shown, which can be after the relay's grace period, so on activation `EditorAgents.resumeRunning()` reattaches every registered agent that has a relay endpoint right away, without a tab, as the sidebar does. When the tab is restored (`deserializeWebviewPanel`), it attaches to that agent. If the window has no agent tabs at all, the registered agents are forgotten. The extension also activates on `onWebviewPanel:piAgentManager.agent`.
+- **Close:** closing a tab disposes the agent: Pi and its relay stop, and its state keys are cleared. The transcript stays in history. Tabs that go away while the window closes or reloads are not treated as closed.
+- **Title:** the tab is named after the chat's title from its transcript, shortened to 40 characters, or **Pi Agent** for a new chat.
+
 ## Pi's environment
 
 `src/view/pi-environment.ts` builds the environment Pi is spawned with. Later sources win:
@@ -77,5 +90,5 @@ Host messages are applied once per animation frame. Markdown is split into blank
 |---|---|---|
 | Unit + components | `npm test` | JSONL decoder; RPC client against `test/fixtures/fake-pi.mjs`; `ChatSession` with a fake client; `ChatViewProvider` and activation against `test/vscode-mock.ts`; reducer, tool formatting, protocol, sanitizer, editor helpers; React components (composer, pickers, Markdown, tool cards, dialogs) |
 | Coverage | `npm run test:coverage` | Same, with V8 thresholds in `vitest.config.ts` |
-| Real Pi E2E | `npm run test:e2e` | The pinned `@earendil-works/pi-coding-agent` CLI in RPC mode, using `test/e2e/support/` (mock OpenAI-compatible server, temporary HOME, confirm-before-bash extension). Checks the protocol contract, a full tool turn with a dialog, a declined tool, extension commands, abort, provider errors, resume/hydration parity, model switching and new chats |
+| Real Pi E2E | `npm run test:e2e` | The pinned `@earendil-works/pi-coding-agent` CLI in RPC mode, using `test/e2e/support/` (mock OpenAI-compatible server, temporary HOME, confirm-before-bash extension). Checks the protocol contract, a full tool turn with a dialog, a declined tool, extension commands, abort, provider errors, resume/hydration parity, model switching and new chats. `editor-agents.e2e.test.ts` runs `activate()` against `test/vscode-mock.ts` with two editor-tab agents, then reloads and checks each tab reattaches to its own Pi |
 | Webview UI | `npm run test:ui` | Playwright drives the built `dist/` webview bridged to a real `ChatSession` (`test/ui/harness.ts`); screenshots in both themes |
