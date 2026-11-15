@@ -1,4 +1,4 @@
-# Pi Agent Manager: contributor and agent guide
+# Pi Agent for VS Code: contributor and agent guide
 
 ## Commit messages: Conventional Commits (required)
 
@@ -45,6 +45,6 @@ When dependencies change, run `npm run notices` to regenerate `THIRD_PARTY_NOTIC
 
 ## Project notes
 
-- Extension ID `peilundai.pi-agent-manager`, display name **Pi Agent Manager**. Command, setting, view and context-key identifiers use the `piAgentManager.` prefix.
+- Extension ID `peilundai.pi-agent-manager`, display name **Pi Agent for VS Code** (formerly Pi Agent Manager, which the IDs still reflect). Command, setting, view and context-key identifiers use the `piAgentManager.` prefix.
 - This is an unofficial client for the Pi coding agent (MIT, © Mario Zechner). Don't bundle Pi code or use Pi's logo, and keep the attribution in `THIRD_PARTY_NOTICES.md` and `src/webview/theme.css`.
 - Architecture: `docs/architecture.md`. Releasing: `docs/PUBLISHING.md`.

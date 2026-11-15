@@ -116,7 +116,7 @@ export class RelayClient extends RpcPeer {
     if (!socket || !this.attached) return;
     this.detaching = true;
     this.attached = false;
-    this.rejectAll(new Error("Pi Agent Manager detached from Pi."));
+    this.rejectAll(new Error("Pi Agent for VS Code detached from Pi."));
     await new Promise<void>((resolve) => {
       socket.once("close", () => resolve());
       socket.end();

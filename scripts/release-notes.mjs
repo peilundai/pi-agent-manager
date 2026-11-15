@@ -10,7 +10,7 @@ const changelog = readFileSync("CHANGELOG.md", "utf8");
 const heading = new RegExp(`^## ${version.replace(/\./g, "\\.")}(?:\\s|$).*$`, "m");
 const match = heading.exec(changelog);
 if (!match) {
-  console.log(`Pi Agent Manager ${version}`);
+  console.log(`Pi Agent for VS Code ${version}`);
   process.exit(0);
 }
 const rest = changelog.slice(match.index + match[0].length);

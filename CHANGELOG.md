@@ -1,6 +1,12 @@
 # Changelog
 
-All notable changes to Pi Agent Manager are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
+All notable changes to Pi Agent for VS Code, formerly Pi Agent Manager, are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
+
+## Unreleased
+
+### Changed
+
+- **Renamed to Pi Agent for VS Code.** The Marketplace listing, side-bar titles, settings section, output channel and command palette category use the new name. The extension ID `peilundai.pi-agent-manager` and every `piAgentManager.*` command, setting and view ID are unchanged, so existing installs, settings and keybindings keep working.
 
 ## 0.2.5 — 2026-11-14
 
