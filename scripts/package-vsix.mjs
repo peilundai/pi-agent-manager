@@ -7,7 +7,7 @@ const execFile = promisify(execFileCallback);
 const require = createRequire(import.meta.url);
 const vsce = require.resolve("@vscode/vsce/vsce");
 
-// Pi Agent for VS Code has no native dependencies, so one universal package serves every platform.
+// Pi Coding Agent for VS Code has no native dependencies, so one universal package serves every platform.
 const { stdout, stderr } = await execFile(
   process.execPath,
   [vsce, "package", "--no-dependencies", "--out", ARTIFACT_NAME],

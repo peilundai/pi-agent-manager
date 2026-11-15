@@ -353,7 +353,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         detail: folder.uri.fsPath,
         folder,
       })),
-      { title: "Pi Agent for VS Code: Workspace Folder", placeHolder: "Choose the folder Pi works in and lists chats for" },
+      { title: "Pi Coding Agent for VS Code: Workspace Folder", placeHolder: "Choose the folder Pi works in and lists chats for" },
     );
     if (!picked || sameFolder(picked.folder, this.folder)) return;
     if (this.session.isBusy) {
@@ -421,7 +421,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   async sendSelection(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-      void vscode.window.showInformationMessage("Open a file and select code to add it to Pi Agent for VS Code.");
+      void vscode.window.showInformationMessage("Open a file and select code to add it to Pi Coding Agent for VS Code.");
       return;
     }
     try {
