@@ -1,4 +1,4 @@
-# Publishing Pi Agent for VS Code
+# Publishing Pi Coding Agent for VS Code
 
 Releases are published by `.github/workflows/release.yml`. It runs on every push to `main`, and it releases when `package.json`'s `version` has no `vX.Y.Z` tag yet. Merging a release pull request that bumps the version is therefore the release. Pushes that don't change the version skip it. The workflow:
 
@@ -62,7 +62,7 @@ Open VSX serves Cursor, VSCodium, Windsurf, Gitpod and other VS Code–compatibl
 
 1. **Smoke-test the VSIX in real VS Code.** Download the `vsix` artifact from the latest green CI run, or run `npm run build && node scripts/package-vsix.mjs` locally. Then:
    - Install it: `code --install-extension pi-agent-manager-<version>.vsix`.
-   - Open a project, run **Pi Agent for VS Code: Open**, and send a prompt with a real model.
+   - Open a project, run **Pi Coding Agent for VS Code: Open**, and send a prompt with a real model.
    - Check an edit diff, an `@` mention, the `/` menu, **⌥L / Alt+L**, interrupting with Esc, Past Chats, and light and dark themes.
    - If possible, test on Windows too: pi installed through npm resolves to a `.cmd` file there.
 2. Update `CHANGELOG.md`: replace "Unreleased" in the version heading with the release date, and describe the changes.

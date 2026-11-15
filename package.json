@@ -1,8 +1,8 @@
 {
   "name": "pi-agent-manager",
-  "displayName": "Pi Agent for VS Code",
+  "displayName": "Pi Coding Agent for VS Code",
   "description": "Unofficial chat for the Pi coding agent in VS Code and Cursor. Agents open in editor tabs, several side by side, or in a single side-bar chat. Runs your locally installed and configured pi CLI.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "peilundai",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -42,7 +42,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Pi Agent for VS Code launches the local pi executable and reads workspace-scoped Pi session files."
+      "description": "Pi Coding Agent for VS Code launches the local pi executable and reads workspace-scoped Pi session files."
     }
   },
   "extensionKind": [
@@ -58,7 +58,7 @@
       {
         "command": "piAgentManager.open",
         "title": "Open",
-        "category": "Pi Agent for VS Code",
+        "category": "Pi Coding Agent for VS Code",
         "icon": {
           "light": "media/pi-light.svg",
           "dark": "media/pi-dark.svg"
@@ -67,7 +67,7 @@
       {
         "command": "piAgentManager.newAgent",
         "title": "New Pi Agent",
-        "category": "Pi Agent for VS Code",
+        "category": "Pi Coding Agent for VS Code",
         "icon": {
           "light": "media/pi-light.svg",
           "dark": "media/pi-dark.svg"
@@ -76,51 +76,51 @@
       {
         "command": "piAgentManager.newChat",
         "title": "New Chat",
-        "category": "Pi Agent for VS Code",
+        "category": "Pi Coding Agent for VS Code",
         "icon": "$(add)"
       },
       {
         "command": "piAgentManager.history",
         "title": "Past Chats",
-        "category": "Pi Agent for VS Code",
+        "category": "Pi Coding Agent for VS Code",
         "icon": "$(history)"
       },
       {
         "command": "piAgentManager.sendSelection",
         "title": "Add Selection to Chat",
-        "category": "Pi Agent for VS Code"
+        "category": "Pi Coding Agent for VS Code"
       },
       {
         "command": "piAgentManager.focusInput",
         "title": "Focus Chat Input",
-        "category": "Pi Agent for VS Code"
+        "category": "Pi Coding Agent for VS Code"
       },
       {
         "command": "piAgentManager.switchFolder",
         "title": "Switch Workspace Folder",
-        "category": "Pi Agent for VS Code",
+        "category": "Pi Coding Agent for VS Code",
         "icon": "$(folder)",
         "enablement": "workspaceFolderCount > 1"
       },
       {
         "command": "piAgentManager.setEnvironmentSecret",
         "title": "Set Environment Secret…",
-        "category": "Pi Agent for VS Code"
+        "category": "Pi Coding Agent for VS Code"
       },
       {
         "command": "piAgentManager.removeEnvironmentSecret",
         "title": "Remove Environment Secret…",
-        "category": "Pi Agent for VS Code"
+        "category": "Pi Coding Agent for VS Code"
       },
       {
         "command": "piAgentManager.reloadEnvironment",
         "title": "Reload Environment and Restart Pi",
-        "category": "Pi Agent for VS Code"
+        "category": "Pi Coding Agent for VS Code"
       },
       {
         "command": "piAgentManager.showEnvironmentDiagnostics",
         "title": "Show Environment Diagnostics",
-        "category": "Pi Agent for VS Code"
+        "category": "Pi Coding Agent for VS Code"
       }
     ],
     "keybindings": [
@@ -145,14 +145,14 @@
       "secondarySidebar": [
         {
           "id": "piAgentManager",
-          "title": "Pi Agent for VS Code",
+          "title": "Pi Coding Agent for VS Code",
           "icon": "media/pi.svg"
         }
       ],
       "activitybar": [
         {
           "id": "piAgentManagerSidebar",
-          "title": "Pi Agent for VS Code",
+          "title": "Pi Coding Agent for VS Code",
           "icon": "media/pi.svg"
         }
       ]
@@ -205,7 +205,7 @@
       ]
     },
     "configuration": {
-      "title": "Pi Agent for VS Code",
+      "title": "Pi Coding Agent for VS Code",
       "properties": {
         "piAgentManager.defaultLocation": {
           "type": "string",
@@ -267,7 +267,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "markdownDescription": "Extra environment variables for Pi, such as a gateway base URL. Do not put API keys here; use **Pi Agent for VS Code: Set Environment Secret…**, which stores them encrypted."
+          "markdownDescription": "Extra environment variables for Pi, such as a gateway base URL. Do not put API keys here; use **Pi Coding Agent for VS Code: Set Environment Secret…**, which stores them encrypted."
         }
       }
     }

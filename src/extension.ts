@@ -25,7 +25,7 @@ const webviewViewOptions = { webviewOptions: { retainContextWhenHidden: true } }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const workspaceFolder = resolveWorkspaceFolder(vscode.workspace, vscode.window.activeTextEditor);
-  const log = vscode.window.createOutputChannel("Pi Agent for VS Code", { log: true });
+  const log = vscode.window.createOutputChannel("Pi Coding Agent for VS Code", { log: true });
   const environment = new PiEnvironment({ secrets: context.secrets, log });
   const knownCommands = await vscode.commands.getCommands(true);
   const surface = chatSurface(knownCommands);

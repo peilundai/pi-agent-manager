@@ -1,6 +1,6 @@
 # Architecture
 
-Pi Agent for VS Code shows a React chat webview in one of two places, chosen by `piAgentManager.defaultLocation`:
+Pi Coding Agent for VS Code shows a React chat webview in one of two places, chosen by `piAgentManager.defaultLocation`:
 
 - **Editor tabs** (`editor`, the default): every agent is a `WebviewPanel` of type `piAgentManager.agent` with its own `ChatViewProvider`, and so its own `pi --mode rpc` process and session. `src/view/editor-agents.ts` (`EditorAgents`) creates, tracks and restores them.
 - **Side bar** (`sidebar`): one `ChatViewProvider` behind a webview view in VS Code's Secondary Side Bar. Hosts that do not register that bar, such as Cursor, show the same chat from the left activity bar instead. VS Code moves a view into Explorer when its container is missing. The secondary view stays hidden while the activity bar fallback is on. Both views are hidden while agents open in editor tabs.

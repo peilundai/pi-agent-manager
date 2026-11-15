@@ -1,6 +1,6 @@
 import { expect, test } from "./harness";
 
-test.describe("Pi Agent for VS Code webview", () => {
+test.describe("Pi Coding Agent for VS Code webview", () => {
   test("shows the empty state with the current model in both themes", async ({ chat }) => {
     const { page } = chat;
     await expect(page.locator(".model-pill .model-name")).toHaveText("Mock Sonnet");
