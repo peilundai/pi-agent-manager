@@ -53,6 +53,85 @@ export class RelativePattern {
   ) {}
 }
 
+export const ViewColumn = { Active: -1, Beside: -2, One: 1, Two: 2 } as const;
+
+export class TabInputWebview {
+  constructor(readonly viewType: string) {}
+}
+
+type Listener<T> = (value: T) => void;
+
+/** A controllable `WebviewPanel`: `receive()` plays a webview message, `posted` collects host messages. */
+export class MockWebviewPanel {
+  title: string;
+  iconPath: unknown;
+  active = true;
+  visible = true;
+  disposed = false;
+  readonly posted: unknown[] = [];
+  readonly reveal = vi.fn();
+  private readonly messageListeners = new Set<Listener<unknown>>();
+  private readonly disposeListeners = new Set<Listener<void>>();
+  private readonly viewStateListeners = new Set<Listener<unknown>>();
+  readonly webview: {
+    options: unknown;
+    html: string;
+    cspSource: string;
+    asWebviewUri(uri: unknown): unknown;
+    postMessage(message: unknown): Promise<boolean>;
+    onDidReceiveMessage(listener: Listener<unknown>): { dispose(): void };
+  };
+
+  constructor(
+    readonly viewType: string,
+    title: string,
+    readonly options: unknown = {},
+  ) {
+    this.title = title;
+    this.webview = {
+      options: undefined,
+      html: "",
+      cspSource: "vscode-resource:",
+      asWebviewUri: (uri) => uri,
+      postMessage: async (message) => {
+        if (this.disposed) return false;
+        this.posted.push(message);
+        return true;
+      },
+      onDidReceiveMessage: (listener) => subscribe(this.messageListeners, listener),
+    };
+  }
+
+  /** Delivers a message from the webview to the extension host. */
+  receive(message: unknown): void {
+    for (const listener of [...this.messageListeners]) listener(message);
+  }
+
+  onDidDispose(listener: Listener<void>): { dispose(): void } {
+    return subscribe(this.disposeListeners, listener);
+  }
+
+  onDidChangeViewState(listener: Listener<unknown>): { dispose(): void } {
+    return subscribe(this.viewStateListeners, listener);
+  }
+
+  setActive(active: boolean): void {
+    this.active = active;
+    for (const listener of [...this.viewStateListeners]) listener({ webviewPanel: this });
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const listener of [...this.disposeListeners]) listener();
+  }
+}
+
+function subscribe<T>(listeners: Set<Listener<T>>, listener: Listener<T>): { dispose(): void } {
+  listeners.add(listener);
+  return { dispose: () => void listeners.delete(listener) };
+}
+
 export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 } as const;
 
 export const configuration = new Map<string, unknown>();
@@ -66,6 +145,11 @@ export const window = {
   onDidChangeActiveTextEditor: vi.fn(),
   onDidChangeTextEditorSelection: vi.fn(),
   registerWebviewViewProvider: vi.fn(),
+  registerWebviewPanelSerializer: vi.fn(),
+  createWebviewPanel: vi.fn(),
+  /** Panels made by `createWebviewPanel`, in order. */
+  panels: [] as MockWebviewPanel[],
+  tabGroups: { all: [] as Array<{ tabs: Array<{ input: unknown }> }> },
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
   showInputBox: vi.fn(),
@@ -103,6 +187,14 @@ export function resetVscodeMock(): void {
   window.onDidChangeActiveTextEditor.mockReset().mockImplementation(disposable);
   window.onDidChangeTextEditorSelection.mockReset().mockImplementation(disposable);
   window.registerWebviewViewProvider.mockReset().mockImplementation(disposable);
+  window.registerWebviewPanelSerializer.mockReset().mockImplementation(disposable);
+  window.panels = [];
+  window.createWebviewPanel.mockReset().mockImplementation((viewType: string, title: string, _column: unknown, options: unknown) => {
+    const panel = new MockWebviewPanel(viewType, title, options);
+    window.panels.push(panel);
+    return panel;
+  });
+  window.tabGroups = { all: [] };
   window.showInformationMessage.mockReset().mockResolvedValue(undefined);
   window.showWarningMessage.mockReset().mockResolvedValue(undefined);
   window.showInputBox.mockReset().mockResolvedValue(undefined);

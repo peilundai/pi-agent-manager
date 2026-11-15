@@ -1,7 +1,7 @@
 {
   "name": "pi-agent-manager",
   "displayName": "Pi Agent for VS Code",
-  "description": "Unofficial side-bar chat for the Pi coding agent in VS Code and Cursor. Runs your locally installed and configured pi CLI.",
+  "description": "Unofficial chat for the Pi coding agent in VS Code and Cursor, in editor tabs or the side bar. Runs your locally installed and configured pi CLI.",
   "version": "0.2.5",
   "publisher": "peilundai",
   "license": "MIT",
@@ -50,13 +50,23 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:piAgentManager.agent"
   ],
   "contributes": {
     "commands": [
       {
         "command": "piAgentManager.open",
         "title": "Open",
+        "category": "Pi Agent for VS Code",
+        "icon": {
+          "light": "media/pi-light.svg",
+          "dark": "media/pi-dark.svg"
+        }
+      },
+      {
+        "command": "piAgentManager.newAgent",
+        "title": "New Pi Agent",
         "category": "Pi Agent for VS Code",
         "icon": {
           "light": "media/pi-light.svg",
@@ -154,7 +164,7 @@
           "id": "piAgentManager.view",
           "name": "Chat",
           "icon": "media/pi.svg",
-          "when": "!piAgentManager.useSidebarFallback"
+          "when": "!piAgentManager.useSidebarFallback && config.piAgentManager.defaultLocation == sidebar"
         }
       ],
       "piAgentManagerSidebar": [
@@ -163,15 +173,21 @@
           "id": "piAgentManager.sidebarView",
           "name": "Chat",
           "icon": "media/pi.svg",
-          "when": "piAgentManager.useSidebarFallback"
+          "when": "piAgentManager.useSidebarFallback && config.piAgentManager.defaultLocation == sidebar"
         }
       ]
     },
     "menus": {
       "editor/title": [
         {
+          "command": "piAgentManager.newAgent",
+          "group": "navigation@1",
+          "when": "config.piAgentManager.defaultLocation != sidebar"
+        },
+        {
           "command": "piAgentManager.open",
-          "group": "navigation@1"
+          "group": "navigation@1",
+          "when": "config.piAgentManager.defaultLocation == sidebar"
         }
       ],
       "commandPalette": [
@@ -191,6 +207,19 @@
     "configuration": {
       "title": "Pi Agent for VS Code",
       "properties": {
+        "piAgentManager.defaultLocation": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "sidebar"
+          ],
+          "enumDescriptions": [
+            "Open each Pi agent in its own editor tab. Run several agents side by side, each with its own Pi session.",
+            "Keep a single Pi chat in the side bar."
+          ],
+          "default": "editor",
+          "markdownDescription": "Where **New Pi Agent** and the other chat commands open Pi. Editor tabs are restored when the window reloads."
+        },
         "piAgentManager.command": {
           "type": "string",
           "default": "pi",

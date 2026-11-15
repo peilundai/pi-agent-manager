@@ -30,9 +30,11 @@
    pi            # pick a provider / sign in
    ```
 2. Install **Pi Agent for VS Code** from the Marketplace.
-3. Click the **π** icon in the editor title bar, or run **Pi Agent for VS Code: Open**, then start typing.
+3. Click the **π** icon in the editor title bar, or run **Pi Agent for VS Code: New Pi Agent**, then start typing.
 
-In VS Code the chat opens in the Secondary Side Bar, on the right. In Cursor that side bar is not available, so the same π icon is on the left activity bar with the other icons. Only one Pi panel is shown.
+Each agent opens in its own editor tab, with its own Pi process and session, so you can run several at once and drag them side by side. The tab is named after its chat. Open agent tabs come back after a window reload, and a run that was in progress keeps going. Closing a tab stops that agent; its chat stays in **Past Chats**.
+
+Prefer a single chat in the side bar? Set `piAgentManager.defaultLocation` to `sidebar`. In VS Code the chat then opens in the Secondary Side Bar, on the right. In Cursor that side bar is not available, so the same π icon is on the left activity bar with the other icons.
 
 Pi Agent for VS Code runs `pi --mode rpc`, so your providers, default model, skills, prompt templates, extensions and session history (`~/.pi/agent`) all just work.
 
@@ -108,6 +110,7 @@ The executable's directory is added to Pi's `PATH`, so nvm-managed Node installs
 
 | Setting | Default | Description |
 |---|---|---|
+| `piAgentManager.defaultLocation` | `editor` | `editor` opens each agent in its own editor tab; `sidebar` keeps one chat in the side bar. |
 | `piAgentManager.command` | `pi` | Executable name or absolute path of the Pi CLI. |
 | `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]`. Mode and session flags are managed for you. |
 | `piAgentManager.loadShellEnvironment` | `true` | Add your login shell's variables (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |

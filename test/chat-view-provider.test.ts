@@ -5,7 +5,7 @@ import type { Uri, WebviewView, WorkspaceFolder } from "vscode";
 import { PiCommandNotFoundError } from "../src/pi/command-resolver";
 import type { SessionSummary } from "../src/shared/model";
 import type { HostToWebviewMessage } from "../src/shared/protocol";
-import { ACTIVE_CHAT_KEY, ChatViewProvider, RELAY_KEY, webviewHtml } from "../src/view/chat-view-provider";
+import { ACTIVE_CHAT_KEY, agentTabTitle, ChatViewProvider, RELAY_KEY, webviewHtml } from "../src/view/chat-view-provider";
 import { resetVscodeMock } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 import { FakeClient } from "./support/fake-client";
@@ -398,6 +398,78 @@ function memoryMemento(initial: Record<string, unknown> = {}) {
     }),
   };
 }
+
+describe("ChatViewProvider in an editor tab", () => {
+  const chatKey = `${ACTIVE_CHAT_KEY}.agent-1`;
+  const relayKey = `${RELAY_KEY}.agent-1`;
+  const endpoint = { socketPath: "/tmp/pi-agent-manager-x/relay.sock", token: "t", cwd: "/work" };
+
+  function editorChat(memento = memoryMemento()) {
+    const clients: FakeClient[] = [];
+    const provider = new ChatViewProvider({
+      extensionUri: mock.Uri.file("/ext") as unknown as Uri,
+      workspaceFolder: folder(),
+      repository: { list: vi.fn(async () => [{ ...session, path: "/s/one.jsonl" }]), watch: vi.fn(() => ({ dispose: vi.fn() })), delete: vi.fn() },
+      memento,
+      agentId: "agent-1",
+      createClient: async (listener) => {
+        const client = new FakeClient(listener);
+        clients.push(client);
+        return client;
+      },
+    });
+    const panel = new mock.MockWebviewPanel("piAgentManager.agent", "Pi Agent");
+    provider.attachPanel(panel as never);
+    return { provider, panel, clients, memento };
+  }
+
+  it("renders into a panel, keeps state under its own keys and names the tab after the chat", async () => {
+    const { provider, panel, memento } = editorChat();
+    expect(panel.webview.html).toContain('<meta name="pi-agent-id" content="agent-1" />');
+    expect(provider.hasPanel).toBe(true);
+    panel.receive({ version: 1, type: "ready" });
+    await vi.waitFor(() => expect(panel.title).toBe("Fix login"));
+    expect(memento.values.get(chatKey)).toEqual({ folder: "/work", sessionFile: "/s/one.jsonl" });
+    expect(memento.values.has(ACTIVE_CHAT_KEY)).toBe(false);
+    panel.dispose();
+    expect(provider.hasPanel).toBe(false);
+    provider.dispose();
+  });
+
+  it("reveals its tab instead of the sidebar, and ignores sidebar views", async () => {
+    const { provider, panel } = editorChat();
+    await provider.focusInput();
+    expect(panel.reveal).toHaveBeenCalledOnce();
+    expect(mock.commands.executeCommand).not.toHaveBeenCalledWith("piAgentManager.view.focus");
+    const view = { viewType: "piAgentManager.view", webview: { html: "" }, onDidDispose: vi.fn() };
+    provider.resolveWebviewView(view as never);
+    expect(view.webview.html).toBe("");
+    provider.dispose();
+  });
+
+  it("stops Pi and forgets the chat when its tab is closed", async () => {
+    const memento = memoryMemento({ [relayKey]: endpoint });
+    const { provider, panel, clients } = editorChat(memento);
+    panel.receive({ version: 1, type: "ready" });
+    await vi.waitFor(() => expect(clients[0]?.running).toBe(true));
+    await provider.close();
+    expect(clients[0]?.running).toBe(false);
+    expect(memento.values.get(chatKey)).toBeUndefined();
+    expect(memento.values.get(relayKey)).toBeUndefined();
+    expect(provider.hasPanel).toBe(false);
+  });
+});
+
+describe("agentTabTitle", () => {
+  it("uses the chat name, shortened for the tab, or a generic title", () => {
+    expect(agentTabTitle(undefined)).toBe("Pi Agent");
+    expect(agentTabTitle("  ")).toBe("Pi Agent");
+    expect(agentTabTitle("Fix\n login")).toBe("Fix login");
+    const long = agentTabTitle("x".repeat(60));
+    expect(long).toHaveLength(40);
+    expect(long.endsWith("…")).toBe(true);
+  });
+});
 
 describe("ChatViewProvider chat restore", () => {
   it("remembers the open chat and resumes it after a window reload", async () => {
