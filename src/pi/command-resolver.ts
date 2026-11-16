@@ -154,6 +154,7 @@ export function buildPiInvocation(
   command: string,
   piArgs: readonly string[],
   platform: NodeJS.Platform = process.platform,
+  baseEnv: NodeJS.ProcessEnv = process.env,
 ): PiInvocation {
   if (platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
     return { file: command, args: [...piArgs] };
@@ -173,7 +174,7 @@ export function buildPiInvocation(
   const env = Object.fromEntries(variableNames.map((name, index) => [name, values[index] ?? ""]));
   const commandLine = variableNames.map((name) => `"%${name}%"`).join(" ");
   return {
-    file: process.env.ComSpec ?? "cmd.exe",
+    file: baseEnv.ComSpec ?? "cmd.exe",
     args: ["/d", "/s", "/v:off", "/c", `"${commandLine}"`],
     env,
   };
@@ -200,18 +201,31 @@ export interface RpcArgsOptions {
   extraArgs?: readonly string[];
 }
 
-/** Builds the argument list for `pi --mode rpc`, rejecting reserved user flags. */
-export function buildRpcArgs(options: RpcArgsOptions = {}): string[] {
-  const extra = (options.extraArgs ?? []).map((value) => value.trim()).filter(Boolean);
+function validatedExtraArgs(extraArgs: readonly string[] | undefined): string[] {
+  const extra = (extraArgs ?? []).map((value) => value.trim()).filter(Boolean);
   for (const value of extra) {
     const flag = value.split("=", 1)[0] ?? value;
     if (RESERVED_FLAGS.has(flag)) {
       throw new Error(`The Pi argument “${flag}” is managed by the extension and cannot be set in piAgentManager.extraArgs.`);
     }
   }
-  const args = ["--mode", "rpc", ...extra];
+  return extra;
+}
+
+/** Builds the argument list for `pi --mode rpc`, rejecting reserved user flags. */
+export function buildRpcArgs(options: RpcArgsOptions = {}): string[] {
+  const args = ["--mode", "rpc", ...validatedExtraArgs(options.extraArgs)];
   if (options.sessionPath) args.push("--session", options.sessionPath);
   return args;
+}
+
+/**
+ * Builds the argument list for plain interactive `pi` in a terminal. The same
+ * session and mode flags are managed by the extension, so they are rejected here
+ * too; everything else in `piAgentManager.extraArgs` passes through unchanged.
+ */
+export function buildTerminalArgs(extraArgs: readonly string[] = []): string[] {
+  return validatedExtraArgs(extraArgs);
 }
 
 /**

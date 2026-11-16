@@ -36,6 +36,8 @@ Each agent opens in its own editor tab, with its own Pi process and session, so 
 
 Prefer a single chat in the side bar? Set `piAgentManager.defaultLocation` to `sidebar`. In VS Code the chat then opens in the Secondary Side Bar, on the right. In Cursor that side bar is not available, so the same π icon is on the left activity bar with the other icons.
 
+Prefer Pi's own terminal UI? Set `piAgentManager.tabMode` to `terminal`. **New Pi Agent** then opens interactive `pi` in a terminal in the editor area, in the workspace folder, through your login shell. New terminals open in the same editor group. **Add Selection to Chat** types an `@path#lines` mention into the Pi terminal you used last, without sending it. Pi terminals don't survive a window reload; use `/resume` in Pi to go back to a session. The side bar always shows the chat UI.
+
 Pi Coding Agent for VS Code runs `pi --mode rpc`, so your providers, default model, skills, prompt templates, extensions and session history (`~/.pi/agent`) all just work.
 
 ## What's inside
@@ -111,8 +113,9 @@ The executable's directory is added to Pi's `PATH`, so nvm-managed Node installs
 | Setting | Default | Description |
 |---|---|---|
 | `piAgentManager.defaultLocation` | `editor` | `editor` opens each agent in its own editor tab; `sidebar` keeps one chat in the side bar. |
+| `piAgentManager.tabMode` | `chat` | What editor tabs show: `chat` (the chat UI) or `terminal` (Pi's own terminal UI). Only applies when `defaultLocation` is `editor`. |
 | `piAgentManager.command` | `pi` | Executable name or absolute path of the Pi CLI. |
-| `piAgentManager.extraArgs` | `[]` | Extra arguments for `pi --mode rpc`, such as `["--provider", "anthropic"]`. Mode and session flags are managed for you. |
+| `piAgentManager.extraArgs` | `[]` | Extra arguments for Pi, such as `["--provider", "anthropic"]`, used by the chat (`pi --mode rpc`) and by terminal tabs. Mode and session flags are managed for you. |
 | `piAgentManager.loadShellEnvironment` | `true` | Add your login shell's variables (API keys, gateway settings, `PATH`) to Pi's environment. Not used on Windows. |
 | `piAgentManager.environment` | `{}` | Extra variables for Pi, such as a gateway base URL. Put keys in **Set Environment Secret…** instead. |
 | `piAgentManager.expandToolCards` | `edits` | Which tool cards start expanded: `edits`, `all` or `none`. With `edits`, a codemode script that edited files opens to show those diffs. |
