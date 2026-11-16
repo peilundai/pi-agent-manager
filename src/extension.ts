@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { resolveWorkspaceFolder } from "./editor/editor-context";
 import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
 import { ChatViewProvider, FALLBACK_CONTEXT, SIDEBAR_VIEW_ID, VIEW_ID, chatSurface } from "./view/chat-view-provider";
+import { isAgentPanelTab } from "./view/agent-placement";
 import { AGENT_PANEL_TYPE, defaultLocation, EditorAgents } from "./view/editor-agents";
 import { PiEnvironment, registerEnvironmentCommands } from "./view/pi-environment";
 import { TerminalAgents, tabMode } from "./view/terminal-agents";
@@ -47,8 +48,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     extensionUri: context.extensionUri,
     memento: context.workspaceState,
     createChat: (agentId) => new ChatViewProvider({ ...chatOptions, agentId }),
+    isAgentTab: (tab) => isAgentTab(tab),
   });
   const terminals = new TerminalAgents({ extensionUri: context.extensionUri, environment, memento: context.workspaceState });
+  /** Pi chat and terminal tabs share one editor group, so new agents of either kind open together. */
+  const isAgentTab = (tab: vscode.Tab): boolean => isAgentPanelTab(tab) || terminals.ownsTab(tab);
   const inSidebar = () => defaultLocation() === "sidebar";
   /** Terminal mode only applies to editor tabs; the sidebar keeps the chat UI. */
   const inTerminalMode = () => !inSidebar() && tabMode() === "terminal";

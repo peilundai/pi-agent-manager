@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
+import { AGENT_PANEL_TYPE, agentViewColumn, isAgentPanelTab, type AgentTabTest } from "./agent-placement";
 import { ACTIVE_CHAT_KEY, agentStateKey, DEFAULT_AGENT_TITLE, RELAY_KEY, type ChatViewProvider } from "./chat-view-provider";
 
-/** The webview panel type of an editor-tab agent; also the `onWebviewPanel:` activation event. */
-export const AGENT_PANEL_TYPE = "piAgentManager.agent";
+export { AGENT_PANEL_TYPE } from "./agent-placement";
 /** The ids of the editor-tab agents open in this workspace, so a reload can restore them. */
 export const AGENTS_KEY = "piAgentManager.editorAgents";
 
@@ -23,10 +23,10 @@ function agentIdFrom(state: unknown): string | undefined {
   return typeof id === "string" && AGENT_ID.test(id) ? id : undefined;
 }
 
-/** How many agent tabs the window has, restored or not; VS Code prefixes the panel type. */
+/** How many agent tabs the window has, restored or not. */
 function openAgentTabs(): number {
   const tabs = vscode.window.tabGroups?.all.flatMap((group) => group.tabs) ?? [];
-  return tabs.filter((tab) => tab.input instanceof vscode.TabInputWebview && tab.input.viewType.endsWith(AGENT_PANEL_TYPE)).length;
+  return tabs.filter(isAgentPanelTab).length;
 }
 
 interface Agent {
@@ -41,6 +41,8 @@ export interface EditorAgentsOptions {
   memento: Pick<vscode.Memento, "get" | "update">;
   /** Builds one agent's chat; every agent gets its own Pi process and session. */
   createChat(agentId: string): ChatViewProvider;
+  /** Which tabs are Pi tabs when placing a new one; defaults to chat tabs. Lets Pi terminals share the group. */
+  isAgentTab?: AgentTabTest;
 }
 
 /**
@@ -143,7 +145,7 @@ export class EditorAgents implements vscode.WebviewPanelSerializer, vscode.Dispo
     return vscode.window.createWebviewPanel(
       AGENT_PANEL_TYPE,
       DEFAULT_AGENT_TITLE,
-      { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
+      { viewColumn: agentViewColumn(this.options.isAgentTab ?? isAgentPanelTab), preserveFocus: false },
       {
         enableScripts: true,
         retainContextWhenHidden: true,

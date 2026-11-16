@@ -73,7 +73,7 @@ async function openWindow(tabs = 0) {
   mock.workspace.workspaceFolders = [{ name: "workspace", index: 0, uri: mock.Uri.file(pi.workspace) }];
   mock.commands.getCommands.mockResolvedValue(["workbench.view.extension.piAgentManager"]);
   // Tabs VS Code put back in the editor area; their webviews are restored when shown.
-  mock.window.tabGroups.all = [{ tabs: Array.from({ length: tabs }, () => ({ input: new mock.TabInputWebview("mainThreadWebview-piAgentManager.agent") })) }];
+  mock.window.tabGroups.all = [mock.tabGroup(1, Array.from({ length: tabs }, () => ({ input: new mock.TabInputWebview("mainThreadWebview-piAgentManager.agent") })))];
   await activate({ extensionUri: mock.Uri.file(extensionDir), subscriptions: [], workspaceState, secrets } as never);
 }
 

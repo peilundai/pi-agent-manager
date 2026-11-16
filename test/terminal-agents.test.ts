@@ -10,7 +10,16 @@ import {
   terminalPath,
   terminalTitle,
 } from "../src/view/terminal-agents";
-import { configuration, type MockTerminal, resetVscodeMock, TabInputTerminal, TerminalExitReason } from "./vscode-mock";
+import {
+  configuration,
+  type MockTerminal,
+  resetVscodeMock,
+  setTabGroups,
+  tabGroup,
+  TabInputTerminal,
+  TabInputWebview,
+  TerminalExitReason,
+} from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 
 const mock = vscode as unknown as typeof VscodeMock;
@@ -204,7 +213,8 @@ describe("TerminalAgents", () => {
     };
     expect(options.name).toBe("Pi Agent");
     expect(options.cwd).toBe("/w");
-    expect(options.location).toEqual({ viewColumn: -2, preserveFocus: false });
+    // No editors are open, so the terminal takes the editor area.
+    expect(options.location).toEqual({ viewColumn: -1, preserveFocus: false });
     expect(options.env.COLORTERM).toBe("truecolor");
     expect(options.env.PATH).toContain("/usr/local/bin");
     // Login shell (platform pinned to linux; `$SHELL` is unset in tests, so /bin/sh).
@@ -259,13 +269,48 @@ describe("TerminalAgents", () => {
   it("reuses one editor group for the next chat", async () => {
     const manager = agents();
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 2, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(2, [{ input: new TabInputTerminal() }]);
     // The next terminal is placed beside the first, then rebound to its group.
     const onActive = mock.window.onDidChangeActiveTerminal.mock.calls[0]?.[0] as (terminal: unknown) => void;
     onActive(mock.window.terminals[0]);
     await manager.newAgent();
     const options = mock.window.createTerminal.mock.calls[1]?.[0] as { location: { viewColumn: number } };
     expect(options.location.viewColumn).toBe(2);
+    manager.dispose();
+  });
+
+  it("opens beside the user's editors, then in the same group as Pi chat tabs", async () => {
+    const manager = agents();
+    const file = { input: {}, label: "index.ts" };
+    setTabGroups([tabGroup(1, [file])]);
+    await manager.newAgent();
+    setTabGroups([tabGroup(1, [file]), tabGroup(2, [{ input: new TabInputWebview("piAgentManager.agent") }])]);
+    await manager.newAgent();
+    const columns = mock.window.createTerminal.mock.calls.map((call) => (call[0] as { location: { viewColumn: number } }).location.viewColumn);
+    expect(columns).toEqual([2, 2]);
+    manager.dispose();
+  });
+
+  it("recognizes its own terminal tabs by title, or a retitled one in its group, but not the user's shells", async () => {
+    const manager = agents();
+    await manager.newAgent();
+    // The terminal opened in the active group, column 1 here.
+    const onActive = mock.window.onDidChangeActiveTerminal.mock.calls[0]?.[0] as (terminal: unknown) => void;
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [{ input: new TabInputTerminal() }]);
+    onActive(mock.window.terminals[0]);
+    const shell = { input: new TabInputTerminal(), label: "zsh" };
+    mock.window.terminals.push({ name: "zsh" } as never);
+    const own = { input: new TabInputTerminal(), label: "Pi Agent" };
+    setTabGroups([tabGroup(1, [own, shell])]);
+    expect(manager.ownsTab(own as never)).toBe(true);
+    expect(manager.ownsTab(shell as never)).toBe(false);
+    const retitled = { input: new TabInputTerminal(), label: "π - project" };
+    const elsewhere = { input: new TabInputTerminal(), label: "π - other" };
+    setTabGroups([tabGroup(1, [retitled, shell]), tabGroup(2, [elsewhere])]);
+    expect(manager.ownsTab(retitled as never)).toBe(true);
+    expect(manager.ownsTab(shell as never)).toBe(false);
+    expect(manager.ownsTab(elsewhere as never)).toBe(false);
+    expect(manager.ownsTab({ input: new TabInputWebview("piAgentManager.agent"), label: "Pi Agent" } as never)).toBe(false);
     manager.dispose();
   });
 
@@ -384,9 +429,9 @@ describe("TerminalAgents restore after a reload", () => {
   it("saves each open terminal with its session, folder, editor group and title number", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [{ input: new TabInputTerminal() }]);
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 2, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(2, [{ input: new TabInputTerminal() }]);
     await manager.newAgent();
     expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([
       { sessionId: "session-1", folder: "/w", viewColumn: 1, number: 1 },
@@ -502,7 +547,7 @@ describe("TerminalAgents restore after a reload", () => {
   it("keeps terminals saved when the window reloads or shuts down", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [{ input: new TabInputTerminal() }]);
     const terminal = await manager.newAgent();
     closeTerminal(terminal, TerminalExitReason.Shutdown);
     manager.dispose();
@@ -542,11 +587,11 @@ describe("TerminalAgents restore after a reload", () => {
   it("restartAll reopens each terminal with the same session, title and editor group", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [{ input: new TabInputTerminal() }]);
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 3, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(3, [{ input: new TabInputTerminal() }]);
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: undefined };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1);
     await manager.restartAll();
     const columns = mock.window.createTerminal.mock.calls.slice(2).map((call) => (call[0] as { location: { viewColumn: number } }).location.viewColumn);
     expect(columns).toEqual([1, 3]);

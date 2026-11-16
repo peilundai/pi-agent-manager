@@ -69,6 +69,30 @@ export const ViewColumn = { Active: -1, Beside: -2, One: 1, Two: 2 } as const;
 
 export class TabInputTerminal {}
 
+export interface MockTab {
+  input: unknown;
+  label?: string;
+  group?: { viewColumn: number };
+}
+
+export interface MockTabGroup {
+  viewColumn: number;
+  activeTab: MockTab | undefined;
+  tabs: MockTab[];
+}
+
+/** An editor group holding `tabs`; the last one is its active tab. */
+export function tabGroup(viewColumn: number, tabs: MockTab[] = []): MockTabGroup {
+  for (const tab of tabs) tab.group = { viewColumn };
+  return { viewColumn, activeTab: tabs.at(-1), tabs };
+}
+
+/** Lays out the editor groups and makes the one in `activeColumn` (the first by default) active. */
+export function setTabGroups(groups: MockTabGroup[], activeColumn = groups[0]?.viewColumn ?? 1): void {
+  window.tabGroups.all = groups;
+  window.tabGroups.activeTabGroup = groups.find((group) => group.viewColumn === activeColumn) ?? tabGroup(activeColumn);
+}
+
 export const TerminalExitReason = { Unknown: 0, Shutdown: 1, Process: 2, User: 3, Extension: 4 } as const;
 
 export class TabInputWebview {
@@ -196,8 +220,8 @@ export const window = {
   panels: [] as MockWebviewPanel[],
   createTerminal: vi.fn(),
   tabGroups: {
-    all: [] as Array<{ tabs: Array<{ input: unknown }> }>,
-    activeTabGroup: { viewColumn: 1, activeTab: undefined as { input: unknown } | undefined },
+    all: [] as MockTabGroup[],
+    activeTabGroup: { viewColumn: 1, activeTab: undefined, tabs: [] } as MockTabGroup,
   },
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
@@ -253,7 +277,7 @@ export function resetVscodeMock(): void {
     window.terminals.push(terminal);
     return terminal;
   });
-  window.tabGroups = { all: [], activeTabGroup: { viewColumn: 1, activeTab: undefined } };
+  window.tabGroups = { all: [], activeTabGroup: { viewColumn: 1, activeTab: undefined, tabs: [] } };
   window.showInformationMessage.mockReset().mockResolvedValue(undefined);
   window.showWarningMessage.mockReset().mockResolvedValue(undefined);
   window.showErrorMessage.mockReset().mockResolvedValue(undefined);

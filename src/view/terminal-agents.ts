@@ -5,6 +5,7 @@ import { resolveWorkspaceFolder, selectionFromEditor } from "../editor/editor-co
 import { isSupportedDocumentScheme, selectionLabel, type EditorSelectionContext } from "../editor/selection";
 import { augmentPath, buildPiInvocation, buildTerminalArgs, resolvePiCommand } from "../pi/command-resolver";
 import { defaultShell, quoteForShell, shellArguments } from "../pi/shell-environment";
+import { agentViewColumn, isAgentPanelTab, type AgentTabTest } from "./agent-placement";
 import { DEFAULT_AGENT_TITLE } from "./chat-view-provider";
 import type { PiEnvironment } from "./pi-environment";
 
@@ -160,6 +161,8 @@ export interface TerminalAgentsOptions {
   /** Test seam: replaces locating the real `pi` executable. */
   resolveCommand?: typeof resolvePiCommand;
   platform?: NodeJS.Platform;
+  /** Which tabs are Pi tabs when placing a new terminal; defaults to Pi terminals and chat tabs. */
+  isAgentTab?: AgentTabTest;
 }
 
 /**
@@ -431,9 +434,25 @@ export class TerminalAgents implements vscode.Disposable {
     return number;
   }
 
-  /** Beside the editor for the first terminal, then the group the last one is in. */
+  /**
+   * Whether a tab is one of this window's Pi terminals. Terminal tabs carry no
+   * terminal reference, so they are matched by title. A tab whose title no open
+   * terminal has (Pi retitled it, or the user renamed it) counts when it is in
+   * the group of a Pi terminal that no tab title matched.
+   */
+  ownsTab(tab: vscode.Tab): boolean {
+    if (!(tab.input instanceof vscode.TabInputTerminal)) return false;
+    const live = [...this.sessions.values()].filter((session) => this.isAlive(session.terminal));
+    if (live.some((session) => session.terminal.name === tab.label)) return true;
+    if (vscode.window.terminals.some((terminal) => terminal.name === tab.label)) return false;
+    const labels = new Set((vscode.window.tabGroups?.all ?? []).flatMap((group) => group.tabs.map((other) => other.label)));
+    return live.some((session) => !labels.has(session.terminal.name) && session.viewColumn === tab.group?.viewColumn);
+  }
+
+  /** The Pi group (the one used last, if it still has a Pi tab), else beside the user's editors. */
   private targetViewColumn(): vscode.ViewColumn {
-    return this.preferredSession()?.viewColumn ?? vscode.ViewColumn.Beside;
+    const isAgentTab = this.options.isAgentTab ?? ((tab: vscode.Tab) => this.ownsTab(tab) || isAgentPanelTab(tab));
+    return agentViewColumn(isAgentTab, this.preferredSession()?.viewColumn);
   }
 
   private preferredSession(): TerminalSession | undefined {

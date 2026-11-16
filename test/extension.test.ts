@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { activate, deactivate } from "../src/extension";
-import { configuration, resetVscodeMock } from "./vscode-mock";
+import { configuration, resetVscodeMock, setTabGroups, tabGroup, TabInputTerminal } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 
 const mock = vscode as unknown as typeof VscodeMock;
@@ -288,6 +288,20 @@ describe("editor-tab agents", () => {
     expect(new Set(ids).size).toBe(2);
     // The sidebar is not used, so no view is revealed.
     expect(executed()).not.toContain(SECONDARY_FOCUS);
+    await deactivate();
+  });
+
+  it("opens a new agent beside the user's editors, sharing the group of a Pi terminal", async () => {
+    await activate({ ...hostContext(), workspaceState: memento() } as never);
+    setTabGroups([tabGroup(1, [{ input: {}, label: "index.ts" }])]);
+    await command("piAgentManager.newAgent")();
+    expect(mock.window.createWebviewPanel.mock.calls[0]?.[2]).toEqual({ viewColumn: 2, preserveFocus: false });
+    configuration.set("tabMode", "terminal");
+    await command("piAgentManager.newAgent")();
+    configuration.set("tabMode", "chat");
+    setTabGroups([tabGroup(1, [{ input: {}, label: "index.ts" }]), tabGroup(3, [{ input: new TabInputTerminal(), label: "Pi Agent" }])]);
+    await command("piAgentManager.newAgent")();
+    expect(mock.window.createWebviewPanel.mock.calls[1]?.[2]).toEqual({ viewColumn: 3, preserveFocus: false });
     await deactivate();
   });
 
