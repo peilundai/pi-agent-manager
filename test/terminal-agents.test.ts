@@ -225,6 +225,7 @@ describe("TerminalAgents", () => {
   it("inserts the selection as an @mention without submitting it", async () => {
     activeEditor();
     const manager = agents();
+    await manager.newAgent();
     await manager.sendSelection();
     expect(mock.window.createTerminal).toHaveBeenCalledTimes(1);
     const terminal = mock.window.terminals[0]!;
@@ -232,10 +233,21 @@ describe("TerminalAgents", () => {
     manager.dispose();
   });
 
+  it("opens Pi without typing into it while it starts, and asks to send again", async () => {
+    activeEditor();
+    const manager = agents();
+    await manager.sendSelection();
+    expect(mock.window.createTerminal).toHaveBeenCalledTimes(1);
+    expect(mock.window.terminals[0]!.sendText).not.toHaveBeenCalled();
+    expect(mock.window.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining("Run Add Selection to Chat again"));
+    manager.dispose();
+  });
+
   it("mentions files from another root by absolute path", async () => {
     activeEditor("/other/lib.ts");
     mock.workspace.getWorkspaceFolder.mockReturnValue(undefined);
     const manager = agents();
+    await manager.newAgent();
     await manager.sendSelection();
     expect(mock.window.terminals[0]!.sendText).toHaveBeenCalledWith("@/other/lib.ts#8-12 ", false);
     manager.dispose();

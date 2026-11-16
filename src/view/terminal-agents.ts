@@ -202,8 +202,15 @@ export class TerminalAgents implements vscode.Disposable {
       const { scheme } = editor.document.uri;
       if (!isSupportedDocumentScheme(scheme)) throw new Error(`Unsupported editor document scheme: ${scheme}`);
       if (scheme === "untitled") throw new Error("Save the file first: Pi in a terminal reads files from disk.");
-      const session = this.preferredSession() ?? (await this.createSession());
-      if (!session) return;
+      const session = this.preferredSession();
+      if (!session) {
+        // Keystrokes sent now would land while the login shell and Pi start up,
+        // and Pi's TUI can drop them, so open Pi and let the user send again.
+        if (await this.createSession()) {
+          void vscode.window.showInformationMessage("Pi is starting in a new terminal. Run Add Selection to Chat again once it is ready.");
+        }
+        return;
+      }
       const path = terminalPath(editor.document, session.folder.path);
       if (!path) return;
       const mention = terminalMention(selectionFromEditor(editor, path));
