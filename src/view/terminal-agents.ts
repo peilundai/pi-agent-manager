@@ -1,4 +1,4 @@
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 import * as vscode from "vscode";
 import { resolveWorkspaceFolder, selectionFromEditor } from "../editor/editor-context";
 import { isSupportedDocumentScheme, selectionLabel, type EditorSelectionContext } from "../editor/selection";
@@ -87,7 +87,8 @@ export function terminalPath(document: Pick<vscode.TextDocument, "uri">, cwd: st
   if (uri.scheme === "untitled") return undefined;
   if (uri.scheme !== "file") return vscode.workspace.asRelativePath(uri, false);
   const path = relative(cwd, uri.fsPath);
-  return !path || path.startsWith("..") || isAbsolute(path) ? uri.fsPath : path;
+  const outside = path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
+  return !path || outside ? uri.fsPath : path;
 }
 
 function errorMessage(error: unknown): string {

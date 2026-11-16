@@ -121,6 +121,10 @@ describe("terminalPath", () => {
     expect(terminalPath({ uri: mock.Uri.file("/other/lib.ts") } as never, "/w")).toBe("/other/lib.ts");
   });
 
+  it("stays relative for in-folder names that start with two dots", () => {
+    expect(terminalPath({ uri: mock.Uri.file("/w/..env") } as never, "/w")).toBe("..env");
+  });
+
   it("has no path for unsaved documents", () => {
     expect(terminalPath({ uri: new mock.Uri("untitled", "Untitled-1") } as never, "/w")).toBeUndefined();
   });
