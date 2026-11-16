@@ -177,6 +177,12 @@ export class TerminalAgents implements vscode.Disposable {
   private sequence = 0;
   /** Set once the window starts shutting down or reloading: the saved list must then stay as it is for `restore()`. */
   private shuttingDown = false;
+  /**
+   * Saved terminals not reopened yet: still being restored, or their reopen
+   * failed (for example `pi` could not be found). They stay saved so the next
+   * reload tries again instead of losing the session.
+   */
+  private unrestored: StoredTerminalAgent[] = [];
 
   constructor(private readonly options: TerminalAgentsOptions) {
     this.listeners.push(
@@ -296,15 +302,16 @@ export class TerminalAgents implements vscode.Disposable {
     if (stored.length === 0) return;
     const folders = new Map((vscode.workspace.workspaceFolders ?? []).map((folder) => [folder.uri.fsPath, folder]));
     const multiRoot = folders.size > 1;
-    for (const entry of stored) {
+    const isOpen = (sessionId: string) => [...this.sessions.values()].some((session) => session.sessionId === sessionId);
+    this.unrestored = stored.filter((entry) => folders.has(entry.folder) && !isOpen(entry.sessionId));
+    for (const entry of [...this.unrestored]) {
       const folder = folders.get(entry.folder);
       if (!folder) continue;
-      const open = [...this.sessions.values()].some((session) => session.sessionId === entry.sessionId);
-      if (open) continue;
-      await this.createSession(
+      const session = await this.createSession(
         { path: folder.uri.fsPath, name: multiRoot ? folder.name : undefined },
         { sessionId: entry.sessionId, viewColumn: entry.viewColumn, ...(entry.number ? { number: entry.number } : {}) },
       );
+      if (session) this.unrestored = this.unrestored.filter((pending) => pending.sessionId !== entry.sessionId);
     }
     this.persist();
   }
@@ -329,13 +336,16 @@ export class TerminalAgents implements vscode.Disposable {
   private persist(): void {
     const memento = this.options.memento;
     if (!memento || this.shuttingDown) return;
-    const entries: StoredTerminalAgent[] = this.orderedSessions().map(({ sessionId, folder, viewColumn, number }) => ({
+    const open: StoredTerminalAgent[] = this.orderedSessions().map(({ sessionId, folder, viewColumn, number }) => ({
       sessionId,
       folder: folder.path,
       ...(folder.name ? { name: folder.name } : {}),
       viewColumn,
       number,
     }));
+    const openIds = new Set(open.map((entry) => entry.sessionId));
+    // Not yet reopened ones first: they were used before anything opened in this window.
+    const entries = [...this.unrestored.filter((entry) => !openIds.has(entry.sessionId)), ...open];
     void Promise.resolve(memento.update(TERMINAL_AGENTS_KEY, entries)).catch(() => undefined);
   }
 
@@ -410,7 +420,10 @@ export class TerminalAgents implements vscode.Disposable {
   /** The lowest tab number no open Pi terminal uses, so closed numbers are reused. */
   private nextNumber(): number {
     this.pruneSessions();
-    const used = new Set([...this.sessions.values()].map((session) => session.number));
+    const used = new Set([
+      ...[...this.sessions.values()].map((session) => session.number),
+      ...this.unrestored.flatMap((entry) => (entry.number ? [entry.number] : [])),
+    ]);
     let number = 1;
     while (used.has(number)) number += 1;
     return number;

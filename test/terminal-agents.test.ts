@@ -446,6 +446,24 @@ describe("TerminalAgents restore after a reload", () => {
     manager.dispose();
   });
 
+  it("keeps a saved terminal whose reopen failed, so the next reload tries again", async () => {
+    const saved = [
+      { sessionId: "aaa", folder: "/w", viewColumn: 1, number: 1 },
+      { sessionId: "bbb", folder: "/w", viewColumn: 1, number: 2 },
+    ];
+    const memento = memoryMemento({ [TERMINAL_AGENTS_KEY]: saved });
+    resolveCommand.mockRejectedValueOnce(new Error("Pi executable was not found."));
+    const manager = agents(memento);
+    await manager.restore();
+    expect(mock.window.createTerminal).toHaveBeenCalledOnce();
+    expect(shellArgs(0)).toContain("'--session-id' 'bbb'");
+    expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual(saved);
+    // A new terminal does not take the failed one's title number.
+    await manager.newAgent();
+    expect(names()[1]).toBe("Pi Agent 3");
+    manager.dispose();
+  });
+
   it("opens nothing when no terminal was saved", async () => {
     const manager = agents(memoryMemento());
     await manager.restore();
