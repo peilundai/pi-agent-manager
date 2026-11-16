@@ -2,7 +2,7 @@
   "name": "pi-agent-manager",
   "displayName": "Pi Coding Agent for VS Code",
   "description": "Unofficial chat for the Pi coding agent in VS Code and Cursor. Agents open in editor tabs, several side by side, or in a single side-bar chat. Runs your locally installed and configured pi CLI.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "publisher": "peilundai",
   "license": "MIT",
   "icon": "media/icon.png",
