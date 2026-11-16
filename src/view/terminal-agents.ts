@@ -199,8 +199,8 @@ export class TerminalAgents implements vscode.Disposable {
 
   /** How many Pi terminals are currently open. */
   get count(): number {
-    this.pruneSessions();
-    return this.sessions.size;
+    // Read-only: counts the terminals still open without pruning (and saving) the list.
+    return [...this.sessions.keys()].filter((terminal) => vscode.window.terminals.includes(terminal)).length;
   }
 
   /** Reveals the terminal the user worked in last, or opens a new one. */

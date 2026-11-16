@@ -516,6 +516,7 @@ describe("TerminalAgents restore after a reload", () => {
     await manager.newAgent();
     // Gone from window.terminals, but no onDidCloseTerminal call reached the manager.
     (first as unknown as MockTerminal).dispose();
+    await manager.open();
     expect(manager.count).toBe(1);
     expect((memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>).map((entry) => entry.sessionId)).toEqual([
       "session-2",
