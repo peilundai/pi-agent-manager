@@ -455,12 +455,28 @@ describe("TerminalAgents restore after a reload", () => {
     resolveCommand.mockRejectedValueOnce(new Error("Pi executable was not found."));
     const manager = agents(memento);
     await manager.restore();
-    expect(mock.window.createTerminal).toHaveBeenCalledOnce();
-    expect(shellArgs(0)).toContain("'--session-id' 'bbb'");
+    // The first reopen failed, so restore stopped and kept both for the next reload.
+    expect(mock.window.createTerminal).not.toHaveBeenCalled();
     expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual(saved);
-    // A new terminal does not take the failed one's title number.
+    // A new terminal does not take a saved one's title number.
     await manager.newAgent();
-    expect(names()[1]).toBe("Pi Agent 3");
+    expect(names()[0]).toBe("Pi Agent 3");
+    manager.dispose();
+  });
+
+  it("shows one error and keeps every terminal saved when pi cannot be found", async () => {
+    const saved = [
+      { sessionId: "aaa", folder: "/w", viewColumn: 1, number: 1 },
+      { sessionId: "bbb", folder: "/w", viewColumn: 1, number: 2 },
+    ];
+    const memento = memoryMemento({ [TERMINAL_AGENTS_KEY]: saved });
+    resolveCommand.mockRejectedValue(new Error("Pi executable was not found."));
+    const manager = agents(memento);
+    await manager.restore();
+    resolveCommand.mockReset().mockResolvedValue({ path: "/usr/local/bin/pi", source: "path", attempts: ["/usr/local/bin/pi"] });
+    expect(mock.window.createTerminal).not.toHaveBeenCalled();
+    expect(mock.window.showErrorMessage).toHaveBeenCalledOnce();
+    expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual(saved);
     manager.dispose();
   });
 

@@ -311,7 +311,9 @@ export class TerminalAgents implements vscode.Disposable {
         { path: folder.uri.fsPath, name: multiRoot ? folder.name : undefined },
         { sessionId: entry.sessionId, viewColumn: entry.viewColumn, ...(entry.number ? { number: entry.number } : {}) },
       );
-      if (session) this.unrestored = this.unrestored.filter((pending) => pending.sessionId !== entry.sessionId);
+      // A failure (pi not found, for example) would repeat for every terminal: show one error and stop.
+      if (!session) break;
+      this.unrestored = this.unrestored.filter((pending) => pending.sessionId !== entry.sessionId);
     }
     this.persist();
   }
