@@ -75,17 +75,19 @@ describe("PiSessionRepository", () => {
     await mkdir(sessionDir, { recursive: true });
 
     const repository = new PiSessionRepository({ agentDir });
-    const changed = new Promise<void>((resolve) => {
-      const watcher = repository.watch(link, () => {
-        watcher.dispose();
-        resolve();
-      });
+    let seen = false;
+    const watcher = repository.watch(link, () => {
+      seen = true;
     });
-    await writeFile(
-      join(sessionDir, "new.jsonl"),
-      JSON.stringify({ type: "session", version: 3, id: "new", cwd: workspace, timestamp: "2026-08-12T01:00:00.000Z" }),
-    );
-    await changed;
+    // macOS's fs.watch (FSEvents) starts asynchronously and can miss a write made right
+    // after watch() returns, so keep rewriting the file until the watcher reports it.
+    const transcript = JSON.stringify({ type: "session", version: 3, id: "new", cwd: workspace, timestamp: "2026-08-12T01:00:00.000Z" });
+    for (let attempt = 0; !seen && attempt < 40; attempt += 1) {
+      await writeFile(join(sessionDir, "new.jsonl"), transcript);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    watcher.dispose();
+    expect(seen).toBe(true);
     expect((await repository.list(link)).map((session) => session.id)).toEqual(["new"]);
   });
 
