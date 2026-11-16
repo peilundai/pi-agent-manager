@@ -69,6 +69,8 @@ export const ViewColumn = { Active: -1, Beside: -2, One: 1, Two: 2 } as const;
 
 export class TabInputTerminal {}
 
+export const TerminalExitReason = { Unknown: 0, Shutdown: 1, Process: 2, User: 3, Extension: 4 } as const;
+
 export class TabInputWebview {
   constructor(readonly viewType: string) {}
 }
@@ -152,7 +154,7 @@ export const configuration = new Map<string, unknown>();
 
 /** A controllable `Terminal`: `sent` collects `sendText` calls, `show` is a `vi.fn()`. */
 export class MockTerminal {
-  exitStatus: { code: number | undefined } | undefined = undefined;
+  exitStatus: { code: number | undefined; reason?: number } | undefined = undefined;
   disposed = false;
   readonly sent: Array<{ text: string; addNewLine: boolean }> = [];
   readonly show = vi.fn();
@@ -168,6 +170,8 @@ export class MockTerminal {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.exitStatus ??= { code: undefined, reason: TerminalExitReason.Extension };
+    this.exitStatus ??= { code: undefined, reason: TerminalExitReason.Extension };
     const index = window.terminals.indexOf(this);
     if (index !== -1) window.terminals.splice(index, 1);
   }

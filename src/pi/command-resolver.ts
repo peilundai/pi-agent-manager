@@ -223,9 +223,13 @@ export function buildRpcArgs(options: RpcArgsOptions = {}): string[] {
  * Builds the argument list for plain interactive `pi` in a terminal. The same
  * session and mode flags are managed by the extension, so they are rejected here
  * too; everything else in `piAgentManager.extraArgs` passes through unchanged.
+ * `--session-id` opens the folder's session with that ID, creating it on first
+ * use, so a terminal reopened after a reload continues the same conversation.
  */
-export function buildTerminalArgs(extraArgs: readonly string[] = []): string[] {
-  return validatedExtraArgs(extraArgs);
+export function buildTerminalArgs(extraArgs: readonly string[] = [], sessionId?: string): string[] {
+  const args = validatedExtraArgs(extraArgs);
+  if (sessionId) args.push("--session-id", sessionId);
+  return args;
 }
 
 /**

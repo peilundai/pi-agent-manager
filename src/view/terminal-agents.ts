@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { isAbsolute, relative, sep } from "node:path";
 import * as vscode from "vscode";
 import { resolveWorkspaceFolder, selectionFromEditor } from "../editor/editor-context";
@@ -18,10 +19,14 @@ export function tabMode(): TabMode {
 /** Longest terminal tab title, as pi-tabs' `titleMaxLength`. */
 export const TERMINAL_TITLE_MAX_LENGTH = 24;
 
-/** The terminal tab title: "Pi Agent", plus the folder name in multi-root windows. */
-export function terminalTitle(folderName?: string): string {
-  if (!folderName) return DEFAULT_AGENT_TITLE;
-  const title = `${DEFAULT_AGENT_TITLE}: ${folderName}`;
+/**
+ * The terminal tab title: "Pi Agent" for the first terminal, "Pi Agent 2" and
+ * so on for the others, plus the folder name in multi-root windows.
+ */
+export function terminalTitle(folderName?: string, number = 1): string {
+  const base = number > 1 ? `${DEFAULT_AGENT_TITLE} ${number}` : DEFAULT_AGENT_TITLE;
+  if (!folderName) return base;
+  const title = `${base}: ${folderName}`;
   return title.length <= TERMINAL_TITLE_MAX_LENGTH ? title : `${title.slice(0, TERMINAL_TITLE_MAX_LENGTH - 1)}…`;
 }
 
@@ -92,6 +97,36 @@ export function terminalPath(document: Pick<vscode.TextDocument, "uri">, cwd: st
   return !path || outside ? uri.fsPath : path.split(sep).join("/");
 }
 
+/** workspaceState key: the open Pi terminals, oldest-used first, reopened after a reload. */
+export const TERMINAL_AGENTS_KEY = "piAgentManager.terminalAgents";
+
+/** One open Pi terminal, as saved in workspaceState. */
+export interface StoredTerminalAgent {
+  /** The Pi session the terminal runs, passed as `--session-id`. */
+  sessionId: string;
+  /** Pi's working directory. */
+  folder: string;
+  /** Workspace folder name, shown in the tab title in multi-root windows. */
+  name?: string;
+  /** The editor group the terminal was in. */
+  viewColumn: number;
+  /** The tab's number: 1 is "Pi Agent", 2 is "Pi Agent 2", and so on. */
+  number?: number;
+}
+
+function isStoredTerminalAgent(value: unknown): value is StoredTerminalAgent {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.sessionId === "string" &&
+    entry.sessionId.length > 0 &&
+    typeof entry.folder === "string" &&
+    typeof entry.viewColumn === "number" &&
+    (entry.name === undefined || typeof entry.name === "string") &&
+    (entry.number === undefined || (typeof entry.number === "number" && Number.isInteger(entry.number) && entry.number >= 1))
+  );
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -105,6 +140,10 @@ interface TerminalFolder {
 
 interface TerminalSession {
   terminal: vscode.Terminal;
+  /** Pi's session for this terminal, so a reload can reopen it. */
+  sessionId: string;
+  /** Tells same-folder tabs apart: "Pi Agent", "Pi Agent 2", … */
+  number: number;
   folder: TerminalFolder;
   viewColumn: number;
   lastUsed: number;
@@ -112,6 +151,10 @@ interface TerminalSession {
 
 export interface TerminalAgentsOptions {
   extensionUri: vscode.Uri;
+  /** Where the open terminals are saved (workspaceState), so a reload can reopen them. */
+  memento?: Pick<vscode.Memento, "get" | "update">;
+  /** Test seam: new Pi session IDs. */
+  createSessionId?: () => string;
   /** Builds Pi's environment (login shell, settings, secrets); defaults to VS Code's own. */
   environment?: Pick<PiEnvironment, "resolve" | "checkMissing">;
   /** Test seam: replaces locating the real `pi` executable. */
@@ -121,10 +164,12 @@ export interface TerminalAgentsOptions {
 
 /**
  * Pi agents in editor-area terminals, as in pi-tabs. Each terminal runs plain
- * interactive `pi` (not `--mode rpc`) in a workspace folder, so there is no
- * webview, no session history UI and no relay: the terminals are transient, a
- * window reload closes them, and Pi's own session history stays inside Pi
- * (`/resume`, `pi --continue`).
+ * interactive `pi` (not `--mode rpc`) in a workspace folder with its own Pi
+ * session (`--session-id`), so there is no webview, no session history UI and
+ * no relay. VS Code does not restore the terminals itself (they are transient),
+ * because a restored terminal would not be running Pi. Instead the open ones
+ * are saved in workspaceState and `restore()` reopens each in its folder and
+ * editor group with the same session after a reload.
  */
 export class TerminalAgents implements vscode.Disposable {
   private readonly sessions = new Map<vscode.Terminal, TerminalSession>();
@@ -134,7 +179,9 @@ export class TerminalAgents implements vscode.Disposable {
   constructor(private readonly options: TerminalAgentsOptions) {
     this.listeners.push(
       vscode.window.onDidCloseTerminal((terminal) => {
-        this.sessions.delete(terminal);
+        // A window reload or shutdown also closes the terminals: keep them saved so they come back.
+        if (terminal.exitStatus?.reason === vscode.TerminalExitReason.Shutdown) return;
+        if (this.sessions.delete(terminal)) this.persist();
       }),
       vscode.window.onDidChangeActiveTerminal((terminal) => {
         this.rememberActiveSession(terminal);
@@ -223,21 +270,70 @@ export class TerminalAgents implements vscode.Disposable {
 
   /**
    * For "Reload Environment and Restart Pi": stops every Pi terminal and opens
-   * a fresh one in each folder, with the reloaded environment. Pi's sessions
-   * stay in Pi's history. Does nothing when no Pi terminal is open.
+   * a fresh one in each folder, with the reloaded environment and the same Pi
+   * session. Does nothing when no Pi terminal is open.
    */
   async restartAll(): Promise<void> {
     this.pruneSessions();
-    const folders = [...this.sessions.values()].sort((left, right) => left.lastUsed - right.lastUsed).map((session) => session.folder);
+    const previous = this.orderedSessions().map(({ sessionId, folder, number }) => ({ sessionId, folder, number }));
     for (const { terminal } of this.sessions.values()) terminal.dispose();
     this.sessions.clear();
     // Sequential, so the last one opened (and focused) is the one used last.
-    for (const folder of folders) await this.createSession(folder);
+    for (const { sessionId, folder, number } of previous) await this.createSession(folder, { sessionId, number });
+    this.persist();
+  }
+
+  /**
+   * After a window reload: reopens every saved Pi terminal in its folder and
+   * editor group, running the same Pi session, in the order they were last
+   * used, so the last one used ends up focused. Entries whose folder is no
+   * longer in the workspace are dropped.
+   */
+  async restore(): Promise<void> {
+    const stored = this.storedAgents();
+    if (stored.length === 0) return;
+    const folders = new Map((vscode.workspace.workspaceFolders ?? []).map((folder) => [folder.uri.fsPath, folder]));
+    const multiRoot = folders.size > 1;
+    for (const entry of stored) {
+      const folder = folders.get(entry.folder);
+      if (!folder) continue;
+      const open = [...this.sessions.values()].some((session) => session.sessionId === entry.sessionId);
+      if (open) continue;
+      await this.createSession(
+        { path: folder.uri.fsPath, name: multiRoot ? folder.name : undefined },
+        { sessionId: entry.sessionId, viewColumn: entry.viewColumn, ...(entry.number ? { number: entry.number } : {}) },
+      );
+    }
+    this.persist();
   }
 
   dispose(): void {
     for (const listener of this.listeners.splice(0)) listener.dispose();
+    // Not persisted: on shutdown the saved list must survive for `restore()`.
     this.sessions.clear();
+  }
+
+  private storedAgents(): StoredTerminalAgent[] {
+    const value = this.options.memento?.get<unknown>(TERMINAL_AGENTS_KEY);
+    return Array.isArray(value) ? value.filter(isStoredTerminalAgent) : [];
+  }
+
+  private orderedSessions(): TerminalSession[] {
+    return [...this.sessions.values()].sort((left, right) => left.lastUsed - right.lastUsed);
+  }
+
+  /** Saves the open terminals, oldest-used first. */
+  private persist(): void {
+    const memento = this.options.memento;
+    if (!memento) return;
+    const entries: StoredTerminalAgent[] = this.orderedSessions().map(({ sessionId, folder, viewColumn, number }) => ({
+      sessionId,
+      folder: folder.path,
+      ...(folder.name ? { name: folder.name } : {}),
+      viewColumn,
+      number,
+    }));
+    void Promise.resolve(memento.update(TERMINAL_AGENTS_KEY, entries)).catch(() => undefined);
   }
 
   private defaultFolder(): TerminalFolder | undefined {
@@ -246,7 +342,10 @@ export class TerminalAgents implements vscode.Disposable {
     return { path: folder.uri.fsPath, name: (vscode.workspace.workspaceFolders?.length ?? 0) > 1 ? folder.name : undefined };
   }
 
-  private async createSession(target = this.defaultFolder()): Promise<TerminalSession | undefined> {
+  private async createSession(
+    target = this.defaultFolder(),
+    reopen: { sessionId?: string; viewColumn?: number; number?: number } = {},
+  ): Promise<TerminalSession | undefined> {
     if (!target) {
       void vscode.window.showErrorMessage("Open a workspace folder to start Pi in a terminal.");
       return undefined;
@@ -254,11 +353,15 @@ export class TerminalAgents implements vscode.Disposable {
     const environment = (await this.options.environment?.resolve().catch(() => undefined)) ?? process.env;
     const config = vscode.workspace.getConfiguration("piAgentManager");
     const platform = this.options.platform ?? process.platform;
+    const sessionId = reopen.sessionId ?? (this.options.createSessionId ?? randomUUID)();
     let commandPath: string;
     let args: string[];
     try {
       const extraArgs = config.get<unknown>("extraArgs", []);
-      args = buildTerminalArgs(Array.isArray(extraArgs) ? extraArgs.filter((value): value is string => typeof value === "string") : []);
+      args = buildTerminalArgs(
+        Array.isArray(extraArgs) ? extraArgs.filter((value): value is string => typeof value === "string") : [],
+        sessionId,
+      );
       const resolved = await (this.options.resolveCommand ?? resolvePiCommand)({
         configured: config.get<string>("command", "pi"),
         env: environment,
@@ -276,27 +379,38 @@ export class TerminalAgents implements vscode.Disposable {
       PATH: augmentPath(commandPath, environment, platform),
     };
     void this.options.environment?.checkMissing(target.path, env).catch(() => undefined);
-    const viewColumn = this.targetViewColumn();
+    const viewColumn = reopen.viewColumn ?? this.targetViewColumn();
+    const number = reopen.number ?? this.nextNumber();
     const terminal = vscode.window.createTerminal({
-      name: terminalTitle(target.name),
+      name: terminalTitle(target.name, number),
       cwd: target.path,
       env,
       iconPath: {
         light: vscode.Uri.joinPath(this.options.extensionUri, "media", "pi-light.svg"),
         dark: vscode.Uri.joinPath(this.options.extensionUri, "media", "pi-dark.svg"),
       },
-      // Not restored after a reload: the restored terminal would not be running Pi.
+      // VS Code would restore a plain shell, not Pi: `restore()` reopens it with Pi instead.
       isTransient: true,
       location: { viewColumn, preserveFocus: false },
       ...(launch.shellPath ? { shellPath: launch.shellPath, shellArgs: launch.shellArgs } : {}),
     });
-    const session: TerminalSession = { terminal, folder: target, viewColumn, lastUsed: ++this.sequence };
+    const session: TerminalSession = { terminal, sessionId, number, folder: target, viewColumn, lastUsed: ++this.sequence };
     this.sessions.set(terminal, session);
     terminal.show(false);
     // `ViewColumn.Beside` is a placement sentinel, not the concrete column VS Code
     // creates: rebind right after reveal so the next terminal reuses the same group.
+    // Also saves the new terminal for `restore()`.
     this.rememberActiveSession(terminal);
     return session;
+  }
+
+  /** The lowest tab number no open Pi terminal uses, so closed numbers are reused. */
+  private nextNumber(): number {
+    this.pruneSessions();
+    const used = new Set([...this.sessions.values()].map((session) => session.number));
+    let number = 1;
+    while (used.has(number)) number += 1;
+    return number;
   }
 
   /** Beside the editor for the first terminal, then the group the last one is in. */
@@ -317,6 +431,7 @@ export class TerminalAgents implements vscode.Disposable {
   private reveal(session: TerminalSession): void {
     session.lastUsed = ++this.sequence;
     session.terminal.show(false);
+    this.persist();
   }
 
   private rememberActiveSession(terminal: vscode.Terminal | undefined): void {
@@ -328,6 +443,7 @@ export class TerminalAgents implements vscode.Disposable {
     if (activeGroup?.activeTab?.input instanceof vscode.TabInputTerminal) {
       session.viewColumn = activeGroup.viewColumn;
     }
+    this.persist();
   }
 
   /** Still open and still running Pi; a terminal whose Pi exited with an error stays open but is not reused. */

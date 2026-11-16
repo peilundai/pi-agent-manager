@@ -228,7 +228,7 @@
           ],
           "enumDescriptions": [
             "Open each Pi agent as a chat in its own editor tab, with its own Pi session.",
-            "Open each Pi agent as a terminal running interactive Pi in its own editor tab. The side bar keeps the chat UI. A window reload closes the terminal; Pi's own session history stays inside Pi."
+            "Open each Pi agent as a terminal running interactive Pi in its own editor tab, with its own Pi session. The side bar keeps the chat UI. The terminals are reopened with their sessions after a window reload."
           ],
           "default": "chat",
           "markdownDescription": "What **New Pi Agent** opens in editor tabs. `terminal` runs plain interactive Pi in a terminal instead of the chat UI. Only applies when `piAgentManager.defaultLocation` is `editor`."

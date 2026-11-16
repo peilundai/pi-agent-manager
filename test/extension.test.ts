@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { activate, deactivate } from "../src/extension";
 import { configuration, resetVscodeMock } from "./vscode-mock";
@@ -161,6 +161,27 @@ describe("terminal mode", () => {
     expect(mock.window.createTerminal).toHaveBeenCalledOnce();
     expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/w", isTransient: true });
     expect(mock.window.createWebviewPanel).not.toHaveBeenCalled();
+    await deactivate();
+  });
+
+  it("reopens the Pi terminals of the last window after a reload", async () => {
+    const saved = [{ sessionId: "abc", folder: "/w", viewColumn: 1, number: 2 }];
+    const context = hostContext();
+    context.workspaceState.get = ((key: string) => (key === "piAgentManager.terminalAgents" ? saved : undefined)) as never;
+    await activate(context as never);
+    await vi.waitFor(() => expect(mock.window.createTerminal).toHaveBeenCalledOnce());
+    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/w", name: "Pi Agent 2", isTransient: true });
+    await deactivate();
+  });
+
+  it("does not reopen saved Pi terminals in chat mode", async () => {
+    configuration.set("tabMode", "chat");
+    const context = hostContext();
+    context.workspaceState.get = ((key: string) =>
+      key === "piAgentManager.terminalAgents" ? [{ sessionId: "abc", folder: "/w", viewColumn: 1 }] : undefined) as never;
+    await activate(context as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mock.window.createTerminal).not.toHaveBeenCalled();
     await deactivate();
   });
 

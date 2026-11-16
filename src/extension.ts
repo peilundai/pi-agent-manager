@@ -48,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     memento: context.workspaceState,
     createChat: (agentId) => new ChatViewProvider({ ...chatOptions, agentId }),
   });
-  const terminals = new TerminalAgents({ extensionUri: context.extensionUri, environment });
+  const terminals = new TerminalAgents({ extensionUri: context.extensionUri, environment, memento: context.workspaceState });
   const inSidebar = () => defaultLocation() === "sidebar";
   /** Terminal mode only applies to editor tabs; the sidebar keeps the chat UI. */
   const inTerminalMode = () => !inSidebar() && tabMode() === "terminal";
@@ -118,10 +118,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     log,
   );
   // A reload left Pi running behind its relay: pick it back up straight away. This runs in
-  // terminal mode too, because chat tabs from before the switch are still restored. Pi
-  // terminals have no relay; they are transient, so a reload closes them.
+  // terminal mode too, because chat tabs from before the switch are still restored.
   if (inSidebar()) sidebar.resumeRunningPi();
   agents.resumeRunning();
+  // A reload closed the Pi terminals (VS Code does not restore them): reopen each one with its session.
+  if (inTerminalMode()) void terminals.restore().catch((error: unknown) => log.warn(`Could not restore Pi terminals: ${String(error)}`));
 }
 
 export async function deactivate(): Promise<void> {
