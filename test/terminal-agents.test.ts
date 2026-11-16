@@ -522,12 +522,17 @@ describe("TerminalAgents restore after a reload", () => {
     manager.dispose();
   });
 
-  it("restartAll reopens each terminal with the same session and title", async () => {
+  it("restartAll reopens each terminal with the same session, title and editor group", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
+    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
     await manager.newAgent();
+    mock.window.tabGroups.activeTabGroup = { viewColumn: 3, activeTab: { input: new TabInputTerminal() } };
     await manager.newAgent();
+    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: undefined };
     await manager.restartAll();
+    const columns = mock.window.createTerminal.mock.calls.slice(2).map((call) => (call[0] as { location: { viewColumn: number } }).location.viewColumn);
+    expect(columns).toEqual([1, 3]);
     expect(shellArgs(2)).toContain("'--session-id' 'session-1'");
     expect(shellArgs(3)).toContain("'--session-id' 'session-2'");
     expect(names().slice(2)).toEqual(["Pi Agent", "Pi Agent 2"]);

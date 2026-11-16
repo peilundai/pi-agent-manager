@@ -283,11 +283,11 @@ export class TerminalAgents implements vscode.Disposable {
    */
   async restartAll(): Promise<void> {
     this.pruneSessions();
-    const previous = this.orderedSessions().map(({ sessionId, folder, number }) => ({ sessionId, folder, number }));
+    const previous = this.orderedSessions().map(({ sessionId, folder, number, viewColumn }) => ({ sessionId, folder, number, viewColumn }));
     for (const { terminal } of this.sessions.values()) terminal.dispose();
     this.sessions.clear();
     // Sequential, so the last one opened (and focused) is the one used last.
-    for (const { sessionId, folder, number } of previous) await this.createSession(folder, { sessionId, number });
+    for (const { sessionId, folder, number, viewColumn } of previous) await this.createSession(folder, { sessionId, number, viewColumn });
     this.persist();
   }
 
