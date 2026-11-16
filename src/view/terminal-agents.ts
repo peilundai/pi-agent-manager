@@ -88,7 +88,8 @@ export function terminalPath(document: Pick<vscode.TextDocument, "uri">, cwd: st
   if (uri.scheme !== "file") return vscode.workspace.asRelativePath(uri, false);
   const path = relative(cwd, uri.fsPath);
   const outside = path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
-  return !path || outside ? uri.fsPath : path;
+  // Forward slashes on every platform, as in the chat's mentions; Pi accepts them on Windows too.
+  return !path || outside ? uri.fsPath : path.split(sep).join("/");
 }
 
 function errorMessage(error: unknown): string {

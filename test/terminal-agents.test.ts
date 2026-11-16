@@ -21,7 +21,8 @@ const environment = {
 };
 
 function agents(): TerminalAgents {
-  return new TerminalAgents({ extensionUri: mock.Uri.file("/ext"), environment, resolveCommand: resolveCommand as never });
+  // Pin the platform so the login-shell launch is tested the same way on every CI runner.
+  return new TerminalAgents({ extensionUri: mock.Uri.file("/ext"), environment, resolveCommand: resolveCommand as never, platform: "linux" });
 }
 
 function activeEditor(uri = "/w/src/app.ts", selection = { startLine: 7, endLine: 11 }): void {
@@ -159,7 +160,7 @@ describe("TerminalAgents", () => {
     expect(options.location).toEqual({ viewColumn: -2, preserveFocus: false });
     expect(options.env.COLORTERM).toBe("truecolor");
     expect(options.env.PATH).toContain("/usr/local/bin");
-    // Login shell on this host (`$SHELL` is unset in tests, so /bin/sh).
+    // Login shell (platform pinned to linux; `$SHELL` is unset in tests, so /bin/sh).
     expect(options.shellArgs).toContain("exec '/usr/local/bin/pi'");
     expect(terminal?.show).toHaveBeenCalledWith(false);
     expect(resolveCommand).toHaveBeenCalledWith({ configured: "pi", env: expect.anything() });
