@@ -5,10 +5,22 @@
 import { vi } from "vitest";
 
 export class Uri {
+  readonly authority: string = "";
+  readonly query: string = "";
+  readonly fragment: string = "";
+
   constructor(
     readonly scheme: string,
     readonly fsPath: string,
   ) {}
+
+  with(change: { scheme?: string; path?: string }): Uri {
+    return new Uri(change.scheme ?? this.scheme, change.path ?? this.fsPath);
+  }
+
+  toJSON(): unknown {
+    return { scheme: this.scheme, path: this.path };
+  }
 
   get path(): string {
     return this.fsPath.split("\\").join("/");
@@ -54,6 +66,10 @@ export class RelativePattern {
 }
 
 export const ViewColumn = { Active: -1, Beside: -2, One: 1, Two: 2 } as const;
+
+export class TabInputTerminal {}
+
+export const TerminalExitReason = { Unknown: 0, Shutdown: 1, Process: 2, User: 3, Extension: 4 } as const;
 
 export class TabInputWebview {
   constructor(readonly viewType: string) {}
@@ -136,22 +152,56 @@ export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3
 
 export const configuration = new Map<string, unknown>();
 
+/** A controllable `Terminal`: `sent` collects `sendText` calls, `show` is a `vi.fn()`. */
+export class MockTerminal {
+  exitStatus: { code: number | undefined; reason?: number } | undefined = undefined;
+  disposed = false;
+  readonly sent: Array<{ text: string; addNewLine: boolean }> = [];
+  readonly show = vi.fn();
+  readonly sendText = vi.fn((text: string, addNewLine = true) => {
+    this.sent.push({ text, addNewLine });
+  });
+
+  constructor(
+    readonly name: string,
+    readonly options: unknown = {},
+  ) {}
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.exitStatus ??= { code: undefined, reason: TerminalExitReason.Extension };
+    this.exitStatus ??= { code: undefined, reason: TerminalExitReason.Extension };
+    const index = window.terminals.indexOf(this);
+    if (index !== -1) window.terminals.splice(index, 1);
+  }
+}
+
 function disposable() {
   return { dispose: vi.fn() };
 }
 
 export const window = {
   activeTextEditor: undefined as unknown,
+  activeTerminal: undefined as unknown,
+  terminals: [] as MockTerminal[],
   onDidChangeActiveTextEditor: vi.fn(),
   onDidChangeTextEditorSelection: vi.fn(),
+  onDidChangeActiveTerminal: vi.fn(),
+  onDidCloseTerminal: vi.fn(),
   registerWebviewViewProvider: vi.fn(),
   registerWebviewPanelSerializer: vi.fn(),
   createWebviewPanel: vi.fn(),
   /** Panels made by `createWebviewPanel`, in order. */
   panels: [] as MockWebviewPanel[],
-  tabGroups: { all: [] as Array<{ tabs: Array<{ input: unknown }> }> },
+  createTerminal: vi.fn(),
+  tabGroups: {
+    all: [] as Array<{ tabs: Array<{ input: unknown }> }>,
+    activeTabGroup: { viewColumn: 1, activeTab: undefined as { input: unknown } | undefined },
+  },
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
+  showErrorMessage: vi.fn(),
   showInputBox: vi.fn(),
   showQuickPick: vi.fn(),
   showOpenDialog: vi.fn(),
@@ -160,7 +210,7 @@ export const window = {
 };
 
 export const workspace = {
-  workspaceFolders: undefined as unknown,
+  workspaceFolders: undefined as Array<{ name: string; index: number; uri: Uri }> | undefined,
   onDidChangeWorkspaceFolders: vi.fn(),
   onDidChangeConfiguration: vi.fn(),
   getWorkspaceFolder: vi.fn(),
@@ -184,8 +234,12 @@ export const env = {
 export function resetVscodeMock(): void {
   configuration.clear();
   window.activeTextEditor = undefined;
+  window.activeTerminal = undefined;
+  window.terminals = [];
   window.onDidChangeActiveTextEditor.mockReset().mockImplementation(disposable);
   window.onDidChangeTextEditorSelection.mockReset().mockImplementation(disposable);
+  window.onDidChangeActiveTerminal.mockReset().mockImplementation(disposable);
+  window.onDidCloseTerminal.mockReset().mockImplementation(disposable);
   window.registerWebviewViewProvider.mockReset().mockImplementation(disposable);
   window.registerWebviewPanelSerializer.mockReset().mockImplementation(disposable);
   window.panels = [];
@@ -194,9 +248,15 @@ export function resetVscodeMock(): void {
     window.panels.push(panel);
     return panel;
   });
-  window.tabGroups = { all: [] };
+  window.createTerminal.mockReset().mockImplementation((options: { name?: string }) => {
+    const terminal = new MockTerminal(options?.name ?? "Pi Agent", options);
+    window.terminals.push(terminal);
+    return terminal;
+  });
+  window.tabGroups = { all: [], activeTabGroup: { viewColumn: 1, activeTab: undefined } };
   window.showInformationMessage.mockReset().mockResolvedValue(undefined);
   window.showWarningMessage.mockReset().mockResolvedValue(undefined);
+  window.showErrorMessage.mockReset().mockResolvedValue(undefined);
   window.showInputBox.mockReset().mockResolvedValue(undefined);
   window.showQuickPick.mockReset().mockResolvedValue(undefined);
   window.createOutputChannel.mockReset().mockImplementation(() => ({

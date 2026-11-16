@@ -4,6 +4,7 @@ import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository"
 import { ChatViewProvider, FALLBACK_CONTEXT, SIDEBAR_VIEW_ID, VIEW_ID, chatSurface } from "./view/chat-view-provider";
 import { AGENT_PANEL_TYPE, defaultLocation, EditorAgents } from "./view/editor-agents";
 import { PiEnvironment, registerEnvironmentCommands } from "./view/pi-environment";
+import { TerminalAgents, tabMode } from "./view/terminal-agents";
 
 const ARCHIVED_SESSIONS_KEY = "piAgentManager.archivedSessions";
 
@@ -47,7 +48,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     memento: context.workspaceState,
     createChat: (agentId) => new ChatViewProvider({ ...chatOptions, agentId }),
   });
+  const terminals = new TerminalAgents({ extensionUri: context.extensionUri, environment, memento: context.workspaceState });
   const inSidebar = () => defaultLocation() === "sidebar";
+  /** Terminal mode only applies to editor tabs; the sidebar keeps the chat UI. */
+  const inTerminalMode = () => !inSidebar() && tabMode() === "terminal";
   /** The chat a command acts on: the sidebar's, or the editor-tab agent the user worked in last. */
   const target = (): ChatViewProvider => (inSidebar() ? sidebar : agents.current());
   const everyChat = (): ChatViewProvider[] => [sidebar, ...agents.chats];
@@ -59,16 +63,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     sidebar,
     agents,
+    terminals,
     vscode.window.registerWebviewViewProvider(VIEW_ID, sidebar, webviewViewOptions),
     vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar, webviewViewOptions),
     vscode.window.registerWebviewPanelSerializer(AGENT_PANEL_TYPE, agents),
-    vscode.commands.registerCommand("piAgentManager.open", () => target().focusInput()),
-    vscode.commands.registerCommand("piAgentManager.newAgent", () => (inSidebar() ? sidebar.newChat() : agents.open().focusInput())),
-    vscode.commands.registerCommand("piAgentManager.newChat", () => target().newChat()),
-    vscode.commands.registerCommand("piAgentManager.history", () => target().toggleHistory()),
-    vscode.commands.registerCommand("piAgentManager.sendSelection", () => target().sendSelection()),
-    vscode.commands.registerCommand("piAgentManager.focusInput", () => target().focusInput()),
-    vscode.commands.registerCommand("piAgentManager.switchFolder", () => target().pickFolder()),
+    vscode.commands.registerCommand("piAgentManager.open", () =>
+      inTerminalMode() ? terminals.focus() : target().focusInput(),
+    ),
+    vscode.commands.registerCommand("piAgentManager.newAgent", () =>
+      inSidebar() ? sidebar.newChat() : inTerminalMode() ? terminals.newAgent() : agents.open().focusInput(),
+    ),
+    vscode.commands.registerCommand("piAgentManager.newChat", () =>
+      inTerminalMode() ? terminals.newAgent() : target().newChat(),
+    ),
+    vscode.commands.registerCommand("piAgentManager.history", () =>
+      inTerminalMode() ? terminals.focus() : target().toggleHistory(),
+    ),
+    vscode.commands.registerCommand("piAgentManager.sendSelection", () =>
+      inTerminalMode() ? terminals.sendSelection() : target().sendSelection(),
+    ),
+    vscode.commands.registerCommand("piAgentManager.focusInput", () =>
+      inTerminalMode() ? terminals.focus() : target().focusInput(),
+    ),
+    vscode.commands.registerCommand("piAgentManager.switchFolder", () =>
+      inTerminalMode() ? terminals.pickFolder() : target().pickFolder(),
+    ),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       for (const chat of everyChat()) {
         chat.followEditor(editor);
@@ -88,15 +107,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       environment,
       // The folder can change in multi-root windows, so ask the chat each time.
       cwd: () => (inSidebar() ? sidebar : (agents.activeChat ?? sidebar)).workspaceFolder?.uri.fsPath,
+      // Chat tabs opened before switching `tabMode` stay open, so restart them and any Pi terminals.
       restart: async () => {
-        await Promise.all([...(inSidebar() ? [sidebar] : []), ...agents.chats].map((chat) => chat.restartPi()));
+        await Promise.all([
+          ...[...(inSidebar() ? [sidebar] : []), ...agents.chats].map((chat) => chat.restartPi()),
+          terminals.restartAll(),
+        ]);
       },
     }),
     log,
   );
-  // A reload left Pi running behind its relay: pick it back up straight away.
+  // A reload left Pi running behind its relay: pick it back up straight away. This runs in
+  // terminal mode too, because chat tabs from before the switch are still restored.
   if (inSidebar()) sidebar.resumeRunningPi();
   agents.resumeRunning();
+  // A reload closed the Pi terminals (VS Code does not restore them): reopen each one with its session.
+  if (inTerminalMode()) void terminals.restore().catch((error: unknown) => log.warn(`Could not restore Pi terminals: ${String(error)}`));
 }
 
 export async function deactivate(): Promise<void> {

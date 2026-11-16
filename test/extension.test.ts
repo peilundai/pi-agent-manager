@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { activate, deactivate } from "../src/extension";
 import { configuration, resetVscodeMock } from "./vscode-mock";
@@ -41,7 +41,7 @@ describe("extension activation", () => {
       "piAgentManager.showEnvironmentDiagnostics",
     ]);
     expect(mock.window.registerWebviewPanelSerializer).toHaveBeenCalledWith("piAgentManager.agent", expect.anything());
-    expect(subscriptions).toHaveLength(21);
+    expect(subscriptions).toHaveLength(22);
     expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
     expect(mock.window.onDidChangeTextEditorSelection).toHaveBeenCalledOnce();
     expect(mock.workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledOnce();
@@ -141,6 +141,61 @@ describe("chat placement", () => {
   });
 });
 
+async function runCommand(id: string): Promise<void> {
+  const handler = mock.commands.registerCommand.mock.calls.find((call) => call[0] === id)?.[1] as (() => Promise<unknown>) | undefined;
+  if (!handler) throw new Error(`${id} was not registered`);
+  await handler();
+}
+
+describe("terminal mode", () => {
+  beforeEach(() => {
+    mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
+    // Any executable absolute path resolves without searching the developer's PATH for pi.
+    configuration.set("command", process.execPath);
+    configuration.set("tabMode", "terminal");
+  });
+
+  it("opens New Pi Agent as a terminal in the editor area instead of a chat tab", async () => {
+    await activate(hostContext() as never);
+    await runCommand("piAgentManager.newAgent");
+    expect(mock.window.createTerminal).toHaveBeenCalledOnce();
+    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/w", isTransient: true });
+    expect(mock.window.createWebviewPanel).not.toHaveBeenCalled();
+    await deactivate();
+  });
+
+  it("reopens the Pi terminals of the last window after a reload", async () => {
+    const saved = [{ sessionId: "abc", folder: "/w", viewColumn: 1, number: 2 }];
+    const context = hostContext();
+    context.workspaceState.get = ((key: string) => (key === "piAgentManager.terminalAgents" ? saved : undefined)) as never;
+    await activate(context as never);
+    await vi.waitFor(() => expect(mock.window.createTerminal).toHaveBeenCalledOnce());
+    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/w", name: "Pi Agent 2", isTransient: true });
+    await deactivate();
+  });
+
+  it("does not reopen saved Pi terminals in chat mode", async () => {
+    configuration.set("tabMode", "chat");
+    const context = hostContext();
+    context.workspaceState.get = ((key: string) =>
+      key === "piAgentManager.terminalAgents" ? [{ sessionId: "abc", folder: "/w", viewColumn: 1 }] : undefined) as never;
+    await activate(context as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mock.window.createTerminal).not.toHaveBeenCalled();
+    await deactivate();
+  });
+
+  it("keeps the chat UI in the side bar", async () => {
+    configuration.set("defaultLocation", "sidebar");
+    mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER, SECONDARY_FOCUS]);
+    await activate(hostContext() as never);
+    await runOpen();
+    expect(mock.window.createTerminal).not.toHaveBeenCalled();
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith(SECONDARY_FOCUS);
+    await deactivate();
+  });
+});
+
 describe("view contributions", () => {
   it("keeps the secondary sidebar and gates the activity bar view on the fallback context", async () => {
     const manifest = (await import("../package.json")).default as {
@@ -177,6 +232,10 @@ describe("view contributions", () => {
     expect(manifest.contributes.configuration.properties["piAgentManager.defaultLocation"]).toMatchObject({
       default: "editor",
       enum: ["editor", "sidebar"],
+    });
+    expect(manifest.contributes.configuration.properties["piAgentManager.tabMode"]).toMatchObject({
+      default: "chat",
+      enum: ["chat", "terminal"],
     });
     expect(manifest.activationEvents).toContain("onWebviewPanel:piAgentManager.agent");
     expect(manifest.contributes.menus["editor/title"]).toEqual([
