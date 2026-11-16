@@ -1,5 +1,11 @@
 import type { SessionSummary, SetupErrorState } from "../shared/model";
-import type { ChatSnapshot, HostToWebviewMessage, ImageAttachment, ProcessStatus, ToolExpansion } from "../shared/protocol";
+import type {
+  ChatSnapshot,
+  HostToWebviewMessage,
+  ImageAttachment,
+  ProcessStatus,
+  ToolExpansion,
+} from "../shared/protocol";
 import type {
   PiCommand,
   PiContent,
@@ -12,7 +18,12 @@ import type {
   ThinkingLevel,
 } from "../pi/rpc-types";
 
-export type ToolStatus = "streaming" | "running" | "success" | "error" | "interrupted";
+export type ToolStatus =
+  | "streaming"
+  | "running"
+  | "success"
+  | "error"
+  | "interrupted";
 
 export interface ToolState {
   id: string;
@@ -47,11 +58,35 @@ export interface DialogRequest {
 }
 
 export type ChatItem =
-  | { kind: "user"; id: string; text: string; images: ImageAttachment[]; pending?: boolean }
-  | { kind: "assistant"; id: string; blocks: AssistantBlock[]; streaming: boolean; stopReason?: string; error?: string }
-  | { kind: "notice"; id: string; level: "info" | "warning" | "error"; text: string }
+  | {
+      kind: "user";
+      id: string;
+      text: string;
+      images: ImageAttachment[];
+      pending?: boolean;
+    }
+  | {
+      kind: "assistant";
+      id: string;
+      blocks: AssistantBlock[];
+      streaming: boolean;
+      stopReason?: string;
+      error?: string;
+    }
+  | {
+      kind: "notice";
+      id: string;
+      level: "info" | "warning" | "error";
+      text: string;
+    }
   | { kind: "dialog"; id: string; request: DialogRequest; answer?: string }
-  | { kind: "bash"; id: string; command: string; output: string; exitCode?: number }
+  | {
+      kind: "bash";
+      id: string;
+      command: string;
+      output: string;
+      exitCode?: number;
+    }
   | { kind: "compaction"; id: string; tokensBefore?: number };
 
 export interface ChatState {
@@ -109,7 +144,10 @@ function contentText(content: PiMessage["content"]): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((block): block is Extract<PiContent, { type: "text" }> => block?.type === "text")
+    .filter(
+      (block): block is Extract<PiContent, { type: "text" }> =>
+        block?.type === "text",
+    )
     .map((block) => block.text)
     .join("\n");
 }
@@ -117,7 +155,10 @@ function contentText(content: PiMessage["content"]): string {
 function contentImages(content: PiMessage["content"]): ImageAttachment[] {
   if (!Array.isArray(content)) return [];
   return content
-    .filter((block): block is Extract<PiContent, { type: "image" }> => block?.type === "image" && Boolean(block.data))
+    .filter(
+      (block): block is Extract<PiContent, { type: "image" }> =>
+        block?.type === "image" && Boolean(block.data),
+    )
     .map((block) => ({ data: block.data, mimeType: block.mimeType }));
 }
 
@@ -125,14 +166,20 @@ function toolOutput(content: unknown): string {
   if (!Array.isArray(content)) return "";
   return content
     .map((block: { type?: string; text?: string }) =>
-      block?.type === "text" ? block.text ?? "" : block?.type === "image" ? "[image]" : "",
+      block?.type === "text"
+        ? (block.text ?? "")
+        : block?.type === "image"
+          ? "[image]"
+          : "",
     )
     .filter(Boolean)
     .join("\n");
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 interface Draft {
@@ -147,7 +194,9 @@ function nextId(draft: Draft, prefix: string): string {
 }
 
 /** Fields that link a tool to its parent and children; kept when a tool's state is rebuilt. */
-function treeFields(tool: ToolState | undefined): Pick<ToolState, "parentId" | "children" | "childrenIncomplete"> {
+function treeFields(
+  tool: ToolState | undefined,
+): Pick<ToolState, "parentId" | "children" | "childrenIncomplete"> {
   if (!tool) return {};
   return {
     ...(tool.parentId !== undefined ? { parentId: tool.parentId } : {}),
@@ -164,7 +213,11 @@ const MAX_NESTING = 16;
  */
 function touchAncestors(draft: Draft, id: string): void {
   let parentId = draft.tools[id]?.parentId;
-  for (let depth = 0; parentId !== undefined && depth < MAX_NESTING; depth += 1) {
+  for (
+    let depth = 0;
+    parentId !== undefined && depth < MAX_NESTING;
+    depth += 1
+  ) {
     const parent = draft.tools[parentId];
     if (!parent) return;
     draft.tools[parentId] = { ...parent };
@@ -176,13 +229,24 @@ function touchAncestors(draft: Draft, id: string): void {
 function attachChild(draft: Draft, parentId: string, childId: string): void {
   const parent = draft.tools[parentId];
   if (!parent || parent.children?.includes(childId)) return;
-  draft.tools[parentId] = { ...parent, children: [...(parent.children ?? []), childId] };
+  draft.tools[parentId] = {
+    ...parent,
+    children: [...(parent.children ?? []), childId],
+  };
 }
 
 /** True when `id` is `ancestorId` or one of its ancestors, which would make a cycle. */
-function isSelfOrAncestor(draft: Draft, id: string, ancestorId: string): boolean {
+function isSelfOrAncestor(
+  draft: Draft,
+  id: string,
+  ancestorId: string,
+): boolean {
   let cursor: string | undefined = ancestorId;
-  for (let depth = 0; cursor !== undefined && depth <= MAX_NESTING; depth += 1) {
+  for (
+    let depth = 0;
+    cursor !== undefined && depth <= MAX_NESTING;
+    depth += 1
+  ) {
     if (cursor === id) return true;
     cursor = draft.tools[cursor]?.parentId;
   }
@@ -200,21 +264,36 @@ const NESTED_STATUS: Record<PiNestedToolCallRecord["status"], ToolStatus> = {
  * reloaded or resumed chat shows the same tree as live streaming. Pi records no results, so calls
  * seen live keep their output. Nested ids are `<callerId>/<n>`, which gives deeper nesting.
  */
-function applyNestedCalls(draft: Draft, rootId: string, message: PiMessage): void {
+function applyNestedCalls(
+  draft: Draft,
+  rootId: string,
+  message: PiMessage,
+): void {
   const record = message.nestedCalls;
   if (!record || !Array.isArray(record.calls)) return;
   for (const call of record.calls) {
-    if (!call || typeof call.id !== "string" || typeof call.name !== "string" || call.id === rootId) continue;
+    if (
+      !call ||
+      typeof call.id !== "string" ||
+      typeof call.name !== "string" ||
+      call.id === rootId
+    )
+      continue;
     const slash = call.id.lastIndexOf("/");
     const callerId = slash > 0 ? call.id.slice(0, slash) : rootId;
-    const parentId = draft.tools[callerId] && !isSelfOrAncestor(draft, call.id, callerId) ? callerId : rootId;
+    const parentId =
+      draft.tools[callerId] && !isSelfOrAncestor(draft, call.id, callerId)
+        ? callerId
+        : rootId;
     const existing = draft.tools[call.id];
     const status = NESTED_STATUS[call.status] ?? "success";
     draft.tools[call.id] = existing
       ? {
           ...existing,
           parentId: existing.parentId ?? parentId,
-          ...(existing.status === "running" || existing.status === "streaming" ? { status } : {}),
+          ...(existing.status === "running" || existing.status === "streaming"
+            ? { status }
+            : {}),
         }
       : {
           id: call.id,
@@ -223,7 +302,9 @@ function applyNestedCalls(draft: Draft, rootId: string, message: PiMessage): voi
           output: typeof call.error === "string" ? call.error : "",
           status,
           parentId,
-          ...(typeof call.durationMs === "number" ? { durationMs: call.durationMs } : {}),
+          ...(typeof call.durationMs === "number"
+            ? { durationMs: call.durationMs }
+            : {}),
         };
     attachChild(draft, draft.tools[call.id]!.parentId!, call.id);
     touchAncestors(draft, call.id);
@@ -233,8 +314,15 @@ function applyNestedCalls(draft: Draft, rootId: string, message: PiMessage): voi
   }
 }
 
-function assistantBlocks(content: PiMessage["content"], draft: Draft, finalStatus?: ToolStatus): AssistantBlock[] {
-  if (!Array.isArray(content)) return typeof content === "string" && content ? [{ type: "text", text: content }] : [];
+function assistantBlocks(
+  content: PiMessage["content"],
+  draft: Draft,
+  finalStatus?: ToolStatus,
+): AssistantBlock[] {
+  if (!Array.isArray(content))
+    return typeof content === "string" && content
+      ? [{ type: "text", text: content }]
+      : [];
   const blocks: AssistantBlock[] = [];
   for (const block of content) {
     if (!block) continue;
@@ -242,7 +330,11 @@ function assistantBlocks(content: PiMessage["content"], draft: Draft, finalStatu
       if (block.text) blocks.push({ type: "text", text: block.text });
     } else if (block.type === "thinking") {
       if (block.thinking || block.redacted) {
-        blocks.push({ type: "thinking", text: block.thinking ?? "", ...(block.redacted ? { redacted: true } : {}) });
+        blocks.push({
+          type: "thinking",
+          text: block.thinking ?? "",
+          ...(block.redacted ? { redacted: true } : {}),
+        });
       }
     } else if (block.type === "toolCall" && block.id) {
       const existing = draft.tools[block.id];
@@ -270,16 +362,26 @@ function applyToolResult(draft: Draft, message: PiMessage): void {
     args: existing?.args ?? {},
     output: toolOutput(message.content),
     status: message.isError ? "error" : "success",
-    ...(message.details ? { details: message.details } : existing?.details ? { details: existing.details } : {}),
-    ...(existing?.durationMs !== undefined ? { durationMs: existing.durationMs } : {}),
+    ...(message.details
+      ? { details: message.details }
+      : existing?.details
+        ? { details: existing.details }
+        : {}),
+    ...(existing?.durationMs !== undefined
+      ? { durationMs: existing.durationMs }
+      : {}),
     ...treeFields(existing),
   };
   applyNestedCalls(draft, id, message);
   touchAncestors(draft, id);
 }
 
-function abortedError(stopReason: string | undefined, errorMessage: string | undefined): string | undefined {
-  if (stopReason === "error") return errorMessage || "The model request failed.";
+function abortedError(
+  stopReason: string | undefined,
+  errorMessage: string | undefined,
+): string | undefined {
+  if (stopReason === "error")
+    return errorMessage || "The model request failed.";
   if (stopReason === "aborted") return "Interrupted";
   return undefined;
 }
@@ -290,10 +392,20 @@ function appendMessage(draft: Draft, message: PiMessage, live: boolean): void {
       const text = contentText(message.content);
       const images = contentImages(message.content);
       if (live) {
-        const pendingIndex = draft.items.findIndex((item) => item.kind === "user" && item.pending);
+        const pendingIndex = draft.items.findIndex(
+          (item) => item.kind === "user" && item.pending,
+        );
         if (pendingIndex !== -1) {
-          const pending = draft.items[pendingIndex] as Extract<ChatItem, { kind: "user" }>;
-          draft.items[pendingIndex] = { kind: "user", id: pending.id, text, images: images.length ? images : pending.images };
+          const pending = draft.items[pendingIndex] as Extract<
+            ChatItem,
+            { kind: "user" }
+          >;
+          draft.items[pendingIndex] = {
+            kind: "user",
+            id: pending.id,
+            text,
+            images: images.length ? images : pending.images,
+          };
           return;
         }
       }
@@ -305,7 +417,11 @@ function appendMessage(draft: Draft, message: PiMessage, live: boolean): void {
       draft.items.push({
         kind: "assistant",
         id: nextId(draft, "a"),
-        blocks: assistantBlocks(message.content, draft, live ? undefined : "running"),
+        blocks: assistantBlocks(
+          message.content,
+          draft,
+          live ? undefined : "running",
+        ),
         streaming: false,
         ...(message.stopReason ? { stopReason: message.stopReason } : {}),
         ...(error ? { error } : {}),
@@ -321,23 +437,38 @@ function appendMessage(draft: Draft, message: PiMessage, live: boolean): void {
         id: nextId(draft, "b"),
         command: message.command ?? "",
         output: message.output ?? "",
-        ...(typeof message.exitCode === "number" ? { exitCode: message.exitCode } : {}),
+        ...(typeof message.exitCode === "number"
+          ? { exitCode: message.exitCode }
+          : {}),
       });
       return;
     case "compactionSummary":
       draft.items.push({
         kind: "compaction",
         id: nextId(draft, "c"),
-        ...(typeof message.tokensBefore === "number" ? { tokensBefore: message.tokensBefore } : {}),
+        ...(typeof message.tokensBefore === "number"
+          ? { tokensBefore: message.tokensBefore }
+          : {}),
       });
       return;
     case "branchSummary":
-      draft.items.push({ kind: "notice", id: nextId(draft, "n"), level: "info", text: "Continued from another branch." });
+      draft.items.push({
+        kind: "notice",
+        id: nextId(draft, "n"),
+        level: "info",
+        text: "Continued from another branch.",
+      });
       return;
     case "custom": {
       if (message.display === false) return;
       const text = contentText(message.content);
-      if (text) draft.items.push({ kind: "notice", id: nextId(draft, "n"), level: "info", text });
+      if (text)
+        draft.items.push({
+          kind: "notice",
+          id: nextId(draft, "n"),
+          level: "info",
+          text,
+        });
       return;
     }
     default:
@@ -351,7 +482,8 @@ function hydrate(state: ChatState, snapshot: ChatSnapshot): ChatState {
   const busy = Boolean(snapshot.state.isStreaming);
   if (!busy) {
     for (const tool of Object.values(draft.tools)) {
-      if (tool.status === "running" || tool.status === "streaming") tool.status = "interrupted";
+      if (tool.status === "running" || tool.status === "streaming")
+        tool.status = "interrupted";
     }
   }
   return {
@@ -370,7 +502,9 @@ function hydrate(state: ChatState, snapshot: ChatSnapshot): ChatState {
   };
 }
 
-function currentAssistant(draft: Draft): Extract<ChatItem, { kind: "assistant" }> {
+function currentAssistant(
+  draft: Draft,
+): Extract<ChatItem, { kind: "assistant" }> {
   for (let index = draft.items.length - 1; index >= 0; index -= 1) {
     const item = draft.items[index];
     if (item?.kind === "assistant" && item.streaming) {
@@ -380,7 +514,12 @@ function currentAssistant(draft: Draft): Extract<ChatItem, { kind: "assistant" }
     }
     if (item?.kind === "user") break;
   }
-  const created: Extract<ChatItem, { kind: "assistant" }> = { kind: "assistant", id: nextId(draft, "a"), blocks: [], streaming: true };
+  const created: Extract<ChatItem, { kind: "assistant" }> = {
+    kind: "assistant",
+    id: nextId(draft, "a"),
+    blocks: [],
+    streaming: true,
+  };
   draft.items.push(created);
   return created;
 }
@@ -393,14 +532,20 @@ function ensureBlock(
   const existing = item.blocks[index];
   if (existing && existing.type === block.type) return existing;
   // Fill gaps (for example a block that was never announced) so indexes stay aligned.
-  while (item.blocks.length < index) item.blocks.push({ type: "text", text: "" });
+  while (item.blocks.length < index)
+    item.blocks.push({ type: "text", text: "" });
   item.blocks[index] = block;
   return block;
 }
 
-function applyMessageUpdate(draft: Draft, update: Record<string, unknown>): void {
+function applyMessageUpdate(
+  draft: Draft,
+  update: Record<string, unknown>,
+): void {
   const type = String(update.type ?? "");
-  const index = Number.isInteger(update.contentIndex) ? Number(update.contentIndex) : 0;
+  const index = Number.isInteger(update.contentIndex)
+    ? Number(update.contentIndex)
+    : 0;
   if (!/^(text|thinking|toolcall)_/.test(type)) return;
   const item = currentAssistant(draft);
   switch (type) {
@@ -408,25 +553,39 @@ function applyMessageUpdate(draft: Draft, update: Record<string, unknown>): void
       ensureBlock(item, index, { type: "text", text: "" });
       return;
     case "text_delta": {
-      const block = ensureBlock(item, index, { type: "text", text: "" }) as Extract<AssistantBlock, { type: "text" }>;
-      item.blocks[index] = { type: "text", text: block.text + String(update.delta ?? "") };
+      const block = ensureBlock(item, index, {
+        type: "text",
+        text: "",
+      }) as Extract<AssistantBlock, { type: "text" }>;
+      item.blocks[index] = {
+        type: "text",
+        text: block.text + String(update.delta ?? ""),
+      };
       return;
     }
     case "text_end":
       ensureBlock(item, index, { type: "text", text: "" });
-      if (typeof update.content === "string") item.blocks[index] = { type: "text", text: update.content };
+      if (typeof update.content === "string")
+        item.blocks[index] = { type: "text", text: update.content };
       return;
     case "thinking_start":
       ensureBlock(item, index, { type: "thinking", text: "" });
       return;
     case "thinking_delta": {
-      const block = ensureBlock(item, index, { type: "thinking", text: "" }) as Extract<AssistantBlock, { type: "thinking" }>;
-      item.blocks[index] = { type: "thinking", text: block.text + String(update.delta ?? "") };
+      const block = ensureBlock(item, index, {
+        type: "thinking",
+        text: "",
+      }) as Extract<AssistantBlock, { type: "thinking" }>;
+      item.blocks[index] = {
+        type: "thinking",
+        text: block.text + String(update.delta ?? ""),
+      };
       return;
     }
     case "thinking_end":
       ensureBlock(item, index, { type: "thinking", text: "" });
-      if (typeof update.content === "string") item.blocks[index] = { type: "thinking", text: update.content };
+      if (typeof update.content === "string")
+        item.blocks[index] = { type: "thinking", text: update.content };
       return;
     case "toolcall_start": {
       const id = typeof update.id === "string" ? update.id : `pending-${index}`;
@@ -446,14 +605,21 @@ function applyMessageUpdate(draft: Draft, update: Record<string, unknown>): void
       const id = typeof call.id === "string" ? call.id : undefined;
       if (!id) return;
       const previous = item.blocks[index];
-      if (previous?.type === "tool" && previous.id !== id) delete draft.tools[previous.id];
+      if (previous?.type === "tool" && previous.id !== id)
+        delete draft.tools[previous.id];
       item.blocks[index] = { type: "tool", id };
       const existing = draft.tools[id];
       draft.tools[id] = {
         id,
-        name: typeof call.name === "string" ? call.name : existing?.name ?? "tool",
+        name:
+          typeof call.name === "string"
+            ? call.name
+            : (existing?.name ?? "tool"),
         output: existing?.output ?? "",
-        status: existing && existing.status !== "streaming" ? existing.status : "running",
+        status:
+          existing && existing.status !== "streaming"
+            ? existing.status
+            : "running",
         ...(existing?.details ? { details: existing.details } : {}),
         ...treeFields(existing),
         args: asRecord(call.arguments),
@@ -480,7 +646,8 @@ function applyMessageEnd(draft: Draft, message: PiMessage): void {
     const blocks = assistantBlocks(message.content, draft);
     const finished: ChatItem = {
       kind: "assistant",
-      id: index === -1 ? nextId(draft, "a") : (draft.items[index] as ChatItem).id,
+      id:
+        index === -1 ? nextId(draft, "a") : (draft.items[index] as ChatItem).id,
       blocks,
       streaming: false,
       ...(message.stopReason ? { stopReason: message.stopReason } : {}),
@@ -499,35 +666,68 @@ function applyMessageEnd(draft: Draft, message: PiMessage): void {
 
 function dialogFrom(event: PiEvent, now: number): DialogRequest | undefined {
   const method = event.method;
-  if (method !== "select" && method !== "confirm" && method !== "input" && method !== "editor") return undefined;
+  if (
+    method !== "select" &&
+    method !== "confirm" &&
+    method !== "input" &&
+    method !== "editor"
+  )
+    return undefined;
   if (typeof event.id !== "string") return undefined;
-  const timeout = typeof event.timeout === "number" && event.timeout > 0 ? event.timeout : undefined;
+  const timeout =
+    typeof event.timeout === "number" && event.timeout > 0
+      ? event.timeout
+      : undefined;
   return {
     id: event.id,
     method,
-    title: typeof event.title === "string" ? event.title : "Pi needs your input",
+    title:
+      typeof event.title === "string" ? event.title : "Pi needs your input",
     ...(typeof event.message === "string" ? { message: event.message } : {}),
-    ...(Array.isArray(event.options) ? { options: event.options.filter((option): option is string => typeof option === "string") } : {}),
-    ...(typeof event.placeholder === "string" ? { placeholder: event.placeholder } : {}),
+    ...(Array.isArray(event.options)
+      ? {
+          options: event.options.filter(
+            (option): option is string => typeof option === "string",
+          ),
+        }
+      : {}),
+    ...(typeof event.placeholder === "string"
+      ? { placeholder: event.placeholder }
+      : {}),
     ...(typeof event.prefill === "string" ? { prefill: event.prefill } : {}),
     ...(timeout ? { deadline: now + timeout } : {}),
   };
 }
 
 function finishRun(draft: Draft, aborted: boolean): void {
-  draft.items = draft.items.map((item) => (item.kind === "assistant" && item.streaming ? { ...item, streaming: false } : item));
+  draft.items = draft.items.map((item) =>
+    item.kind === "assistant" && item.streaming
+      ? { ...item, streaming: false }
+      : item,
+  );
   const finished: string[] = [];
   for (const [id, tool] of Object.entries(draft.tools)) {
     if (tool.status === "running" || tool.status === "streaming") {
-      draft.tools[id] = { ...tool, status: aborted ? "interrupted" : "success" };
+      draft.tools[id] = {
+        ...tool,
+        status: aborted ? "interrupted" : "success",
+      };
       finished.push(id);
     }
   }
   for (const id of finished) touchAncestors(draft, id);
 }
 
-export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now: number): ChatState {
-  const draft: Draft = { items: [...state.items], tools: { ...state.tools }, seq: state.seq };
+export function applyPiEvents(
+  state: ChatState,
+  events: readonly PiEvent[],
+  now: number,
+): ChatState {
+  const draft: Draft = {
+    items: [...state.items],
+    tools: { ...state.tools },
+    seq: state.seq,
+  };
   let next: ChatState = state;
   const patch = (update: Partial<ChatState>): void => {
     next = { ...next, ...update };
@@ -548,7 +748,12 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
         else if (message.role === "assistant") {
           // message_start may already hold the first chunk, which the following deltas
           // repeat; rebuild live content from deltas only (message_end is authoritative).
-          draft.items.push({ kind: "assistant", id: nextId(draft, "a"), blocks: [], streaming: true });
+          draft.items.push({
+            kind: "assistant",
+            id: nextId(draft, "a"),
+            blocks: [],
+            streaming: true,
+          });
         }
         break;
       }
@@ -563,33 +768,66 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
       case "tool_execution_start":
       case "tool_execution_update":
       case "tool_execution_end": {
-        const id = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+        const id =
+          typeof event.toolCallId === "string" ? event.toolCallId : undefined;
         if (!id) break;
         const existing = draft.tools[id];
-        const result = asRecord(event.type === "tool_execution_end" ? event.result : event.partialResult);
+        const result = asRecord(
+          event.type === "tool_execution_end"
+            ? event.result
+            : event.partialResult,
+        );
         const isEnd = event.type === "tool_execution_end";
-        const output = event.type === "tool_execution_start" ? existing?.output ?? "" : toolOutput(result.content);
-        const details = Object.keys(result).length ? asRecord(result.details) : existing?.details;
+        const output =
+          event.type === "tool_execution_start"
+            ? (existing?.output ?? "")
+            : toolOutput(result.content);
+        const details = Object.keys(result).length
+          ? asRecord(result.details)
+          : existing?.details;
         // Calls a tool makes while it runs (codemode scripts) belong under that tool, not in the transcript.
-        const claimedParent = typeof event.parentToolCallId === "string" ? event.parentToolCallId : undefined;
+        const claimedParent =
+          typeof event.parentToolCallId === "string"
+            ? event.parentToolCallId
+            : undefined;
         const parentId =
           existing?.parentId ??
-          (claimedParent && draft.tools[claimedParent] && !isSelfOrAncestor(draft, id, claimedParent) ? claimedParent : undefined);
+          (claimedParent &&
+          draft.tools[claimedParent] &&
+          !isSelfOrAncestor(draft, id, claimedParent)
+            ? claimedParent
+            : undefined);
         draft.tools[id] = {
           id,
-          name: typeof event.toolName === "string" ? event.toolName : existing?.name ?? "tool",
-          args: event.args !== undefined ? asRecord(event.args) : existing?.args ?? {},
+          name:
+            typeof event.toolName === "string"
+              ? event.toolName
+              : (existing?.name ?? "tool"),
+          args:
+            event.args !== undefined
+              ? asRecord(event.args)
+              : (existing?.args ?? {}),
           output,
           status: isEnd ? (event.isError ? "error" : "success") : "running",
           ...(details && Object.keys(details).length ? { details } : {}),
-          ...(typeof event.durationMs === "number" ? { durationMs: event.durationMs } : {}),
+          ...(typeof event.durationMs === "number"
+            ? { durationMs: event.durationMs }
+            : {}),
           ...treeFields(existing),
           ...(parentId !== undefined ? { parentId } : {}),
         };
         if (parentId !== undefined) {
           attachChild(draft, parentId, id);
           touchAncestors(draft, id);
-        } else if (!draft.items.some((item) => item.kind === "assistant" && item.blocks.some((block) => block.type === "tool" && block.id === id))) {
+        } else if (
+          !draft.items.some(
+            (item) =>
+              item.kind === "assistant" &&
+              item.blocks.some(
+                (block) => block.type === "tool" && block.id === id,
+              ),
+          )
+        ) {
           const item = currentAssistant(draft);
           item.blocks.push({ type: "tool", id });
         }
@@ -598,8 +836,12 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
       case "queue_update":
         patch({
           queue: {
-            steering: Array.isArray(event.steering) ? event.steering.map(String) : [],
-            followUp: Array.isArray(event.followUp) ? event.followUp.map(String) : [],
+            steering: Array.isArray(event.steering)
+              ? event.steering.map(String)
+              : [],
+            followUp: Array.isArray(event.followUp)
+              ? event.followUp.map(String)
+              : [],
           },
         });
         break;
@@ -613,22 +855,39 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
           draft.items.push({
             kind: "compaction",
             id: nextId(draft, "c"),
-            ...(typeof result.tokensBefore === "number" ? { tokensBefore: result.tokensBefore } : {}),
+            ...(typeof result.tokensBefore === "number"
+              ? { tokensBefore: result.tokensBefore }
+              : {}),
           });
         } else if (typeof event.errorMessage === "string") {
-          draft.items.push({ kind: "notice", id: nextId(draft, "n"), level: "error", text: `Compaction failed: ${event.errorMessage}` });
+          draft.items.push({
+            kind: "notice",
+            id: nextId(draft, "n"),
+            level: "error",
+            text: `Compaction failed: ${event.errorMessage}`,
+          });
         }
         break;
       }
       case "auto_retry_start": {
-        const seconds = Math.max(1, Math.round(Number(event.delayMs ?? 0) / 1000));
-        patch({ activity: `Retrying in ${seconds}s (attempt ${String(event.attempt ?? "?")}/${String(event.maxAttempts ?? "?")})` });
+        const seconds = Math.max(
+          1,
+          Math.round(Number(event.delayMs ?? 0) / 1000),
+        );
+        patch({
+          activity: `Retrying in ${seconds}s (attempt ${String(event.attempt ?? "?")}/${String(event.maxAttempts ?? "?")})`,
+        });
         break;
       }
       case "auto_retry_end":
         patch({ activity: undefined });
         if (event.success === false && typeof event.finalError === "string") {
-          draft.items.push({ kind: "notice", id: nextId(draft, "n"), level: "error", text: event.finalError });
+          draft.items.push({
+            kind: "notice",
+            id: nextId(draft, "n"),
+            level: "error",
+            text: event.finalError,
+          });
         }
         break;
       case "extension_error":
@@ -641,13 +900,28 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
         break;
       case "extension_ui_request": {
         if (event.method === "notify" && typeof event.message === "string") {
-          const level = event.notifyType === "error" ? "error" : event.notifyType === "warning" ? "warning" : "info";
-          draft.items.push({ kind: "notice", id: nextId(draft, "n"), level, text: event.message });
+          const level =
+            event.notifyType === "error"
+              ? "error"
+              : event.notifyType === "warning"
+                ? "warning"
+                : "info";
+          draft.items.push({
+            kind: "notice",
+            id: nextId(draft, "n"),
+            level,
+            text: event.message,
+          });
           break;
         }
         const request = dialogFrom(event, now);
         // Pending dialogs are re-sent after a snapshot; keep a single card per request.
-        if (request && !draft.items.some((item) => item.kind === "dialog" && item.request.id === request.id)) {
+        if (
+          request &&
+          !draft.items.some(
+            (item) => item.kind === "dialog" && item.request.id === request.id,
+          )
+        ) {
           draft.items.push({ kind: "dialog", id: nextId(draft, "d"), request });
         }
         break;
@@ -660,7 +934,9 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
         break;
       }
       case "thinking_level_changed":
-        patch({ pi: { ...next.pi, thinkingLevel: event.level as ThinkingLevel } });
+        patch({
+          pi: { ...next.pi, thinkingLevel: event.level as ThinkingLevel },
+        });
         break;
       default:
         break;
@@ -669,12 +945,24 @@ export function applyPiEvents(state: ChatState, events: readonly PiEvent[], now:
   return { ...next, items: draft.items, tools: draft.tools, seq: draft.seq };
 }
 
-function pushNotice(state: ChatState, level: "info" | "warning" | "error", text: string): ChatState {
+function pushNotice(
+  state: ChatState,
+  level: "info" | "warning" | "error",
+  text: string,
+): ChatState {
   const seq = state.seq + 1;
-  return { ...state, seq, items: [...state.items, { kind: "notice", id: `n${seq}`, level, text }] };
+  return {
+    ...state,
+    seq,
+    items: [...state.items, { kind: "notice", id: `n${seq}`, level, text }],
+  };
 }
 
-function handleHost(state: ChatState, message: HostToWebviewMessage, now: number): ChatState {
+function handleHost(
+  state: ChatState,
+  message: HostToWebviewMessage,
+  now: number,
+): ChatState {
   switch (message.type) {
     case "init": {
       const next: ChatState = {
@@ -694,7 +982,13 @@ function handleHost(state: ChatState, message: HostToWebviewMessage, now: number
       if (message.error) process.error = message.error;
       if (message.stderr) process.stderr = message.stderr;
       const exited = message.status === "exited";
-      return { ...state, process, ...(exited ? { busy: false, busySince: undefined, activity: undefined } : {}) };
+      return {
+        ...state,
+        process,
+        ...(exited
+          ? { busy: false, busySince: undefined, activity: undefined }
+          : {}),
+      };
     }
     case "snapshot": {
       const next = hydrate(state, message.snapshot);
@@ -704,15 +998,25 @@ function handleHost(state: ChatState, message: HostToWebviewMessage, now: number
       return applyPiEvents(state, message.events, now);
     case "state": {
       const busy = state.busy || Boolean(message.state.isStreaming);
-      return { ...state, pi: message.state, busy, ...(busy && !state.busySince ? { busySince: now } : {}) };
+      return {
+        ...state,
+        pi: message.state,
+        busy,
+        ...(busy && !state.busySince ? { busySince: now } : {}),
+      };
     }
     case "stats":
       return { ...state, stats: message.stats };
     case "sessions":
       return { ...state, sessions: message.sessions };
     case "prompt.result": {
-      const removePending = message.error || message.disposition === "handled" || message.disposition === "queued";
-      const items = removePending ? state.items.filter((item) => !(item.kind === "user" && item.pending)) : state.items;
+      const removePending =
+        message.error ||
+        message.disposition === "handled" ||
+        message.disposition === "queued";
+      const items = removePending
+        ? state.items.filter((item) => !(item.kind === "user" && item.pending))
+        : state.items;
       const next = { ...state, items };
       return message.error ? pushNotice(next, "error", message.error) : next;
     }
@@ -732,18 +1036,32 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         seq,
-        items: [...state.items, { kind: "user", id: `u${seq}`, text: action.text, images: action.images, pending: true }],
+        items: [
+          ...state.items,
+          {
+            kind: "user",
+            id: `u${seq}`,
+            text: action.text,
+            images: action.images,
+            pending: true,
+          },
+        ],
       };
     }
     case "dialog.answer":
       return {
         ...state,
         items: state.items.map((item) =>
-          item.kind === "dialog" && item.request.id === action.id ? { ...item, answer: action.answer } : item,
+          item.kind === "dialog" && item.request.id === action.id
+            ? { ...item, answer: action.answer }
+            : item,
         ),
       };
     case "notice.dismiss":
-      return { ...state, items: state.items.filter((item) => item.id !== action.id) };
+      return {
+        ...state,
+        items: state.items.filter((item) => item.id !== action.id),
+      };
     default:
       return state;
   }

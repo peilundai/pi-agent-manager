@@ -8,6 +8,10 @@ All notable changes to Pi Coding Agent for VS Code, formerly Pi Agent Manager, a
 
 - **Terminal tabs.** Set `piAgentManager.tabMode` to `terminal` to open **New Pi Agent** as interactive `pi` in an editor-area terminal, as the Pi Coding Agent Tabs extension does, instead of the chat UI. **Add Selection to Chat** types an `@path#lines` mention into the Pi terminal, and **Switch Workspace Folder** opens a new terminal in the folder you pick. Each terminal runs its own Pi session under a distinct title (Pi Agent, Pi Agent 2, …), and the open terminals are reopened with their sessions, folders, editor groups and titles after a window reload. The side bar keeps the chat UI. ([#54](https://github.com/peilundai/pi-agent-manager/issues/54))
 
+### Changed
+
+- **New agents open beside your editors.** When other editors are open, **New Pi Agent** opens the chat or terminal in a new editor group on the right instead of covering the file you are in. Later agents, chat or terminal, open as tabs in that Pi group. With nothing else open, the agent still takes the whole editor area.
+
 ## 0.3.1 — 2026-11-15
 
 0.3.0 was tagged but never reached the stores: the Marketplace rejected the display name "Pi Agent for VS Code" because another extension already uses it. 0.3.1 ships the same changes under the name Pi Coding Agent for VS Code.

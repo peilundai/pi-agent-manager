@@ -1,6 +1,20 @@
-import type { ChatSnapshot, DialogResponse, HostToWebviewMessage, ImageAttachment, PromptMode } from "../shared/protocol";
+import type {
+  ChatSnapshot,
+  DialogResponse,
+  HostToWebviewMessage,
+  ImageAttachment,
+  PromptMode,
+} from "../shared/protocol";
 import type { RpcClientListener } from "./rpc-client";
-import type { PiCommand, PiEvent, PiMessage, PiModel, PiSessionStats, PiState, ThinkingLevel } from "./rpc-types";
+import type {
+  PiCommand,
+  PiEvent,
+  PiMessage,
+  PiModel,
+  PiSessionStats,
+  PiState,
+  ThinkingLevel,
+} from "./rpc-types";
 import { RunReplay } from "./run-replay";
 import { sanitizeEvent, sanitizeMessages } from "./sanitize";
 
@@ -12,7 +26,10 @@ const COMPACT_TIMEOUT_MS = 10 * 60_000;
 export interface RpcClientLike {
   readonly running: boolean;
   start(): Promise<void>;
-  request<T = unknown>(command: Record<string, unknown> & { type: string }, timeoutMs?: number): Promise<T>;
+  request<T = unknown>(
+    command: Record<string, unknown> & { type: string },
+    timeoutMs?: number,
+  ): Promise<T>;
   send(record: Record<string, unknown>): void;
   stderr(): string;
   stop(): Promise<void>;
@@ -84,7 +101,12 @@ export class ChatSession {
 
   /** True while the chat has no messages and nothing is running, so it can be replaced freely. */
   get isPristine(): boolean {
-    return !this.busy && this.prompting === 0 && !this.ranSinceState && !this.state.messageCount;
+    return (
+      !this.busy &&
+      this.prompting === 0 &&
+      !this.ranSinceState &&
+      !this.state.messageCount
+    );
   }
 
   get sessionFile(): string | undefined {
@@ -95,9 +117,11 @@ export class ChatSession {
   async ensureStarted(sessionPath?: string): Promise<RpcClientLike> {
     if (this.client?.running) return this.client;
     if (!this.starting) {
-      const starting: Promise<RpcClientLike> = this.spawn(sessionPath).finally(() => {
-        if (this.starting === starting) this.starting = undefined;
-      });
+      const starting: Promise<RpcClientLike> = this.spawn(sessionPath).finally(
+        () => {
+          if (this.starting === starting) this.starting = undefined;
+        },
+      );
       this.starting = starting;
     }
     return this.starting;
@@ -119,21 +143,44 @@ export class ChatSession {
     await this.ensureStarted(sessionPath);
   }
 
-  async prompt(text: string, images: ImageAttachment[], mode: PromptMode): Promise<void> {
+  async prompt(
+    text: string,
+    images: ImageAttachment[],
+    mode: PromptMode,
+  ): Promise<void> {
     // Count the prompt from the moment it is submitted, including while Pi is still starting.
     this.prompting += 1;
     try {
       const client = await this.ensureStarted();
-      const payloadImages = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
-      const command: Record<string, unknown> & { type: string } = { type: "prompt", message: text };
+      const payloadImages = images.map(({ data, mimeType }) => ({
+        type: "image",
+        data,
+        mimeType,
+      }));
+      const command: Record<string, unknown> & { type: string } = {
+        type: "prompt",
+        message: text,
+      };
       if (payloadImages.length) command.images = payloadImages;
-      if (this.busy || mode !== "send") command.streamingBehavior = mode === "steer" ? "steer" : "followUp";
+      if (this.busy || mode !== "send")
+        command.streamingBehavior = mode === "steer" ? "steer" : "followUp";
       try {
-        const result = await client.request<{ disposition?: string }>(command, PROMPT_TIMEOUT_MS);
-        this.options.post({ version: 1, type: "prompt.result", disposition: result?.disposition ?? "started" });
+        const result = await client.request<{ disposition?: string }>(
+          command,
+          PROMPT_TIMEOUT_MS,
+        );
+        this.options.post({
+          version: 1,
+          type: "prompt.result",
+          disposition: result?.disposition ?? "started",
+        });
         if (result?.disposition === "handled") await this.refreshState();
       } catch (error) {
-        this.options.post({ version: 1, type: "prompt.result", error: errorMessage(error) });
+        this.options.post({
+          version: 1,
+          type: "prompt.result",
+          error: errorMessage(error),
+        });
       }
     } finally {
       this.prompting -= 1;
@@ -142,13 +189,17 @@ export class ChatSession {
 
   async abort(): Promise<void> {
     if (!this.client?.running) return;
-    await this.client.request({ type: "abort" }, ABORT_TIMEOUT_MS).catch((error) => this.notice("warning", errorMessage(error)));
+    await this.client
+      .request({ type: "abort" }, ABORT_TIMEOUT_MS)
+      .catch((error) => this.notice("warning", errorMessage(error)));
   }
 
   async newChat(): Promise<void> {
     const client = await this.ensureStarted();
     if (this.busy) await this.abort();
-    const result = await client.request<{ cancelled?: boolean }>({ type: "new_session" });
+    const result = await client.request<{ cancelled?: boolean }>({
+      type: "new_session",
+    });
     if (result?.cancelled) return;
     await this.postSnapshot();
   }
@@ -160,7 +211,10 @@ export class ChatSession {
     }
     if (sessionPath === this.state.sessionFile) return;
     if (this.busy) await this.abort();
-    const result = await this.client.request<{ cancelled?: boolean }>({ type: "switch_session", sessionPath });
+    const result = await this.client.request<{ cancelled?: boolean }>({
+      type: "switch_session",
+      sessionPath,
+    });
     if (result?.cancelled) return;
     await this.postSnapshot();
   }
@@ -228,14 +282,24 @@ export class ChatSession {
     try {
       const [state, messages, models, commands, stats] = await Promise.all([
         client.request<PiState>({ type: "get_state" }),
-        client.request<{ messages?: PiMessage[] }>({ type: "get_messages" }).then((data) => {
-          // Fallback for clients that do not report responses synchronously.
-          this.markBoundary();
-          return data?.messages ?? [];
-        }),
-        client.request<{ models?: PiModel[] }>({ type: "get_available_models" }).then((data) => data?.models ?? []).catch(() => []),
-        client.request<{ commands?: PiCommand[] }>({ type: "get_commands" }).then((data) => data?.commands ?? []).catch(() => []),
-        client.request<PiSessionStats>({ type: "get_session_stats" }).catch(() => undefined),
+        client
+          .request<{ messages?: PiMessage[] }>({ type: "get_messages" })
+          .then((data) => {
+            // Fallback for clients that do not report responses synchronously.
+            this.markBoundary();
+            return data?.messages ?? [];
+          }),
+        client
+          .request<{ models?: PiModel[] }>({ type: "get_available_models" })
+          .then((data) => data?.models ?? [])
+          .catch(() => []),
+        client
+          .request<{ commands?: PiCommand[] }>({ type: "get_commands" })
+          .then((data) => data?.commands ?? [])
+          .catch(() => []),
+        client
+          .request<PiSessionStats>({ type: "get_session_stats" })
+          .catch(() => undefined),
       ]);
       if (generation !== this.generation) return;
       this.applyState(state);
@@ -243,7 +307,11 @@ export class ChatSession {
         state: this.state,
         messages: sanitizeMessages(messages),
         models: models.map(compactModel),
-        commands: commands.map(({ name, description, source }) => ({ name, description: description ?? "", source })),
+        commands: commands.map(({ name, description, source }) => ({
+          name,
+          description: description ?? "",
+          source,
+        })),
         ...(stats ? { stats } : {}),
       };
       this.options.post({ version: 1, type: "snapshot", snapshot });
@@ -258,7 +326,9 @@ export class ChatSession {
       this.boundaryReplay = undefined;
       if (generation === this.generation) {
         // Without a snapshot nothing is covered: replay everything in order.
-        const replay = posted ? [...boundary, ...withoutSnapshotCoverage(before), ...after] : [...before, ...after];
+        const replay = posted
+          ? [...boundary, ...withoutSnapshotCoverage(before), ...after]
+          : [...before, ...after];
         for (const event of replay) this.enqueueSanitized(event);
         this.flush();
       }
@@ -293,7 +363,8 @@ export class ChatSession {
   }
 
   private async spawn(sessionPath: string | undefined): Promise<RpcClientLike> {
-    if (this.disposed) throw new Error("Pi Coding Agent for VS Code has been disposed.");
+    if (this.disposed)
+      throw new Error("Pi Coding Agent for VS Code has been disposed.");
     this.generation += 1;
     const generation = this.generation;
     this.busy = false;
@@ -306,7 +377,11 @@ export class ChatSession {
           if (generation === this.generation) this.handleEvent(event);
         },
         onResponse: ({ command }) => {
-          if (generation === this.generation && command === "get_messages" && this.snapshotGate === "before") {
+          if (
+            generation === this.generation &&
+            command === "get_messages" &&
+            this.snapshotGate === "before"
+          ) {
             this.markBoundary();
           }
         },
@@ -319,7 +394,13 @@ export class ChatSession {
             version: 1,
             type: "process",
             status: "exited",
-            ...(expected ? {} : { error: signal ? `Pi stopped (signal ${signal}).` : `Pi exited with code ${code ?? "unknown"}.` }),
+            ...(expected
+              ? {}
+              : {
+                  error: signal
+                    ? `Pi stopped (signal ${signal}).`
+                    : `Pi exited with code ${code ?? "unknown"}.`,
+                }),
             ...(expected || !stderr ? {} : { stderr: stderr.slice(-4_000) }),
           });
         },
@@ -327,7 +408,12 @@ export class ChatSession {
       await client.start();
     } catch (error) {
       if (generation === this.generation) {
-        this.options.post({ version: 1, type: "process", status: "exited", error: errorMessage(error) });
+        this.options.post({
+          version: 1,
+          type: "process",
+          status: "exited",
+          error: errorMessage(error),
+        });
       }
       throw error;
     }
@@ -380,16 +466,31 @@ export class ChatSession {
         void this.afterSettled();
         return;
       case "session_info_changed":
-        this.state = { ...this.state, ...(typeof event.name === "string" ? { sessionName: event.name } : {}) };
+        this.state = {
+          ...this.state,
+          ...(typeof event.name === "string"
+            ? { sessionName: event.name }
+            : {}),
+        };
         if (typeof event.name !== "string") delete this.state.sessionName;
         this.options.onSessionsChanged();
         break;
       case "thinking_level_changed":
-        this.state = { ...this.state, thinkingLevel: event.level as ThinkingLevel };
+        this.state = {
+          ...this.state,
+          thinkingLevel: event.level as ThinkingLevel,
+        };
         break;
       case "extension_ui_request":
-        if (event.method === "set_editor_text" && typeof event.text === "string") {
-          this.options.post({ version: 1, type: "composer.insert", text: event.text });
+        if (
+          event.method === "set_editor_text" &&
+          typeof event.text === "string"
+        ) {
+          this.options.post({
+            version: 1,
+            type: "composer.insert",
+            text: event.text,
+          });
           return;
         }
         break;
@@ -432,7 +533,9 @@ export class ChatSession {
     await this.refreshState();
     const client = this.client;
     if (!client?.running) return;
-    const stats = await client.request<PiSessionStats>({ type: "get_session_stats" }).catch(() => undefined);
+    const stats = await client
+      .request<PiSessionStats>({ type: "get_session_stats" })
+      .catch(() => undefined);
     if (stats) this.options.post({ version: 1, type: "stats", stats });
     this.options.onSessionsChanged();
   }
@@ -463,7 +566,8 @@ export class ChatSession {
     };
     this.busy = Boolean(state?.isStreaming) || this.busy;
     this.ranSinceState = false;
-    if (previous !== this.state.sessionFile) this.options.onActiveSessionChanged?.(this.state.sessionFile);
+    if (previous !== this.state.sessionFile)
+      this.options.onActiveSessionChanged?.(this.state.sessionFile);
   }
 
   private notice(level: "info" | "warning" | "error", message: string): void {
@@ -501,6 +605,8 @@ function compactModel(model: PiModel): PiModel {
     reasoning: Boolean(model.reasoning),
     ...(model.input ? { input: model.input } : {}),
     ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-    ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
+    ...(model.thinkingLevelMap
+      ? { thinkingLevelMap: model.thinkingLevelMap }
+      : {}),
   };
 }

@@ -29,7 +29,8 @@ export interface FindReferencesOptions {
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** `$NAME` or `${NAME}`; `$$` is an escaped dollar sign. */
-const INTERPOLATION = /\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const INTERPOLATION =
+  /\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
 /** Containers whose string values may reference variables. */
 const CONTAINERS = new Set(["headers", "env"]);
 /** Keys whose value is the name of a variable, such as `bearerTokenEnvVar`. */
@@ -40,7 +41,11 @@ export function defaultAgentDir(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** Variable names referenced by one config value. */
-export function referencedNames(value: string, key: string, legacyBareName = false): string[] {
+export function referencedNames(
+  value: string,
+  key: string,
+  legacyBareName = false,
+): string[] {
   const text = value.trim();
   // `!command` values run a command; Pi does not interpolate them.
   if (text.startsWith("!")) return [];
@@ -50,29 +55,52 @@ export function referencedNames(value: string, key: string, legacyBareName = fal
     return name ? [name] : [];
   });
   // Older Pi releases read an all-caps `apiKey` such as `GATEWAY_API_KEY` as a variable name.
-  if (!names.length && legacyBareName && /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(text)) return [text];
+  if (
+    !names.length &&
+    legacyBareName &&
+    /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(text)
+  )
+    return [text];
   return names;
 }
 
-function collect(value: unknown, path: string[], inContainer: boolean, file: string, out: EnvironmentReference[]): void {
+function collect(
+  value: unknown,
+  path: string[],
+  inContainer: boolean,
+  file: string,
+  out: EnvironmentReference[],
+): void {
   if (typeof value === "string") {
     const key = path[path.length - 1] ?? "";
     if (!inContainer && key !== "apiKey" && !NAME_KEY.test(key)) return;
-    for (const name of referencedNames(value, key, key === "apiKey")) out.push({ name, file, field: path.join(".") });
+    for (const name of referencedNames(value, key, key === "apiKey"))
+      out.push({ name, file, field: path.join(".") });
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => collect(item, [...path, String(index)], inContainer, file, out));
+    value.forEach((item, index) =>
+      collect(item, [...path, String(index)], inContainer, file, out),
+    );
     return;
   }
   if (typeof value !== "object" || value === null) return;
   for (const [key, child] of Object.entries(value)) {
-    collect(child, [...path, key], inContainer || CONTAINERS.has(key), file, out);
+    collect(
+      child,
+      [...path, key],
+      inContainer || CONTAINERS.has(key),
+      file,
+      out,
+    );
   }
 }
 
 /** Parses one config file's text; malformed files contribute nothing. */
-export function referencesInConfig(text: string, file: string): EnvironmentReference[] {
+export function referencesInConfig(
+  text: string,
+  file: string,
+): EnvironmentReference[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -85,7 +113,9 @@ export function referencesInConfig(text: string, file: string): EnvironmentRefer
 }
 
 /** Reads Pi's user and project config files and lists the variables they reference. */
-export async function findEnvironmentReferences(options: FindReferencesOptions = {}): Promise<EnvironmentReference[]> {
+export async function findEnvironmentReferences(
+  options: FindReferencesOptions = {},
+): Promise<EnvironmentReference[]> {
   const agentDir = options.agentDir ?? defaultAgentDir(options.env);
   const read = options.readFile ?? ((path: string) => fsReadFile(path, "utf8"));
   const files = [join(agentDir, "models.json"), join(agentDir, "mcp.json")];
@@ -103,7 +133,10 @@ export async function findEnvironmentReferences(options: FindReferencesOptions =
 }
 
 /** References whose variable is unset or empty in `env`, one per name. */
-export function missingReferences(references: readonly EnvironmentReference[], env: NodeJS.ProcessEnv): EnvironmentReference[] {
+export function missingReferences(
+  references: readonly EnvironmentReference[],
+  env: NodeJS.ProcessEnv,
+): EnvironmentReference[] {
   const seen = new Set<string>();
   return references.filter((reference) => {
     if (seen.has(reference.name) || env[reference.name]) return false;

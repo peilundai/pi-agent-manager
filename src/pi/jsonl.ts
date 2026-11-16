@@ -13,12 +13,14 @@ export class JsonlDecoder {
 
   constructor(
     private readonly onRecord: (value: unknown) => void,
-    private readonly onInvalid: (line: string, error: unknown) => void = () => undefined,
+    private readonly onInvalid: (line: string, error: unknown) => void = () =>
+      undefined,
     private readonly maxLineLength = DEFAULT_MAX_LINE_BYTES,
   ) {}
 
   push(chunk: Buffer | string): void {
-    this.buffer += typeof chunk === "string" ? chunk : this.decoder.write(chunk);
+    this.buffer +=
+      typeof chunk === "string" ? chunk : this.decoder.write(chunk);
     let newline = this.buffer.indexOf("\n");
     while (newline !== -1) {
       const line = this.buffer.slice(0, newline);
@@ -29,7 +31,10 @@ export class JsonlDecoder {
     }
     if (this.buffer.length > this.maxLineLength) {
       // Drop an oversized record instead of growing without bound.
-      this.onInvalid(this.buffer.slice(0, 200), new Error("JSONL record exceeds the size limit."));
+      this.onInvalid(
+        this.buffer.slice(0, 200),
+        new Error("JSONL record exceeds the size limit."),
+      );
       this.buffer = "";
       this.discarding = true;
     }

@@ -10,12 +10,25 @@ import {
   terminalPath,
   terminalTitle,
 } from "../src/view/terminal-agents";
-import { configuration, type MockTerminal, resetVscodeMock, TabInputTerminal, TerminalExitReason } from "./vscode-mock";
+import {
+  configuration,
+  type MockTerminal,
+  resetVscodeMock,
+  setTabGroups,
+  tabGroup,
+  TabInputTerminal,
+  TabInputWebview,
+  TerminalExitReason,
+} from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 
 const mock = vscode as unknown as typeof VscodeMock;
 
-const resolveCommand = vi.fn(async () => ({ path: "/usr/local/bin/pi", source: "path" as const, attempts: ["/usr/local/bin/pi"] }));
+const resolveCommand = vi.fn(async () => ({
+  path: "/usr/local/bin/pi",
+  source: "path" as const,
+  attempts: ["/usr/local/bin/pi"],
+}));
 const environment = {
   resolve: async () => ({ PATH: "/usr/bin:/bin" }) as NodeJS.ProcessEnv,
   checkMissing: vi.fn(async () => undefined),
@@ -47,24 +60,38 @@ function agents(memento?: ReturnType<typeof memoryMemento>): TerminalAgents {
 }
 
 function shellArgs(index: number): string {
-  return (mock.window.createTerminal.mock.calls[index]?.[0] as { shellArgs: string[] }).shellArgs.join(" ");
+  return (
+    mock.window.createTerminal.mock.calls[index]?.[0] as { shellArgs: string[] }
+  ).shellArgs.join(" ");
 }
 
 function names(): string[] {
-  return mock.window.createTerminal.mock.calls.map((call) => (call[0] as { name: string }).name);
+  return mock.window.createTerminal.mock.calls.map(
+    (call) => (call[0] as { name: string }).name,
+  );
 }
 
 function closeTerminal(terminal: unknown, reason: number): void {
   const mockTerminal = terminal as MockTerminal;
   mockTerminal.exitStatus = { code: 0, reason };
   mockTerminal.dispose();
-  for (const call of mock.window.onDidCloseTerminal.mock.calls) (call[0] as (value: unknown) => void)(terminal);
+  for (const call of mock.window.onDidCloseTerminal.mock.calls)
+    (call[0] as (value: unknown) => void)(terminal);
 }
 
-function activeEditor(uri = "/w/src/app.ts", selection = { startLine: 7, endLine: 11 }): void {
-  mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
-  mock.workspace.getWorkspaceFolder.mockReturnValue(mock.workspace.workspaceFolders[0]);
-  mock.workspace.asRelativePath.mockImplementation((value: unknown) => String((value as { fsPath: string }).fsPath).replace(/^\/w\//, ""));
+function activeEditor(
+  uri = "/w/src/app.ts",
+  selection = { startLine: 7, endLine: 11 },
+): void {
+  mock.workspace.workspaceFolders = [
+    { name: "w", index: 0, uri: mock.Uri.file("/w") },
+  ];
+  mock.workspace.getWorkspaceFolder.mockReturnValue(
+    mock.workspace.workspaceFolders[0],
+  );
+  mock.workspace.asRelativePath.mockImplementation((value: unknown) =>
+    String((value as { fsPath: string }).fsPath).replace(/^\/w\//, ""),
+  );
   mock.window.activeTextEditor = {
     document: {
       uri: mock.Uri.file(uri),
@@ -87,8 +114,12 @@ beforeEach(() => {
   sessionIds = 0;
   resolveCommand.mockClear();
   environment.checkMissing.mockClear();
-  mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
-  mock.workspace.getWorkspaceFolder.mockImplementation(() => mock.workspace.workspaceFolders?.[0]);
+  mock.workspace.workspaceFolders = [
+    { name: "w", index: 0, uri: mock.Uri.file("/w") },
+  ];
+  mock.workspace.getWorkspaceFolder.mockImplementation(
+    () => mock.workspace.workspaceFolders?.[0],
+  );
 });
 
 describe("tabMode", () => {
@@ -106,34 +137,64 @@ describe("tabMode", () => {
 
 describe("buildTerminalArgs", () => {
   it("passes extra arguments through to plain pi", () => {
-    expect(buildTerminalArgs(["--offline", "--provider", "anthropic"])).toEqual(["--offline", "--provider", "anthropic"]);
+    expect(buildTerminalArgs(["--offline", "--provider", "anthropic"])).toEqual(
+      ["--offline", "--provider", "anthropic"],
+    );
   });
 
   it("adds the terminal's own Pi session after the extra arguments", () => {
-    expect(buildTerminalArgs(["--offline"], "abc")).toEqual(["--offline", "--session-id", "abc"]);
+    expect(buildTerminalArgs(["--offline"], "abc")).toEqual([
+      "--offline",
+      "--session-id",
+      "abc",
+    ]);
   });
 
   it("rejects the flags the extension manages", () => {
-    expect(() => buildTerminalArgs(["--mode", "rpc"])).toThrow(/managed by the extension/);
-    expect(() => buildTerminalArgs(["--session", "/tmp/x"])).toThrow(/managed by the extension/);
-    expect(() => buildTerminalArgs(["--continue"])).toThrow(/managed by the extension/);
+    expect(() => buildTerminalArgs(["--mode", "rpc"])).toThrow(
+      /managed by the extension/,
+    );
+    expect(() => buildTerminalArgs(["--session", "/tmp/x"])).toThrow(
+      /managed by the extension/,
+    );
+    expect(() => buildTerminalArgs(["--continue"])).toThrow(
+      /managed by the extension/,
+    );
   });
 });
 
 describe("buildTerminalLaunch", () => {
   it("runs pi through the login shell on macOS/Linux", () => {
-    const launch = buildTerminalLaunch("/usr/local/bin/pi", ["--offline"], "darwin", { SHELL: "/bin/zsh", PATH: "/usr/bin" });
+    const launch = buildTerminalLaunch(
+      "/usr/local/bin/pi",
+      ["--offline"],
+      "darwin",
+      { SHELL: "/bin/zsh", PATH: "/usr/bin" },
+    );
     expect(launch.shellPath).toBe("/bin/zsh");
-    expect(launch.shellArgs).toEqual(["-i", "-l", "-c", "exec '/usr/local/bin/pi' '--offline'"]);
+    expect(launch.shellArgs).toEqual([
+      "-i",
+      "-l",
+      "-c",
+      "exec '/usr/local/bin/pi' '--offline'",
+    ]);
   });
 
   it("quotes paths with spaces instead of splitting them", () => {
-    const launch = buildTerminalLaunch("/opt/my pi/pi", [], "linux", { SHELL: "/bin/bash", PATH: "/usr/bin" });
+    const launch = buildTerminalLaunch("/opt/my pi/pi", [], "linux", {
+      SHELL: "/bin/bash",
+      PATH: "/usr/bin",
+    });
     expect(launch.shellArgs[3]).toBe("exec '/opt/my pi/pi'");
   });
 
   it("runs the Windows shim through cmd.exe", () => {
-    const launch = buildTerminalLaunch("C:\\npm\\pi.cmd", ["--offline"], "win32", { ComSpec: "C:\\Windows\\System32\\cmd.exe" });
+    const launch = buildTerminalLaunch(
+      "C:\\npm\\pi.cmd",
+      ["--offline"],
+      "win32",
+      { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+    );
     expect(launch.shellPath).toBe("C:\\Windows\\System32\\cmd.exe");
     expect(launch.shellArgs).toContain("/c");
   });
@@ -141,34 +202,69 @@ describe("buildTerminalLaunch", () => {
 
 describe("terminalMention", () => {
   it("uses the compact @path#lines token", () => {
-    expect(terminalMention({ relativePath: "src/app.ts", startLine: 7, endLine: 11 })).toBe("@src/app.ts#8-12");
+    expect(
+      terminalMention({
+        relativePath: "src/app.ts",
+        startLine: 7,
+        endLine: 11,
+      }),
+    ).toBe("@src/app.ts#8-12");
   });
 
   it("quotes paths with spaces", () => {
-    expect(terminalMention({ relativePath: "docs/design notes.md", startLine: 0, endLine: 0 })).toBe('@"docs/design notes.md"#1');
+    expect(
+      terminalMention({
+        relativePath: "docs/design notes.md",
+        startLine: 0,
+        endLine: 0,
+      }),
+    ).toBe('@"docs/design notes.md"#1');
   });
 
   it("refuses paths with control characters, which would act as keystrokes", () => {
-    expect(() => terminalMention({ relativePath: "evil\n!rm -rf ~", startLine: 0, endLine: 0 })).toThrow(/cannot be typed/);
-    expect(() => terminalMention({ relativePath: "a\u001b[2Jb", startLine: 0, endLine: 0 })).toThrow(/cannot be typed/);
+    expect(() =>
+      terminalMention({
+        relativePath: "evil\n!rm -rf ~",
+        startLine: 0,
+        endLine: 0,
+      }),
+    ).toThrow(/cannot be typed/);
+    expect(() =>
+      terminalMention({
+        relativePath: "a\u001b[2Jb",
+        startLine: 0,
+        endLine: 0,
+      }),
+    ).toThrow(/cannot be typed/);
   });
 });
 
 describe("terminalPath", () => {
   it("is relative to the terminal's folder", () => {
-    expect(terminalPath({ uri: mock.Uri.file("/w/src/app.ts") } as never, "/w")).toBe("src/app.ts");
+    expect(
+      terminalPath({ uri: mock.Uri.file("/w/src/app.ts") } as never, "/w"),
+    ).toBe("src/app.ts");
   });
 
   it("is absolute for files outside the terminal's folder", () => {
-    expect(terminalPath({ uri: mock.Uri.file("/other/lib.ts") } as never, "/w")).toBe("/other/lib.ts");
+    expect(
+      terminalPath({ uri: mock.Uri.file("/other/lib.ts") } as never, "/w"),
+    ).toBe("/other/lib.ts");
   });
 
   it("stays relative for in-folder names that start with two dots", () => {
-    expect(terminalPath({ uri: mock.Uri.file("/w/..env") } as never, "/w")).toBe("..env");
+    expect(
+      terminalPath({ uri: mock.Uri.file("/w/..env") } as never, "/w"),
+    ).toBe("..env");
   });
 
   it("has no path for unsaved documents", () => {
-    expect(terminalPath({ uri: new mock.Uri("untitled", "Untitled-1") } as never, "/w")).toBeUndefined();
+    expect(
+      terminalPath(
+        { uri: new mock.Uri("untitled", "Untitled-1") } as never,
+        "/w",
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -204,13 +300,19 @@ describe("TerminalAgents", () => {
     };
     expect(options.name).toBe("Pi Agent");
     expect(options.cwd).toBe("/w");
-    expect(options.location).toEqual({ viewColumn: -2, preserveFocus: false });
+    // No editors are open, so the terminal takes the editor area.
+    expect(options.location).toEqual({ viewColumn: -1, preserveFocus: false });
     expect(options.env.COLORTERM).toBe("truecolor");
     expect(options.env.PATH).toContain("/usr/local/bin");
     // Login shell (platform pinned to linux; `$SHELL` is unset in tests, so /bin/sh).
-    expect(options.shellArgs).toContain("exec '/usr/local/bin/pi' '--session-id' 'session-1'");
+    expect(options.shellArgs).toContain(
+      "exec '/usr/local/bin/pi' '--session-id' 'session-1'",
+    );
     expect(terminal?.show).toHaveBeenCalledWith(false);
-    expect(resolveCommand).toHaveBeenCalledWith({ configured: "pi", env: expect.anything() });
+    expect(resolveCommand).toHaveBeenCalledWith({
+      configured: "pi",
+      env: expect.anything(),
+    });
     expect(manager.count).toBe(1);
     manager.dispose();
   });
@@ -219,18 +321,26 @@ describe("TerminalAgents", () => {
     configuration.set("extraArgs", ["--offline"]);
     const manager = agents();
     await manager.newAgent();
-    const options = mock.window.createTerminal.mock.calls[0]?.[0] as { shellArgs: string[] };
-    expect(options.shellArgs.join(" ")).toContain("exec '/usr/local/bin/pi' '--offline'");
+    const options = mock.window.createTerminal.mock.calls[0]?.[0] as {
+      shellArgs: string[];
+    };
+    expect(options.shellArgs.join(" ")).toContain(
+      "exec '/usr/local/bin/pi' '--offline'",
+    );
     expect(options.shellArgs.join(" ")).not.toContain("--mode rpc");
     manager.dispose();
   });
 
   it("shows an error and opens nothing when pi cannot be found", async () => {
-    resolveCommand.mockRejectedValueOnce(new Error("Pi executable was not found. Checked 3 locations."));
+    resolveCommand.mockRejectedValueOnce(
+      new Error("Pi executable was not found. Checked 3 locations."),
+    );
     const manager = agents();
     await expect(manager.newAgent()).resolves.toBeUndefined();
     expect(mock.window.createTerminal).not.toHaveBeenCalled();
-    expect(mock.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("Pi executable was not found"));
+    expect(mock.window.showErrorMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Pi executable was not found"),
+    );
     manager.dispose();
   });
 
@@ -249,7 +359,9 @@ describe("TerminalAgents", () => {
     const manager = agents();
     const terminal = await manager.newAgent();
     expect(manager.count).toBe(1);
-    const onClose = mock.window.onDidCloseTerminal.mock.calls[0]?.[0] as (terminal: unknown) => void;
+    const onClose = mock.window.onDidCloseTerminal.mock.calls[0]?.[0] as (
+      terminal: unknown,
+    ) => void;
     terminal?.dispose();
     onClose(terminal);
     expect(manager.count).toBe(0);
@@ -259,13 +371,55 @@ describe("TerminalAgents", () => {
   it("reuses one editor group for the next chat", async () => {
     const manager = agents();
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 2, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(2, [
+      { input: new TabInputTerminal() },
+    ]);
     // The next terminal is placed beside the first, then rebound to its group.
-    const onActive = mock.window.onDidChangeActiveTerminal.mock.calls[0]?.[0] as (terminal: unknown) => void;
+    const onActive = mock.window.onDidChangeActiveTerminal.mock
+      .calls[0]?.[0] as (terminal: unknown) => void;
     onActive(mock.window.terminals[0]);
     await manager.newAgent();
-    const options = mock.window.createTerminal.mock.calls[1]?.[0] as { location: { viewColumn: number } };
+    const options = mock.window.createTerminal.mock.calls[1]?.[0] as {
+      location: { viewColumn: number };
+    };
     expect(options.location.viewColumn).toBe(2);
+    manager.dispose();
+  });
+
+  it("opens beside the user's editors, then in the same group as Pi chat tabs", async () => {
+    const manager = agents();
+    setTabGroups([tabGroup(1, [{ input: {}, label: "index.ts" }])]);
+    await manager.newAgent();
+    setTabGroups([
+      tabGroup(1, [{ input: {}, label: "index.ts" }]),
+      tabGroup(2, [{ input: new TabInputWebview("piAgentManager.agent") }]),
+    ]);
+    await manager.newAgent();
+    const columns = mock.window.createTerminal.mock.calls.map(
+      (call) =>
+        (call[0] as { location: { viewColumn: number } }).location.viewColumn,
+    );
+    expect(columns).toEqual([2, 2]);
+    manager.dispose();
+  });
+
+  it("recognizes its own terminal tabs by title or by the group they were last seen in", async () => {
+    const manager = agents();
+    await manager.newAgent();
+    const own = { input: new TabInputTerminal(), label: "Pi Agent" };
+    const renamed = { input: new TabInputTerminal(), label: "node" };
+    const other = { input: new TabInputTerminal(), label: "zsh" };
+    tabGroup(-1, [own, renamed]);
+    tabGroup(3, [other]);
+    expect(manager.ownsTab(own as never)).toBe(true);
+    expect(manager.ownsTab(renamed as never)).toBe(true);
+    expect(manager.ownsTab(other as never)).toBe(false);
+    expect(
+      manager.ownsTab({
+        input: new TabInputWebview("piAgentManager.agent"),
+        label: "Pi Agent",
+      } as never),
+    ).toBe(false);
     manager.dispose();
   });
 
@@ -286,7 +440,9 @@ describe("TerminalAgents", () => {
     await manager.sendSelection();
     expect(mock.window.createTerminal).toHaveBeenCalledTimes(1);
     expect(mock.window.terminals[0]!.sendText).not.toHaveBeenCalled();
-    expect(mock.window.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining("Run Add Selection to Chat again"));
+    expect(mock.window.showInformationMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Run Add Selection to Chat again"),
+    );
     manager.dispose();
   });
 
@@ -296,17 +452,24 @@ describe("TerminalAgents", () => {
     const manager = agents();
     await manager.newAgent();
     await manager.sendSelection();
-    expect(mock.window.terminals[0]!.sendText).toHaveBeenCalledWith("@/other/lib.ts#8-12 ", false);
+    expect(mock.window.terminals[0]!.sendText).toHaveBeenCalledWith(
+      "@/other/lib.ts#8-12 ",
+      false,
+    );
     manager.dispose();
   });
 
   it("asks to save an untitled document instead of mentioning it", async () => {
     activeEditor();
-    (mock.window.activeTextEditor as { document: { uri: unknown } }).document.uri = new mock.Uri("untitled", "Untitled-1");
+    (
+      mock.window.activeTextEditor as { document: { uri: unknown } }
+    ).document.uri = new mock.Uri("untitled", "Untitled-1");
     const manager = agents();
     await manager.sendSelection();
     expect(mock.window.createTerminal).not.toHaveBeenCalled();
-    expect(mock.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining("Save the file first"));
+    expect(mock.window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Save the file first"),
+    );
     manager.dispose();
   });
 
@@ -325,12 +488,16 @@ describe("TerminalAgents", () => {
     ];
     const manager = agents();
     const first = await manager.newAgent();
-    mock.window.showQuickPick.mockImplementationOnce(async (items: unknown) => (items as unknown[])[1]);
+    mock.window.showQuickPick.mockImplementationOnce(
+      async (items: unknown) => (items as unknown[])[1],
+    );
     await manager.pickFolder();
     await manager.restartAll();
     expect((first as unknown as MockTerminal | undefined)?.disposed).toBe(true);
     expect(mock.window.createTerminal).toHaveBeenCalledTimes(4);
-    const cwds = mock.window.createTerminal.mock.calls.slice(2).map((call) => (call[0] as { cwd: string }).cwd);
+    const cwds = mock.window.createTerminal.mock.calls
+      .slice(2)
+      .map((call) => (call[0] as { cwd: string }).cwd);
     expect(cwds).toEqual(["/w", "/api"]);
     expect(manager.count).toBe(2);
     manager.dispose();
@@ -348,10 +515,15 @@ describe("TerminalAgents", () => {
       { name: "w", index: 0, uri: mock.Uri.file("/w") },
       { name: "api", index: 1, uri: mock.Uri.file("/api") },
     ];
-    mock.window.showQuickPick.mockImplementationOnce(async (items: unknown) => (items as unknown[])[1]);
+    mock.window.showQuickPick.mockImplementationOnce(
+      async (items: unknown) => (items as unknown[])[1],
+    );
     const manager = agents();
     await manager.pickFolder();
-    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/api", name: "Pi Agent: api" });
+    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({
+      cwd: "/api",
+      name: "Pi Agent: api",
+    });
     manager.dispose();
   });
 
@@ -375,7 +547,12 @@ describe("TerminalAgents titles", () => {
     await manager.newAgent();
     closeTerminal(first, TerminalExitReason.User);
     await manager.newAgent();
-    expect(names()).toEqual(["Pi Agent", "Pi Agent 2", "Pi Agent 3", "Pi Agent"]);
+    expect(names()).toEqual([
+      "Pi Agent",
+      "Pi Agent 2",
+      "Pi Agent 3",
+      "Pi Agent",
+    ]);
     manager.dispose();
   });
 });
@@ -384,9 +561,13 @@ describe("TerminalAgents restore after a reload", () => {
   it("saves each open terminal with its session, folder, editor group and title number", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [
+      { input: new TabInputTerminal() },
+    ]);
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 2, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(2, [
+      { input: new TabInputTerminal() },
+    ]);
     await manager.newAgent();
     expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([
       { sessionId: "session-1", folder: "/w", viewColumn: 1, number: 1 },
@@ -400,10 +581,16 @@ describe("TerminalAgents restore after a reload", () => {
     const manager = agents(memento);
     const first = await manager.newAgent();
     await manager.newAgent();
-    const onActive = mock.window.onDidChangeActiveTerminal.mock.calls[0]?.[0] as (terminal: unknown) => void;
+    const onActive = mock.window.onDidChangeActiveTerminal.mock
+      .calls[0]?.[0] as (terminal: unknown) => void;
     onActive(first);
-    const saved = memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>;
-    expect(saved.map((entry) => entry.sessionId)).toEqual(["session-2", "session-1"]);
+    const saved = memento.values.get(TERMINAL_AGENTS_KEY) as Array<{
+      sessionId: string;
+    }>;
+    expect(saved.map((entry) => entry.sessionId)).toEqual([
+      "session-2",
+      "session-1",
+    ]);
     manager.dispose();
   });
 
@@ -414,16 +601,34 @@ describe("TerminalAgents restore after a reload", () => {
     ];
     const memento = memoryMemento({
       [TERMINAL_AGENTS_KEY]: [
-        { sessionId: "aaa", folder: "/api", name: "api", viewColumn: 2, number: 2 },
+        {
+          sessionId: "aaa",
+          folder: "/api",
+          name: "api",
+          viewColumn: 2,
+          number: 2,
+        },
         { sessionId: "bbb", folder: "/w", name: "w", viewColumn: 1, number: 1 },
       ],
     });
     const manager = agents(memento);
     await manager.restore();
     expect(mock.window.createTerminal).toHaveBeenCalledTimes(2);
-    expect(mock.window.createTerminal.mock.calls.map((call) => call[0])).toEqual([
-      expect.objectContaining({ cwd: "/api", name: "Pi Agent 2: api", isTransient: true, location: { viewColumn: 2, preserveFocus: false } }),
-      expect.objectContaining({ cwd: "/w", name: "Pi Agent: w", isTransient: true, location: { viewColumn: 1, preserveFocus: false } }),
+    expect(
+      mock.window.createTerminal.mock.calls.map((call) => call[0]),
+    ).toEqual([
+      expect.objectContaining({
+        cwd: "/api",
+        name: "Pi Agent 2: api",
+        isTransient: true,
+        location: { viewColumn: 2, preserveFocus: false },
+      }),
+      expect.objectContaining({
+        cwd: "/w",
+        name: "Pi Agent: w",
+        isTransient: true,
+        location: { viewColumn: 1, preserveFocus: false },
+      }),
     ]);
     expect(shellArgs(0)).toContain("'--session-id' 'aaa'");
     expect(shellArgs(1)).toContain("'--session-id' 'bbb'");
@@ -436,13 +641,20 @@ describe("TerminalAgents restore after a reload", () => {
 
   it("drops saved terminals whose folder left the workspace, and ignores malformed entries", async () => {
     const memento = memoryMemento({
-      [TERMINAL_AGENTS_KEY]: [{ sessionId: "gone", folder: "/elsewhere", viewColumn: 1 }, { folder: "/w" }, "junk", { sessionId: "kept", folder: "/w", viewColumn: 1 }],
+      [TERMINAL_AGENTS_KEY]: [
+        { sessionId: "gone", folder: "/elsewhere", viewColumn: 1 },
+        { folder: "/w" },
+        "junk",
+        { sessionId: "kept", folder: "/w", viewColumn: 1 },
+      ],
     });
     const manager = agents(memento);
     await manager.restore();
     expect(mock.window.createTerminal).toHaveBeenCalledOnce();
     expect(shellArgs(0)).toContain("'--session-id' 'kept'");
-    expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([{ sessionId: "kept", folder: "/w", viewColumn: 1, number: 1 }]);
+    expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([
+      { sessionId: "kept", folder: "/w", viewColumn: 1, number: 1 },
+    ]);
     manager.dispose();
   });
 
@@ -452,7 +664,9 @@ describe("TerminalAgents restore after a reload", () => {
       { sessionId: "bbb", folder: "/w", viewColumn: 1, number: 2 },
     ];
     const memento = memoryMemento({ [TERMINAL_AGENTS_KEY]: saved });
-    resolveCommand.mockRejectedValueOnce(new Error("Pi executable was not found."));
+    resolveCommand.mockRejectedValueOnce(
+      new Error("Pi executable was not found."),
+    );
     const manager = agents(memento);
     await manager.restore();
     // The first reopen failed, so restore stopped and kept both for the next reload.
@@ -473,7 +687,13 @@ describe("TerminalAgents restore after a reload", () => {
     resolveCommand.mockRejectedValue(new Error("Pi executable was not found."));
     const manager = agents(memento);
     await manager.restore();
-    resolveCommand.mockReset().mockResolvedValue({ path: "/usr/local/bin/pi", source: "path", attempts: ["/usr/local/bin/pi"] });
+    resolveCommand
+      .mockReset()
+      .mockResolvedValue({
+        path: "/usr/local/bin/pi",
+        source: "path",
+        attempts: ["/usr/local/bin/pi"],
+      });
     expect(mock.window.createTerminal).not.toHaveBeenCalled();
     expect(mock.window.showErrorMessage).toHaveBeenCalledOnce();
     expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual(saved);
@@ -493,7 +713,9 @@ describe("TerminalAgents restore after a reload", () => {
     const first = await manager.newAgent();
     const second = await manager.newAgent();
     closeTerminal(first, TerminalExitReason.User);
-    expect((memento.values.get(TERMINAL_AGENTS_KEY) as unknown[]).length).toBe(1);
+    expect((memento.values.get(TERMINAL_AGENTS_KEY) as unknown[]).length).toBe(
+      1,
+    );
     closeTerminal(second, TerminalExitReason.Process);
     expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([]);
     manager.dispose();
@@ -502,11 +724,15 @@ describe("TerminalAgents restore after a reload", () => {
   it("keeps terminals saved when the window reloads or shuts down", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [
+      { input: new TabInputTerminal() },
+    ]);
     const terminal = await manager.newAgent();
     closeTerminal(terminal, TerminalExitReason.Shutdown);
     manager.dispose();
-    expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([{ sessionId: "session-1", folder: "/w", viewColumn: 1, number: 1 }]);
+    expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([
+      { sessionId: "session-1", folder: "/w", viewColumn: 1, number: 1 },
+    ]);
   });
 
   it("saves the shorter list when it prunes a terminal VS Code closed without a handled event", async () => {
@@ -518,9 +744,11 @@ describe("TerminalAgents restore after a reload", () => {
     (first as unknown as MockTerminal).dispose();
     await manager.open();
     expect(manager.count).toBe(1);
-    expect((memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>).map((entry) => entry.sessionId)).toEqual([
-      "session-2",
-    ]);
+    expect(
+      (
+        memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>
+      ).map((entry) => entry.sessionId),
+    ).toEqual(["session-2"]);
     manager.dispose();
   });
 
@@ -531,32 +759,47 @@ describe("TerminalAgents restore after a reload", () => {
     const second = await manager.newAgent();
     for (const terminal of [first, second]) {
       const mockTerminal = terminal as unknown as MockTerminal;
-      mockTerminal.exitStatus = { code: 0, reason: TerminalExitReason.Shutdown };
+      mockTerminal.exitStatus = {
+        code: 0,
+        reason: TerminalExitReason.Shutdown,
+      };
       mockTerminal.dispose();
     }
     expect(manager.count).toBe(0);
-    expect((memento.values.get(TERMINAL_AGENTS_KEY) as unknown[]).length).toBe(2);
+    expect((memento.values.get(TERMINAL_AGENTS_KEY) as unknown[]).length).toBe(
+      2,
+    );
     manager.dispose();
   });
 
   it("restartAll reopens each terminal with the same session, title and editor group", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1, [
+      { input: new TabInputTerminal() },
+    ]);
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 3, activeTab: { input: new TabInputTerminal() } };
+    mock.window.tabGroups.activeTabGroup = tabGroup(3, [
+      { input: new TabInputTerminal() },
+    ]);
     await manager.newAgent();
-    mock.window.tabGroups.activeTabGroup = { viewColumn: 1, activeTab: undefined };
+    mock.window.tabGroups.activeTabGroup = tabGroup(1);
     await manager.restartAll();
-    const columns = mock.window.createTerminal.mock.calls.slice(2).map((call) => (call[0] as { location: { viewColumn: number } }).location.viewColumn);
+    const columns = mock.window.createTerminal.mock.calls
+      .slice(2)
+      .map(
+        (call) =>
+          (call[0] as { location: { viewColumn: number } }).location.viewColumn,
+      );
     expect(columns).toEqual([1, 3]);
     expect(shellArgs(2)).toContain("'--session-id' 'session-1'");
     expect(shellArgs(3)).toContain("'--session-id' 'session-2'");
     expect(names().slice(2)).toEqual(["Pi Agent", "Pi Agent 2"]);
-    expect((memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>).map((entry) => entry.sessionId)).toEqual([
-      "session-1",
-      "session-2",
-    ]);
+    expect(
+      (
+        memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>
+      ).map((entry) => entry.sessionId),
+    ).toEqual(["session-1", "session-2"]);
     manager.dispose();
   });
 });

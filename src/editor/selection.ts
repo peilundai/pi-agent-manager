@@ -17,12 +17,21 @@ export function isSupportedDocumentScheme(scheme: string): boolean {
 function hasUnsafeTerminalControl(value: string): boolean {
   return [...value].some((character) => {
     const code = character.charCodeAt(0);
-    return code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127;
+    return (
+      code <= 8 ||
+      code === 11 ||
+      code === 12 ||
+      (code >= 14 && code <= 31) ||
+      code === 127
+    );
   });
 }
 
 function markdownFence(text: string): string {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const longest = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length),
+  );
   return "`".repeat(Math.max(3, longest + 1));
 }
 
@@ -45,8 +54,13 @@ export function formatEditorSelection(context: EditorSelectionContext): string {
   if (!context.relativePath || context.relativePath.length > 16_384) {
     throw new Error("Invalid editor document path.");
   }
-  if (hasUnsafeTerminalControl(context.relativePath) || hasUnsafeTerminalControl(context.text)) {
-    throw new Error("Editor selection contains an unsafe terminal control character.");
+  if (
+    hasUnsafeTerminalControl(context.relativePath) ||
+    hasUnsafeTerminalControl(context.text)
+  ) {
+    throw new Error(
+      "Editor selection contains an unsafe terminal control character.",
+    );
   }
   if (Buffer.byteLength(context.text, "utf8") > MAX_SELECTION_BYTES) {
     throw new Error("Editor selection is too large to send to Pi.");
@@ -62,7 +76,12 @@ export function formatEditorSelection(context: EditorSelectionContext): string {
 }
 
 /** The compact composer token for a selection, for example `@src/app.ts#8-12` or `@src/app.ts#8`. */
-export function selectionLabel(context: Pick<EditorSelectionContext, "relativePath" | "startLine" | "endLine">): string {
+export function selectionLabel(
+  context: Pick<
+    EditorSelectionContext,
+    "relativePath" | "startLine" | "endLine"
+  >,
+): string {
   const start = context.startLine + 1;
   const end = context.endLine + 1;
   return `@${context.relativePath}#${start === end ? start : `${start}-${end}`}`;

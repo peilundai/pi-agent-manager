@@ -16,7 +16,8 @@ export function boundJson(value: unknown, depth = 0): unknown {
   if (typeof value === "string") return truncateString(value, MAX_STRING);
   if (value === null || typeof value !== "object") return value;
   if (depth > MAX_DEPTH) return "[…]";
-  if (Array.isArray(value)) return value.slice(0, MAX_ARRAY).map((item) => boundJson(item, depth + 1));
+  if (Array.isArray(value))
+    return value.slice(0, MAX_ARRAY).map((item) => boundJson(item, depth + 1));
   const record = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   const isImage = record.type === "image" && typeof record.data === "string";
@@ -33,7 +34,11 @@ export function boundJson(value: unknown, depth = 0): unknown {
 const HIDDEN_ROLES = new Set(["system"]);
 
 export function isVisibleMessage(message: PiMessage | undefined): boolean {
-  return Boolean(message && typeof message.role === "string" && !HIDDEN_ROLES.has(message.role));
+  return Boolean(
+    message &&
+    typeof message.role === "string" &&
+    !HIDDEN_ROLES.has(message.role),
+  );
 }
 
 /**
@@ -53,7 +58,9 @@ export function sanitizeEvent(event: PiEvent): PiEvent | undefined {
       return { type: event.type, message: boundJson(message) };
     }
     case "message_update": {
-      const inner = event.assistantMessageEvent as Record<string, unknown> | undefined;
+      const inner = event.assistantMessageEvent as
+        | Record<string, unknown>
+        | undefined;
       if (!inner) return undefined;
       // 0.x versions also sent cumulative snapshots; drop them to keep the stream linear.
       const { partial: _partial, ...rest } = inner;
@@ -69,5 +76,7 @@ export function sanitizeEvent(event: PiEvent): PiEvent | undefined {
 }
 
 export function sanitizeMessages(messages: readonly PiMessage[]): PiMessage[] {
-  return messages.filter(isVisibleMessage).map((message) => boundJson(message) as PiMessage);
+  return messages
+    .filter(isVisibleMessage)
+    .map((message) => boundJson(message) as PiMessage);
 }

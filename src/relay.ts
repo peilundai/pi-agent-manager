@@ -8,7 +8,9 @@ import { JsonlDecoder } from "./pi/jsonl";
 import { startRelay, type RelayConfig } from "./pi/relay-server";
 
 function reply(record: Record<string, unknown>): Promise<void> {
-  return new Promise((resolve) => process.stdout.write(`${JSON.stringify(record)}\n`, () => resolve()));
+  return new Promise((resolve) =>
+    process.stdout.write(`${JSON.stringify(record)}\n`, () => resolve()),
+  );
 }
 
 async function run(config: RelayConfig): Promise<void> {
@@ -18,7 +20,10 @@ async function run(config: RelayConfig): Promise<void> {
     await relay.closed;
     process.exit(0);
   } catch (error) {
-    await reply({ type: "relay.failed", message: error instanceof Error ? error.message : String(error) });
+    await reply({
+      type: "relay.failed",
+      message: error instanceof Error ? error.message : String(error),
+    });
     process.exit(1);
   }
 }

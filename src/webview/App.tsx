@@ -1,8 +1,29 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { parseReferencedPrompt } from "../shared/context-references";
-import { isHostMessage, type EditorSelection, type HostToWebviewMessage, type ImageAttachment, type PromptMode, type WebviewToHostMessage } from "../shared/protocol";
+import {
+  isHostMessage,
+  type EditorSelection,
+  type HostToWebviewMessage,
+  type ImageAttachment,
+  type PromptMode,
+  type WebviewToHostMessage,
+} from "../shared/protocol";
 import { chatReducer, initialChatState, type ChatState } from "./chat-state";
-import { Composer, type ComposerDraft, type ComposerHandle, type LocalCommand } from "./components/Composer";
+import {
+  Composer,
+  type ComposerDraft,
+  type ComposerHandle,
+  type LocalCommand,
+} from "./components/Composer";
 import { ChatContext } from "./components/context";
 import { EmptyState, PiMascot } from "./components/EmptyState";
 import { Header, SessionPicker } from "./components/Header";
@@ -12,7 +33,15 @@ import { generateSessionTitle } from "../pi/session-title";
 
 const MAX_HISTORY = 50;
 const SPINNER_FRAMES = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
-const WORKING_WORDS = ["Working", "Thinking", "Pondering", "Computing", "Crunching", "Reasoning", "Iterating"];
+const WORKING_WORDS = [
+  "Working",
+  "Thinking",
+  "Pondering",
+  "Computing",
+  "Crunching",
+  "Reasoning",
+  "Iterating",
+];
 
 function useElapsed(since: number | undefined): number {
   const [now, setNow] = useState(() => Date.now());
@@ -29,16 +58,20 @@ function StatusLine({ state }: { state: ChatState }) {
   const since = state.busy ? state.busySince : undefined;
   const elapsed = useElapsed(since);
   // Vary the word per run, deterministically from when the run started.
-  const word = WORKING_WORDS[Math.floor((since ?? 0) / 1000) % WORKING_WORDS.length];
+  const word =
+    WORKING_WORDS[Math.floor((since ?? 0) / 1000) % WORKING_WORDS.length];
   if (!state.busy && !state.activity) return null;
-  const frame = SPINNER_FRAMES[Math.floor(elapsed / 120) % SPINNER_FRAMES.length];
+  const frame =
+    SPINNER_FRAMES[Math.floor(elapsed / 120) % SPINNER_FRAMES.length];
   const seconds = Math.floor(elapsed / 1000);
   return (
     <div className="status-line" role="status" aria-live="polite">
       <span className="spinner" aria-hidden="true">
         {frame}
       </span>
-      <span className="status-word shimmer">{state.activity ?? `${word}…`}</span>
+      <span className="status-word shimmer">
+        {state.activity ?? `${word}…`}
+      </span>
       <span className="status-meta">
         {seconds > 0 ? `${seconds}s · ` : ""}esc to interrupt
       </span>
@@ -57,14 +90,22 @@ function QueueChips({ queue }: { queue: ChatState["queue"] }) {
       {entries.map((entry, index) => (
         <div key={index} className="queue-chip" title={entry.text}>
           <span className="badge">{entry.kind}</span>
-          <span className="queue-text">{parseReferencedPrompt(entry.text).message}</span>
+          <span className="queue-text">
+            {parseReferencedPrompt(entry.text).message}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
-function SetupView({ state, post }: { state: ChatState; post(message: WebviewToHostMessage): void }) {
+function SetupView({
+  state,
+  post,
+}: {
+  state: ChatState;
+  post(message: WebviewToHostMessage): void;
+}) {
   const error = state.setupError;
   if (!error) return null;
   if (error.kind === "workspace") {
@@ -72,8 +113,16 @@ function SetupView({ state, post }: { state: ChatState; post(message: WebviewToH
       <div className="setup">
         <PiMascot size={6} />
         <h2>Open a folder to chat with Pi</h2>
-        <p>Pi works inside a workspace folder and keeps its chats per folder.</p>
-        <button type="button" className="button primary" onClick={() => post({ version: 1, type: "setup.action", action: "openFolder" })}>
+        <p>
+          Pi works inside a workspace folder and keeps its chats per folder.
+        </p>
+        <button
+          type="button"
+          className="button primary"
+          onClick={() =>
+            post({ version: 1, type: "setup.action", action: "openFolder" })
+          }
+        >
           Open Folder
         </button>
       </div>
@@ -83,17 +132,44 @@ function SetupView({ state, post }: { state: ChatState; post(message: WebviewToH
     <div className="setup">
       <PiMascot size={6} />
       <h2>Pi CLI not found</h2>
-      <p>Pi Coding Agent for VS Code uses your local Pi installation. Install it, run <code>pi</code> once in a terminal to sign in, then retry.</p>
-      <pre className="setup-command">npm install -g @earendil-works/pi-coding-agent</pre>
+      <p>
+        Pi Coding Agent for VS Code uses your local Pi installation. Install it,
+        run <code>pi</code> once in a terminal to sign in, then retry.
+      </p>
+      <pre className="setup-command">
+        npm install -g @earendil-works/pi-coding-agent
+      </pre>
       <p className="muted">{error.message}</p>
       <div className="setup-actions">
-        <button type="button" className="button primary" onClick={() => post({ version: 1, type: "setup.action", action: "retry" })}>
+        <button
+          type="button"
+          className="button primary"
+          onClick={() =>
+            post({ version: 1, type: "setup.action", action: "retry" })
+          }
+        >
           Retry
         </button>
-        <button type="button" className="button" onClick={() => post({ version: 1, type: "setup.action", action: "chooseExecutable" })}>
+        <button
+          type="button"
+          className="button"
+          onClick={() =>
+            post({
+              version: 1,
+              type: "setup.action",
+              action: "chooseExecutable",
+            })
+          }
+        >
           Choose Executable…
         </button>
-        <button type="button" className="button" onClick={() => post({ version: 1, type: "setup.action", action: "openSettings" })}>
+        <button
+          type="button"
+          className="button"
+          onClick={() =>
+            post({ version: 1, type: "setup.action", action: "openSettings" })
+          }
+        >
           Settings
         </button>
       </div>
@@ -101,7 +177,13 @@ function SetupView({ state, post }: { state: ChatState; post(message: WebviewToH
   );
 }
 
-function ProcessBanner({ state, post }: { state: ChatState; post(message: WebviewToHostMessage): void }) {
+function ProcessBanner({
+  state,
+  post,
+}: {
+  state: ChatState;
+  post(message: WebviewToHostMessage): void;
+}) {
   const { process } = state;
   if (process.status === "starting" && !state.items.length) {
     return <div className="process-banner muted">Starting Pi…</div>;
@@ -119,7 +201,11 @@ function ProcessBanner({ state, post }: { state: ChatState; post(message: Webvie
           <pre>{process.stderr}</pre>
         </details>
       )}
-      <button type="button" className="button primary" onClick={() => post({ version: 1, type: "restart" })}>
+      <button
+        type="button"
+        className="button primary"
+        onClick={() => post({ version: 1, type: "restart" })}
+      >
         Restart Pi
       </button>
     </div>
@@ -129,20 +215,33 @@ function ProcessBanner({ state, post }: { state: ChatState; post(message: Webvie
 export function App({ transport }: { transport: WebviewTransport }) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [files, setFiles] = useState<{ requestId: number; files: string[] }>({ requestId: -1, files: [] });
-  const [editorSelection, setEditorSelection] = useState<EditorSelection | undefined>(undefined);
+  const [files, setFiles] = useState<{ requestId: number; files: string[] }>({
+    requestId: -1,
+    files: [],
+  });
+  const [editorSelection, setEditorSelection] = useState<
+    EditorSelection | undefined
+  >(undefined);
   // Persisted webview state is read once; the ref is only touched from callbacks.
   const [initialPersisted] = useState(() => transport.getState());
   const persisted = useRef(initialPersisted);
-  const [history, setHistory] = useState<string[]>(() => initialPersisted.history ?? []);
+  const [history, setHistory] = useState<string[]>(
+    () => initialPersisted.history ?? [],
+  );
   const composer = useRef<ComposerHandle>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const pending = useRef<HostToWebviewMessage[]>([]);
   const frame = useRef<number | undefined>(undefined);
 
-  const post = useCallback((message: WebviewToHostMessage) => transport.post(message), [transport]);
-  const context = useMemo(() => ({ post, toolExpansion: state.toolExpansion }), [post, state.toolExpansion]);
+  const post = useCallback(
+    (message: WebviewToHostMessage) => transport.post(message),
+    [transport],
+  );
+  const context = useMemo(
+    () => ({ post, toolExpansion: state.toolExpansion }),
+    [post, state.toolExpansion],
+  );
 
   useEffect(() => {
     const flush = () => {
@@ -156,7 +255,11 @@ export function App({ transport }: { transport: WebviewTransport }) {
       if (!isHostMessage(message)) return;
       switch (message.type) {
         case "composer.insert":
-          composer.current?.insert(message.text, message.images, message.references);
+          composer.current?.insert(
+            message.text,
+            message.images,
+            message.references,
+          );
           return;
         case "composer.focus":
           composer.current?.focus();
@@ -179,8 +282,10 @@ export function App({ transport }: { transport: WebviewTransport }) {
     };
     window.addEventListener("message", onMessage);
     post({ version: 1, type: "ready" });
-    const onFocus = () => post({ version: 1, type: "focus.changed", focused: true });
-    const onBlur = () => post({ version: 1, type: "focus.changed", focused: false });
+    const onFocus = () =>
+      post({ version: 1, type: "focus.changed", focused: true });
+    const onBlur = () =>
+      post({ version: 1, type: "focus.changed", focused: false });
     window.addEventListener("focus", onFocus);
     window.addEventListener("blur", onBlur);
     return () => {
@@ -193,7 +298,8 @@ export function App({ transport }: { transport: WebviewTransport }) {
 
   useLayoutEffect(() => {
     const element = scroller.current;
-    if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
+    if (element && stickToBottom.current)
+      element.scrollTop = element.scrollHeight;
   });
 
   useEffect(() => {
@@ -202,14 +308,21 @@ export function App({ transport }: { transport: WebviewTransport }) {
 
   const onDraftChange = useCallback(
     (draft: ComposerDraft) => {
-      persisted.current = { ...persisted.current, draft: draft.text, draftReferences: draft.references };
+      persisted.current = {
+        ...persisted.current,
+        draft: draft.text,
+        draftReferences: draft.references,
+      };
       transport.setState(persisted.current);
     },
     [transport],
   );
   // The composer remounts after a setup error is retried; give it the latest draft, not the first one.
   const loadDraft = useCallback(
-    (): ComposerDraft => ({ text: persisted.current.draft ?? "", references: persisted.current.draftReferences ?? [] }),
+    (): ComposerDraft => ({
+      text: persisted.current.draft ?? "",
+      references: persisted.current.draftReferences ?? [],
+    }),
     [],
   );
 
@@ -220,7 +333,10 @@ export function App({ transport }: { transport: WebviewTransport }) {
       post({ version: 1, type: "prompt", text, images, mode });
       if (text) {
         setHistory((current) => {
-          const next = [...current.filter((entry) => entry !== text), text].slice(-MAX_HISTORY);
+          const next = [
+            ...current.filter((entry) => entry !== text),
+            text,
+          ].slice(-MAX_HISTORY);
           persisted.current = { ...persisted.current, history: next };
           transport.setState(persisted.current);
           return next;
@@ -238,29 +354,55 @@ export function App({ transport }: { transport: WebviewTransport }) {
   const localCommands: LocalCommand[] = useMemo(
     () => [
       { name: "new", description: "Start a new chat", run: newChat },
-      { name: "compact", description: "Summarize the conversation to free context", run: () => post({ version: 1, type: "compact" }) },
-      { name: "model", description: "Choose model and thinking level", run: () => composer.current?.toggleModelPicker() },
-      { name: "rename", description: "Rename this chat", run: () => post({ version: 1, type: "chat.rename" }) },
-      { name: "history", description: "Browse past chats", run: () => setHistoryOpen(true) },
+      {
+        name: "compact",
+        description: "Summarize the conversation to free context",
+        run: () => post({ version: 1, type: "compact" }),
+      },
+      {
+        name: "model",
+        description: "Choose model and thinking level",
+        run: () => composer.current?.toggleModelPicker(),
+      },
+      {
+        name: "rename",
+        description: "Rename this chat",
+        run: () => post({ version: 1, type: "chat.rename" }),
+      },
+      {
+        name: "history",
+        description: "Browse past chats",
+        run: () => setHistoryOpen(true),
+      },
     ],
     [newChat, post],
   );
 
-  const activeSession = state.sessions.find((session) => session.path === state.pi.sessionFile);
+  const activeSession = state.sessions.find(
+    (session) => session.path === state.pi.sessionFile,
+  );
   const firstPrompt = state.items.find((item) => item.kind === "user");
   const title =
     state.pi.sessionName ||
     (state.items.length ? activeSession?.title : undefined) ||
-    (firstPrompt?.kind === "user" && firstPrompt.text ? generateSessionTitle(firstPrompt.text) : undefined) ||
+    (firstPrompt?.kind === "user" && firstPrompt.text
+      ? generateSessionTitle(firstPrompt.text)
+      : undefined) ||
     "Untitled";
   const busy = state.busy;
-  const disabled = Boolean(state.setupError) || state.process.status === "exited";
+  const disabled =
+    Boolean(state.setupError) || state.process.status === "exited";
 
   return (
     <ChatContext.Provider value={context}>
       <div
         className="app"
-        style={{ "--content-max-width": state.maxContentWidth > 0 ? `${state.maxContentWidth}px` : "none" } as CSSProperties}
+        style={
+          {
+            "--content-max-width":
+              state.maxContentWidth > 0 ? `${state.maxContentWidth}px` : "none",
+          } as CSSProperties
+        }
       >
         <Header
           title={title}
@@ -290,11 +432,18 @@ export function App({ transport }: { transport: WebviewTransport }) {
               ref={scroller}
               onScroll={(event) => {
                 const element = event.currentTarget;
-                stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
+                stickToBottom.current =
+                  element.scrollHeight -
+                    element.scrollTop -
+                    element.clientHeight <
+                  40;
               }}
             >
               {state.items.length === 0 ? (
-                <EmptyState platform={state.platform} workspaceName={state.workspaceName} />
+                <EmptyState
+                  platform={state.platform}
+                  workspaceName={state.workspaceName}
+                />
               ) : (
                 <div className="messages">
                   {state.items.map((item) => (
@@ -302,8 +451,12 @@ export function App({ transport }: { transport: WebviewTransport }) {
                       key={item.id}
                       item={item}
                       tools={state.tools}
-                      onDialogAnswer={(id, answer) => dispatch({ type: "dialog.answer", id, answer })}
-                      onDismiss={(id) => dispatch({ type: "notice.dismiss", id })}
+                      onDialogAnswer={(id, answer) =>
+                        dispatch({ type: "dialog.answer", id, answer })
+                      }
+                      onDismiss={(id) =>
+                        dispatch({ type: "notice.dismiss", id })
+                      }
                     />
                   ))}
                 </div>

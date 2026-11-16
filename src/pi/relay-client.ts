@@ -5,9 +5,18 @@ import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encodeJsonl, JsonlDecoder } from "./jsonl";
-import { exitMessage, RpcPeer, type RpcClientListener, type RpcSpawnOptions } from "./rpc-client";
+import {
+  exitMessage,
+  RpcPeer,
+  type RpcClientListener,
+  type RpcSpawnOptions,
+} from "./rpc-client";
 import type { PiEvent } from "./rpc-types";
-import { RELAY_DIR_PREFIX, RELAY_PROTOCOL, type RelayConfig } from "./relay-server";
+import {
+  RELAY_DIR_PREFIX,
+  RELAY_PROTOCOL,
+  type RelayConfig,
+} from "./relay-server";
 
 const LAUNCH_TIMEOUT_MS = 15_000;
 const ATTACH_TIMEOUT_MS = 5_000;
@@ -24,7 +33,11 @@ export interface RelayEndpoint {
 export function isRelayEndpoint(value: unknown): value is RelayEndpoint {
   if (!value || typeof value !== "object") return false;
   const { socketPath, token, cwd } = value as Record<string, unknown>;
-  return typeof socketPath === "string" && typeof token === "string" && typeof cwd === "string";
+  return (
+    typeof socketPath === "string" &&
+    typeof token === "string" &&
+    typeof cwd === "string"
+  );
 }
 
 export interface RelayClientOptions {
@@ -135,7 +148,10 @@ export class RelayClient extends RpcPeer {
   private async launch(): Promise<RelayEndpoint> {
     const pi = await this.options.spawnOptions();
     const token = randomBytes(32).toString("hex");
-    const directory = process.platform === "win32" ? undefined : await mkdtemp(join(tmpdir(), RELAY_DIR_PREFIX));
+    const directory =
+      process.platform === "win32"
+        ? undefined
+        : await mkdtemp(join(tmpdir(), RELAY_DIR_PREFIX));
     const socketPath = directory
       ? join(directory, "relay.sock")
       : `\\\\.\\pipe\\${RELAY_DIR_PREFIX}${randomBytes(16).toString("hex")}`;
@@ -144,7 +160,9 @@ export class RelayClient extends RpcPeer {
       token,
       socketPath,
       pi,
-      ...(this.options.graceMs !== undefined ? { graceMs: this.options.graceMs } : {}),
+      ...(this.options.graceMs !== undefined
+        ? { graceMs: this.options.graceMs }
+        : {}),
     };
     const relay = spawn(this.options.nodePath, [this.options.script], {
       cwd: pi.cwd,
@@ -168,16 +186,30 @@ export class RelayClient extends RpcPeer {
         const decoder = new JsonlDecoder((record) => {
           const reply = record as { type?: unknown; message?: unknown };
           if (reply.type === "relay.ready") finish();
-          else finish(new Error(typeof reply.message === "string" ? reply.message : "Pi's relay failed to start."));
+          else
+            finish(
+              new Error(
+                typeof reply.message === "string"
+                  ? reply.message
+                  : "Pi's relay failed to start.",
+              ),
+            );
         });
         relay.stdout.on("data", (chunk: Buffer) => decoder.push(chunk));
         relay.once("error", (error) => finish(error));
-        relay.once("exit", (code) => finish(new Error(`Pi's relay exited with code ${code ?? "unknown"}.`)));
+        relay.once("exit", (code) =>
+          finish(
+            new Error(`Pi's relay exited with code ${code ?? "unknown"}.`),
+          ),
+        );
         relay.stdin.on("error", () => undefined);
         relay.stdin.end(encodeJsonl(config));
       });
     } catch (error) {
-      if (directory) await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+      if (directory)
+        await rm(directory, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
       throw error;
     }
     relay.stdout.destroy();
@@ -200,17 +232,25 @@ export class RelayClient extends RpcPeer {
         socket.destroy();
         reject(error);
       };
-      const timer = setTimeout(() => fail(new Error("Pi's relay did not answer.")), ATTACH_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => fail(new Error("Pi's relay did not answer.")),
+        ATTACH_TIMEOUT_MS,
+      );
       const decoder = new JsonlDecoder((record) => {
         const message = record as Record<string, unknown> & { type?: unknown };
         if (!welcomed) {
           if (message.type !== "relay.welcome") {
-            fail(new Error(`Pi's relay refused the connection (${String(message.reason ?? "unknown")}).`));
+            fail(
+              new Error(
+                `Pi's relay refused the connection (${String(message.reason ?? "unknown")}).`,
+              ),
+            );
             return;
           }
           welcomed = true;
           replaying = [];
-          if (typeof message.stderr === "string") this.stderrTail = message.stderr;
+          if (typeof message.stderr === "string")
+            this.stderrTail = message.stderr;
           return;
         }
         if (replaying) {
@@ -232,7 +272,15 @@ export class RelayClient extends RpcPeer {
         }
         this.fromRelay(message);
       });
-      socket.on("connect", () => socket.write(encodeJsonl({ type: "relay.hello", protocol: RELAY_PROTOCOL, token: endpoint.token })));
+      socket.on("connect", () =>
+        socket.write(
+          encodeJsonl({
+            type: "relay.hello",
+            protocol: RELAY_PROTOCOL,
+            token: endpoint.token,
+          }),
+        ),
+      );
       socket.on("data", (chunk: Buffer) => decoder.push(chunk));
       socket.on("error", (error) => fail(error));
       socket.on("close", () => {
@@ -248,12 +296,18 @@ export class RelayClient extends RpcPeer {
   private fromRelay(message: Record<string, unknown>): void {
     switch (message.type) {
       case "relay.stderr":
-        if (typeof message.text === "string") this.stderrTail = (this.stderrTail + message.text).slice(-STDERR_TAIL_BYTES);
+        if (typeof message.text === "string")
+          this.stderrTail = (this.stderrTail + message.text).slice(
+            -STDERR_TAIL_BYTES,
+          );
         return;
       case "relay.exit":
         this.closed({
           code: typeof message.code === "number" ? message.code : null,
-          signal: typeof message.signal === "string" ? (message.signal as NodeJS.Signals) : null,
+          signal:
+            typeof message.signal === "string"
+              ? (message.signal as NodeJS.Signals)
+              : null,
           expected: Boolean(message.expected),
         });
         return;
@@ -263,7 +317,15 @@ export class RelayClient extends RpcPeer {
   }
 
   /** Pi exited (with its exit status) or the relay went away (without one). */
-  private closed(exit: { code: number | null; signal: NodeJS.Signals | null; expected: boolean } | undefined): void {
+  private closed(
+    exit:
+      | {
+          code: number | null;
+          signal: NodeJS.Signals | null;
+          expected: boolean;
+        }
+      | undefined,
+  ): void {
     if (this.detaching || (!this.attached && !exit)) return;
     const wasAttached = this.attached;
     this.attached = false;
@@ -272,8 +334,15 @@ export class RelayClient extends RpcPeer {
     this.endpoint = undefined;
     const code = exit?.code ?? null;
     const signal = exit?.signal ?? null;
-    this.rejectAll(new Error(exit ? exitMessage(code, signal) : "Pi's relay stopped."));
+    this.rejectAll(
+      new Error(exit ? exitMessage(code, signal) : "Pi's relay stopped."),
+    );
     if (!wasAttached && !exit) return;
-    this.listener.onExit({ code, signal, stderr: this.stderrTail, expected: this.stopping || Boolean(exit?.expected) });
+    this.listener.onExit({
+      code,
+      signal,
+      stderr: this.stderrTail,
+      expected: this.stopping || Boolean(exit?.expected),
+    });
   }
 }

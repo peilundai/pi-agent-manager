@@ -37,7 +37,8 @@ const emptyArchiveStore: ArchiveStore = {
 
 function expandHome(path: string): string {
   if (path === "~") return homedir();
-  if (path.startsWith("~/") || path.startsWith("~\\")) return join(homedir(), path.slice(2));
+  if (path.startsWith("~/") || path.startsWith("~\\"))
+    return join(homedir(), path.slice(2));
   return resolve(path);
 }
 
@@ -50,14 +51,22 @@ function workspacePath(cwd: string): string {
   }
 }
 
-function samePath(left: string, right: string, platform: NodeJS.Platform): boolean {
+function samePath(
+  left: string,
+  right: string,
+  platform: NodeJS.Platform,
+): boolean {
   const a = resolve(left);
   const b = resolve(right);
-  return platform === "win32" ? a.toLocaleLowerCase() === b.toLocaleLowerCase() : a === b;
+  return platform === "win32"
+    ? a.toLocaleLowerCase() === b.toLocaleLowerCase()
+    : a === b;
 }
 
 export function encodeWorkspaceDirectory(cwd: string): string {
-  return `--${resolve(cwd).replace(/^[/\\]+/, "").replace(/[/\\:]/g, "-")}--`;
+  return `--${resolve(cwd)
+    .replace(/^[/\\]+/, "")
+    .replace(/[/\\:]/g, "-")}--`;
 }
 
 export class PiSessionRepository {
@@ -89,7 +98,11 @@ export class PiSessionRepository {
   async list(cwd: string): Promise<SessionSummary[]> {
     const workspace = await realpath(cwd).catch(() => resolve(cwd));
     const directories = this.directories(workspace);
-    const paths = (await Promise.all(directories.map((directory) => this.transcripts(directory)))).flat();
+    const paths = (
+      await Promise.all(
+        directories.map((directory) => this.transcripts(directory)),
+      )
+    ).flat();
     const parsed = await this.readConcurrently(paths);
     const archived = new Set(this.archiveStore.read());
     const unique = new Map<string, SessionSummary>();
@@ -109,26 +122,34 @@ export class PiSessionRepository {
       });
     }
 
-    return [...unique.values()].sort((left, right) => right.updatedAt - left.updatedAt);
+    return [...unique.values()].sort(
+      (left, right) => right.updatedAt - left.updatedAt,
+    );
   }
 
   async setArchived(sessionId: string, archived: boolean): Promise<void> {
     const ids = new Set(this.archiveStore.read());
     if (archived) ids.add(sessionId);
     else ids.delete(sessionId);
-    await this.archiveStore.write([...ids].sort((left, right) => left.localeCompare(right)));
+    await this.archiveStore.write(
+      [...ids].sort((left, right) => left.localeCompare(right)),
+    );
   }
 
   async delete(session: SessionSummary): Promise<void> {
     if (!session.path.endsWith(".jsonl")) {
-      throw new Error(`Refusing to delete a non-JSONL session: ${session.path}`);
+      throw new Error(
+        `Refusing to delete a non-JSONL session: ${session.path}`,
+      );
     }
     const transcript = resolve(session.path);
     const transcriptDirectory = dirname(transcript);
     const transcriptName = basename(transcript);
     const sidecarName = transcriptName.slice(0, -".jsonl".length);
     if (!sidecarName || sidecarName === "." || sidecarName === "..") {
-      throw new Error(`Refusing to derive a sidecar from a dot-segment transcript: ${session.path}`);
+      throw new Error(
+        `Refusing to derive a sidecar from a dot-segment transcript: ${session.path}`,
+      );
     }
     const sidecar = resolve(transcriptDirectory, sidecarName);
     if (
@@ -136,7 +157,9 @@ export class PiSessionRepository {
       dirname(sidecar) !== transcriptDirectory ||
       basename(sidecar) !== sidecarName
     ) {
-      throw new Error(`Refusing to delete an unsafe session sidecar: ${sidecar}`);
+      throw new Error(
+        `Refusing to delete an unsafe session sidecar: ${sidecar}`,
+      );
     }
     await rm(transcript, { force: true });
     await rm(sidecar, { recursive: true, force: true });
@@ -147,7 +170,9 @@ export class PiSessionRepository {
     const watchers: FSWatcher[] = [];
     for (const directory of this.directories(workspacePath(cwd))) {
       try {
-        watchers.push(watchDirectory(directory, { persistent: false }, onChange));
+        watchers.push(
+          watchDirectory(directory, { persistent: false }, onChange),
+        );
       } catch {
         // A session directory is optional until Pi writes its first transcript.
       }
@@ -161,14 +186,20 @@ export class PiSessionRepository {
 
   private directories(cwd: string): string[] {
     const env = this.options.env ?? process.env;
-    const configuredSessionDir = this.options.sessionDir ?? env.PI_CODING_AGENT_SESSION_DIR;
+    const configuredSessionDir =
+      this.options.sessionDir ?? env.PI_CODING_AGENT_SESSION_DIR;
     if (configuredSessionDir) return [expandHome(configuredSessionDir)];
 
     const agentDir = expandHome(
-      this.options.agentDir ?? env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"),
+      this.options.agentDir ??
+        env.PI_CODING_AGENT_DIR ??
+        join(homedir(), ".pi", "agent"),
     );
     const encoded = encodeWorkspaceDirectory(cwd);
-    return [join(agentDir, "sessions", encoded), join(agentDir, "session", encoded)];
+    return [
+      join(agentDir, "sessions", encoded),
+      join(agentDir, "session", encoded),
+    ];
   }
 
   private async transcripts(directory: string): Promise<string[]> {
@@ -182,7 +213,9 @@ export class PiSessionRepository {
     }
   }
 
-  private async readConcurrently(paths: readonly string[]): Promise<ParsedSession[]> {
+  private async readConcurrently(
+    paths: readonly string[],
+  ): Promise<ParsedSession[]> {
     const sessions: ParsedSession[] = [];
     let nextIndex = 0;
     const worker = async (): Promise<void> => {
@@ -192,13 +225,21 @@ export class PiSessionRepository {
         try {
           const file = await stat(path);
           const cached = this.cache.get(path);
-          if (cached && cached.mtimeMs === file.mtimeMs && cached.size === file.size) {
+          if (
+            cached &&
+            cached.mtimeMs === file.mtimeMs &&
+            cached.size === file.size
+          ) {
             sessions.push(cached.parsed);
             continue;
           }
           const parsed = await parseSessionFile(path, file);
           if (!parsed) continue;
-          this.cache.set(path, { mtimeMs: file.mtimeMs, size: file.size, parsed });
+          this.cache.set(path, {
+            mtimeMs: file.mtimeMs,
+            size: file.size,
+            parsed,
+          });
           sessions.push(parsed);
         } catch {
           // A transcript may disappear or be partially replaced while history refreshes.

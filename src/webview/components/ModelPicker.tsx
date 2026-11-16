@@ -52,12 +52,24 @@ export function ModelPicker({
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const list = needle
-      ? models.filter((model) => `${model.provider} ${model.id} ${model.name ?? ""}`.toLowerCase().includes(needle))
+      ? models.filter((model) =>
+          `${model.provider} ${model.id} ${model.name ?? ""}`
+            .toLowerCase()
+            .includes(needle),
+        )
       : models;
     return [...list].sort((left, right) => {
-      const leftCurrent = left.id === current?.id && left.provider === current?.provider ? -1 : 0;
-      const rightCurrent = right.id === current?.id && right.provider === current?.provider ? -1 : 0;
-      return leftCurrent - rightCurrent || left.provider.localeCompare(right.provider) || modelLabel(left).localeCompare(modelLabel(right));
+      const leftCurrent =
+        left.id === current?.id && left.provider === current?.provider ? -1 : 0;
+      const rightCurrent =
+        right.id === current?.id && right.provider === current?.provider
+          ? -1
+          : 0;
+      return (
+        leftCurrent - rightCurrent ||
+        left.provider.localeCompare(right.provider) ||
+        modelLabel(left).localeCompare(modelLabel(right))
+      );
     });
   }, [models, query, current]);
   const levels = supportedLevels(current);
@@ -71,11 +83,20 @@ export function ModelPicker({
   }, [onClose]);
 
   return (
-    <div className="popover model-picker" ref={ref} role="dialog" aria-label="Choose model">
+    <div
+      className="popover model-picker"
+      ref={ref}
+      role="dialog"
+      aria-label="Choose model"
+    >
       {levels.length > 1 && (
         <div className="picker-section">
           <div className="picker-label">Thinking</div>
-          <div className="segmented" role="radiogroup" aria-label="Thinking level">
+          <div
+            className="segmented"
+            role="radiogroup"
+            aria-label="Thinking level"
+          >
             {levels.map((level) => (
               <button
                 key={level}
@@ -121,9 +142,12 @@ export function ModelPicker({
         />
       </div>
       <div className="picker-list" role="listbox" aria-label="Models">
-        {filtered.length === 0 && <div className="picker-empty">No models match.</div>}
+        {filtered.length === 0 && (
+          <div className="picker-empty">No models match.</div>
+        )}
         {filtered.map((model, index) => {
-          const selected = model.id === current?.id && model.provider === current?.provider;
+          const selected =
+            model.id === current?.id && model.provider === current?.provider;
           return (
             <button
               key={`${model.provider}/${model.id}`}
@@ -138,7 +162,9 @@ export function ModelPicker({
                 <span className="picker-item-title">{modelLabel(model)}</span>
                 <span className="picker-item-sub">{model.provider}</span>
               </span>
-              {selected && <span className="codicon codicon-check" aria-hidden="true" />}
+              {selected && (
+                <span className="codicon codicon-check" aria-hidden="true" />
+              )}
             </button>
           );
         })}

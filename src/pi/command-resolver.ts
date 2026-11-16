@@ -34,7 +34,9 @@ export class PiCommandNotFoundError extends Error {
   readonly attempts: string[];
 
   constructor(attempts: readonly string[]) {
-    super(`Pi executable was not found. Checked ${attempts.length} location${attempts.length === 1 ? "" : "s"}.`);
+    super(
+      `Pi executable was not found. Checked ${attempts.length} location${attempts.length === 1 ? "" : "s"}.`,
+    );
     this.name = "PiCommandNotFoundError";
     this.attempts = [...attempts];
   }
@@ -44,9 +46,15 @@ function pathApi(platform: NodeJS.Platform): typeof posix | typeof win32 {
   return platform === "win32" ? win32 : posix;
 }
 
-async function defaultAccess(path: string, platform: NodeJS.Platform): Promise<boolean> {
+async function defaultAccess(
+  path: string,
+  platform: NodeJS.Platform,
+): Promise<boolean> {
   try {
-    await fileAccess(path, platform === "win32" ? constants.F_OK : constants.X_OK);
+    await fileAccess(
+      path,
+      platform === "win32" ? constants.F_OK : constants.X_OK,
+    );
     return true;
   } catch {
     return false;
@@ -55,22 +63,35 @@ async function defaultAccess(path: string, platform: NodeJS.Platform): Promise<b
 
 async function defaultNpmRoot(): Promise<string | undefined> {
   try {
-    const result = await execFileAsync("npm", ["root", "-g"], { encoding: "utf8" });
+    const result = await execFileAsync("npm", ["root", "-g"], {
+      encoding: "utf8",
+    });
     return result.stdout.trim() || undefined;
   } catch {
     return undefined;
   }
 }
 
-function executableNames(configured: string, platform: NodeJS.Platform): string[] {
-  if (platform !== "win32" || /\.(?:cmd|bat|exe)$/i.test(configured)) return [configured];
+function executableNames(
+  configured: string,
+  platform: NodeJS.Platform,
+): string[] {
+  if (platform !== "win32" || /\.(?:cmd|bat|exe)$/i.test(configured))
+    return [configured];
   return [`${configured}.cmd`, `${configured}.exe`, configured];
 }
 
-function npmCandidates(root: string, executable: string, platform: NodeJS.Platform): string[] {
+function npmCandidates(
+  root: string,
+  executable: string,
+  platform: NodeJS.Platform,
+): string[] {
   const path = pathApi(platform);
   const names = executableNames(executable, platform);
-  const binDirectory = platform === "win32" ? path.dirname(root) : path.join(path.dirname(path.dirname(root)), "bin");
+  const binDirectory =
+    platform === "win32"
+      ? path.dirname(root)
+      : path.join(path.dirname(path.dirname(root)), "bin");
   return names.map((name) => path.join(binDirectory, name));
 }
 
@@ -81,11 +102,13 @@ function defaultCommonPaths(
 ): string[] {
   const path = pathApi(platform);
   if (platform === "win32") {
-    const directories = [env.APPDATA ? path.join(env.APPDATA, "npm") : undefined].filter(
-      (value): value is string => Boolean(value),
-    );
+    const directories = [
+      env.APPDATA ? path.join(env.APPDATA, "npm") : undefined,
+    ].filter((value): value is string => Boolean(value));
     return directories.flatMap((directory) =>
-      executableNames(executable, platform).map((name) => path.join(directory, name)),
+      executableNames(executable, platform).map((name) =>
+        path.join(directory, name),
+      ),
     );
   }
   return ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map((directory) =>
@@ -100,7 +123,9 @@ export async function resolvePiCommand(
   const path = pathApi(platform);
   const env = options.env ?? process.env;
   const configured = options.configured?.trim() || "pi";
-  const canAccess = options.access ?? ((candidate: string) => defaultAccess(candidate, platform));
+  const canAccess =
+    options.access ??
+    ((candidate: string) => defaultAccess(candidate, platform));
   const attempts: string[] = [];
   const seen = new Set<string>();
 
@@ -125,7 +150,9 @@ export async function resolvePiCommand(
     throw new PiCommandNotFoundError([configured]);
   }
 
-  const pathDirectories = (env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  const pathDirectories = (env.PATH ?? "")
+    .split(path.delimiter)
+    .filter(Boolean);
   for (const directory of pathDirectories) {
     for (const name of executableNames(configured, platform)) {
       const resolved = await attempt(path.join(directory, name), "path");
@@ -133,7 +160,9 @@ export async function resolvePiCommand(
     }
   }
 
-  const npmRoot = await (options.npmRoot ?? defaultNpmRoot)().catch(() => undefined);
+  const npmRoot = await (options.npmRoot ?? defaultNpmRoot)().catch(
+    () => undefined,
+  );
   if (npmRoot) {
     for (const candidate of npmCandidates(npmRoot, configured, platform)) {
       const resolved = await attempt(candidate, "npm");
@@ -141,7 +170,8 @@ export async function resolvePiCommand(
     }
   }
 
-  const commonPaths = options.commonPaths ?? defaultCommonPaths(configured, platform, env);
+  const commonPaths =
+    options.commonPaths ?? defaultCommonPaths(configured, platform, env);
   for (const candidate of commonPaths) {
     const resolved = await attempt(candidate, "common");
     if (resolved) return resolved;
@@ -171,7 +201,9 @@ export function buildPiInvocation(
   // Keep legal path characters out of cmd.exe's source text. Quoted one-pass
   // environment expansion with delayed expansion disabled treats &, ^, %, and
   // Unicode as argument data instead of shell syntax.
-  const env = Object.fromEntries(variableNames.map((name, index) => [name, values[index] ?? ""]));
+  const env = Object.fromEntries(
+    variableNames.map((name, index) => [name, values[index] ?? ""]),
+  );
   const commandLine = variableNames.map((name) => `"%${name}%"`).join(" ");
   return {
     file: baseEnv.ComSpec ?? "cmd.exe",
@@ -201,12 +233,16 @@ export interface RpcArgsOptions {
   extraArgs?: readonly string[];
 }
 
-function validatedExtraArgs(extraArgs: readonly string[] | undefined): string[] {
+function validatedExtraArgs(
+  extraArgs: readonly string[] | undefined,
+): string[] {
   const extra = (extraArgs ?? []).map((value) => value.trim()).filter(Boolean);
   for (const value of extra) {
     const flag = value.split("=", 1)[0] ?? value;
     if (RESERVED_FLAGS.has(flag)) {
-      throw new Error(`The Pi argument “${flag}” is managed by the extension and cannot be set in piAgentManager.extraArgs.`);
+      throw new Error(
+        `The Pi argument “${flag}” is managed by the extension and cannot be set in piAgentManager.extraArgs.`,
+      );
     }
   }
   return extra;
@@ -226,7 +262,10 @@ export function buildRpcArgs(options: RpcArgsOptions = {}): string[] {
  * `--session-id` opens the folder's session with that ID, creating it on first
  * use, so a terminal reopened after a reload continues the same conversation.
  */
-export function buildTerminalArgs(extraArgs: readonly string[] = [], sessionId?: string): string[] {
+export function buildTerminalArgs(
+  extraArgs: readonly string[] = [],
+  sessionId?: string,
+): string[] {
   const args = validatedExtraArgs(extraArgs);
   if (sessionId) args.push("--session-id", sessionId);
   return args;
@@ -245,7 +284,12 @@ export function augmentPath(
   const path = pathApi(platform);
   const extra = [path.dirname(piPath)];
   if (platform !== "win32") extra.push("/opt/homebrew/bin", "/usr/local/bin");
-  const current = (env.PATH ?? env.Path ?? "").split(path.delimiter).filter(Boolean);
-  const merged = [...extra.filter((entry) => !current.includes(entry)), ...current];
+  const current = (env.PATH ?? env.Path ?? "")
+    .split(path.delimiter)
+    .filter(Boolean);
+  const merged = [
+    ...extra.filter((entry) => !current.includes(entry)),
+    ...current,
+  ];
   return merged.join(path.delimiter);
 }

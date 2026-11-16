@@ -4,7 +4,14 @@
  * Every field is treated as untrusted input; consumers must tolerate missing values.
  */
 
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type ThinkingLevel =
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
 
 export const THINKING_LEVELS: readonly ThinkingLevel[] = [
   "off",
@@ -45,9 +52,19 @@ export interface PiCommand {
 }
 
 export interface PiSessionStats {
-  tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
+  tokens?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    total?: number;
+  };
   cost?: number;
-  contextUsage?: { tokens?: number | null; contextWindow?: number; percent?: number | null };
+  contextUsage?: {
+    tokens?: number | null;
+    contextWindow?: number;
+    percent?: number | null;
+  };
 }
 
 export interface PiTextContent {
@@ -74,7 +91,11 @@ export interface PiToolCall {
   arguments: Record<string, unknown>;
 }
 
-export type PiContent = PiTextContent | PiThinkingContent | PiImageContent | PiToolCall;
+export type PiContent =
+  | PiTextContent
+  | PiThinkingContent
+  | PiImageContent
+  | PiToolCall;
 
 export interface PiToolResult {
   content?: PiContent[];
@@ -127,13 +148,57 @@ export interface PiMessage {
 }
 
 export type ExtensionUiRequest =
-  | { type: "extension_ui_request"; id: string; method: "select"; title: string; options: string[]; timeout?: number }
-  | { type: "extension_ui_request"; id: string; method: "confirm"; title: string; message?: string; timeout?: number }
-  | { type: "extension_ui_request"; id: string; method: "input"; title: string; placeholder?: string; timeout?: number }
-  | { type: "extension_ui_request"; id: string; method: "editor"; title: string; prefill?: string; timeout?: number }
-  | { type: "extension_ui_request"; id: string; method: "notify"; message: string; notifyType?: "info" | "warning" | "error" }
-  | { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string }
-  | { type: "extension_ui_request"; id: string; method: string; [key: string]: unknown };
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "select";
+      title: string;
+      options: string[];
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "confirm";
+      title: string;
+      message?: string;
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "input";
+      title: string;
+      placeholder?: string;
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "editor";
+      title: string;
+      prefill?: string;
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "notify";
+      message: string;
+      notifyType?: "info" | "warning" | "error";
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "set_editor_text";
+      text: string;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: string;
+      [key: string]: unknown;
+    };
 
 /** A record emitted by Pi on stdout that is not a command response. */
 export interface PiEvent {

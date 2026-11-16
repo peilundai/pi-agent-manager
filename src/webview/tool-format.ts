@@ -20,7 +20,9 @@ function str(value: unknown): string | undefined {
 }
 
 function num(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function firstLine(value: string, max = 120): string {
@@ -30,7 +32,8 @@ function firstLine(value: string, max = 120): string {
 }
 
 export function displayPath(path: string, workspaceRoot?: string): string {
-  if (workspaceRoot && path.startsWith(`${workspaceRoot}/`)) return path.slice(workspaceRoot.length + 1);
+  if (workspaceRoot && path.startsWith(`${workspaceRoot}/`))
+    return path.slice(workspaceRoot.length + 1);
   return path;
 }
 
@@ -38,40 +41,74 @@ function capitalize(value: string): string {
   return value ? value[0]!.toUpperCase() + value.slice(1) : value;
 }
 
-export function describeTool(tool: Pick<ToolState, "name" | "args">): ToolDescription {
+export function describeTool(
+  tool: Pick<ToolState, "name" | "args">,
+): ToolDescription {
   const args = tool.args;
   const path = str(args.path) ?? str(args.file_path) ?? str(args.filePath);
   switch (tool.name) {
     case "read": {
       const offset = num(args.offset);
       const limit = num(args.limit);
-      const range = offset !== undefined || limit !== undefined
-        ? `:${offset ?? 1}${limit !== undefined ? `-${(offset ?? 1) + limit - 1}` : ""}`
-        : "";
-      return { verb: "Read", target: `${path ?? "file"}${range}`, ...(path ? { path } : {}), ...(offset ? { line: offset - 1 } : {}) };
+      const range =
+        offset !== undefined || limit !== undefined
+          ? `:${offset ?? 1}${limit !== undefined ? `-${(offset ?? 1) + limit - 1}` : ""}`
+          : "";
+      return {
+        verb: "Read",
+        target: `${path ?? "file"}${range}`,
+        ...(path ? { path } : {}),
+        ...(offset ? { line: offset - 1 } : {}),
+      };
     }
     case "write":
-      return { verb: "Write", target: path ?? "file", ...(path ? { path } : {}) };
+      return {
+        verb: "Write",
+        target: path ?? "file",
+        ...(path ? { path } : {}),
+      };
     case "edit":
-      return { verb: "Edit", target: path ?? "file", ...(path ? { path } : {}) };
+      return {
+        verb: "Edit",
+        target: path ?? "file",
+        ...(path ? { path } : {}),
+      };
     case "bash":
     case "powershell":
-      return { verb: tool.name === "bash" ? "Bash" : "PowerShell", target: firstLine(str(args.command) ?? "") };
+      return {
+        verb: tool.name === "bash" ? "Bash" : "PowerShell",
+        target: firstLine(str(args.command) ?? ""),
+      };
     case "grep": {
       const where = str(args.path) ?? str(args.glob);
-      return { verb: "Search", target: `"${str(args.pattern) ?? ""}"${where ? ` in ${where}` : ""}` };
+      return {
+        verb: "Search",
+        target: `"${str(args.pattern) ?? ""}"${where ? ` in ${where}` : ""}`,
+      };
     }
     case "find":
-      return { verb: "Find", target: `${str(args.pattern) ?? ""}${str(args.path) ? ` in ${str(args.path)}` : ""}` };
+      return {
+        verb: "Find",
+        target: `${str(args.pattern) ?? ""}${str(args.path) ? ` in ${str(args.path)}` : ""}`,
+      };
     case "ls":
       return { verb: "List", target: str(args.path) ?? "." };
     case "codemode": {
-      const line = scriptSource(args).split("\n").find((text) => text.trim()) ?? "";
+      const line =
+        scriptSource(args)
+          .split("\n")
+          .find((text) => text.trim()) ?? "";
       return { verb: "Codemode", target: firstLine(line.trim(), 120) };
     }
     default: {
-      const firstString = Object.values(args).find((value): value is string => typeof value === "string" && value.length > 0);
-      return { verb: capitalize(tool.name.replace(/[_-]+/g, " ")), target: firstString ? firstLine(firstString, 80) : "" };
+      const firstString = Object.values(args).find(
+        (value): value is string =>
+          typeof value === "string" && value.length > 0,
+      );
+      return {
+        verb: capitalize(tool.name.replace(/[_-]+/g, " ")),
+        target: firstString ? firstLine(firstString, 80) : "",
+      };
     }
   }
 }
@@ -85,13 +122,17 @@ function countLines(text: string): number {
   return text.replace(/\n$/, "").split("\n").length;
 }
 
-const SHELL_STATUS = /(?:^|\n\n)(Command (?:exited with code -?\d+|timed out after [^\n]+|aborted|terminated without an exit code))\s*$/;
+const SHELL_STATUS =
+  /(?:^|\n\n)(Command (?:exited with code -?\d+|timed out after [^\n]+|aborted|terminated without an exit code))\s*$/;
 
 /**
  * Splits the status line Pi appends to a failed shell command ("Command exited with code 128")
  * from the command's own output, which is usually ordinary stdout rather than an error.
  */
-export function splitShellStatus(output: string): { body: string; status?: string } {
+export function splitShellStatus(output: string): {
+  body: string;
+  status?: string;
+} {
   const match = SHELL_STATUS.exec(output);
   if (!match) return { body: output };
   return { body: output.slice(0, match.index), status: match[1]! };
@@ -99,17 +140,25 @@ export function splitShellStatus(output: string): { body: string; status?: strin
 
 function shellStatusSummary(status: string): string {
   const code = /^Command exited with code (-?\d+)$/.exec(status)?.[1];
-  return code !== undefined ? `Exit code ${code}` : capitalize(status.replace(/^Command /, ""));
+  return code !== undefined
+    ? `Exit code ${code}`
+    : capitalize(status.replace(/^Command /, ""));
 }
 
 /** The one-line "⎿" result summary shown under a finished tool. */
 export function summarizeTool(tool: ToolState): string | undefined {
   if (tool.status === "streaming") return undefined;
-  if (tool.status === "running") return tool.name === "bash" ? "Running…" : undefined;
+  if (tool.status === "running")
+    return tool.name === "bash" ? "Running…" : undefined;
   if (tool.status === "interrupted") return "Interrupted";
   if (tool.status === "error") {
-    const status = tool.name === "bash" || tool.name === "powershell" ? splitShellStatus(tool.output).status : undefined;
-    return status ? shellStatusSummary(status) : firstLine(tool.output || "Failed", 160);
+    const status =
+      tool.name === "bash" || tool.name === "powershell"
+        ? splitShellStatus(tool.output).status
+        : undefined;
+    return status
+      ? shellStatusSummary(status)
+      : firstLine(tool.output || "Failed", 160);
   }
   switch (tool.name) {
     case "read": {
@@ -125,7 +174,10 @@ export function summarizeTool(tool: ToolState): string | undefined {
       if (!added && !removed) return "Applied edit";
       const parts = [];
       if (added) parts.push(`Added ${plural(added, "line")}`);
-      if (removed) parts.push(`${added ? "removed" : "Removed"} ${plural(removed, "line")}`);
+      if (removed)
+        parts.push(
+          `${added ? "removed" : "Removed"} ${plural(removed, "line")}`,
+        );
       return parts.join(", ");
     }
     case "bash":
@@ -151,7 +203,9 @@ export interface DiffStats {
 }
 
 /** Rows of the diff an edit or write tool shows, from Pi's diff when present. */
-export function toolDiffRows(tool: Pick<ToolState, "name" | "args" | "details">): DiffRow[] {
+export function toolDiffRows(
+  tool: Pick<ToolState, "name" | "args" | "details">,
+): DiffRow[] {
   if (tool.name === "edit") {
     const rows = parsePiDiff(str(tool.details?.diff) ?? "");
     return rows.length ? rows : editArgsDiff(tool.args);
@@ -166,7 +220,9 @@ export function toolDiffRows(tool: Pick<ToolState, "name" | "args" | "details">)
 }
 
 /** Added and removed line counts for an edit or write, or undefined for other tools. */
-export function diffStats(tool: Pick<ToolState, "name" | "args" | "details">): DiffStats | undefined {
+export function diffStats(
+  tool: Pick<ToolState, "name" | "args" | "details">,
+): DiffStats | undefined {
   if (tool.name !== "edit" && tool.name !== "write") return undefined;
   let added = 0;
   let removed = 0;
@@ -195,7 +251,11 @@ export function parsePiDiff(diff: string): DiffRow[] {
       rows.push({ kind: "skip", text: "…" });
       continue;
     }
-    rows.push({ kind: sign === "+" ? "add" : sign === "-" ? "del" : "ctx", ...(line !== undefined ? { line } : {}), text });
+    rows.push({
+      kind: sign === "+" ? "add" : sign === "-" ? "del" : "ctx",
+      ...(line !== undefined ? { line } : {}),
+      text,
+    });
   }
   return rows;
 }
@@ -210,8 +270,10 @@ export function editArgsDiff(args: Record<string, unknown>): DiffRow[] {
   const rows: DiffRow[] = [];
   edits.forEach((edit: Record<string, unknown>, index: number) => {
     if (index > 0) rows.push({ kind: "skip", text: "…" });
-    for (const line of (str(edit?.oldText) ?? "").split("\n")) rows.push({ kind: "del", text: line });
-    for (const line of (str(edit?.newText) ?? "").split("\n")) rows.push({ kind: "add", text: line });
+    for (const line of (str(edit?.oldText) ?? "").split("\n"))
+      rows.push({ kind: "del", text: line });
+    for (const line of (str(edit?.newText) ?? "").split("\n"))
+      rows.push({ kind: "add", text: line });
   });
   return rows;
 }
@@ -263,13 +325,18 @@ const OPTIONS_LINE = /^\s*\/\/\s*@options:/;
 export function scriptSource(args: Record<string, unknown>): string {
   const code = str(args.code) ?? "";
   const [first = "", ...rest] = code.split("\n");
-  return (OPTIONS_LINE.test(first) ? rest.join("\n") : code).replace(/^\n+/, "").replace(/\s+$/, "");
+  return (OPTIONS_LINE.test(first) ? rest.join("\n") : code)
+    .replace(/^\n+/, "")
+    .replace(/\s+$/, "");
 }
 
 const MAX_TREE_DEPTH = 16;
 
 /** The calls `tool` made, then the calls those made, depth first. */
-export function descendants(tool: ToolState, tools: Record<string, ToolState>): ToolState[] {
+export function descendants(
+  tool: ToolState,
+  tools: Record<string, ToolState>,
+): ToolState[] {
   const found: ToolState[] = [];
   const seen = new Set<string>([tool.id]);
   const visit = (parent: ToolState, depth: number): void => {
@@ -287,7 +354,10 @@ export function descendants(tool: ToolState, tools: Record<string, ToolState>): 
 }
 
 /** Lines changed by the edits and writes among a tool's nested calls that were applied. */
-export function nestedDiffStats(tool: ToolState, tools: Record<string, ToolState>): DiffStats | undefined {
+export function nestedDiffStats(
+  tool: ToolState,
+  tools: Record<string, ToolState>,
+): DiffStats | undefined {
   let added = 0;
   let removed = 0;
   for (const child of descendants(tool, tools)) {
@@ -300,22 +370,51 @@ export function nestedDiffStats(tool: ToolState, tools: Record<string, ToolState
 }
 
 /** Whether a tool's card starts open under the `toolExpansion` setting. */
-export function autoExpands(tool: ToolState, tools: Record<string, ToolState>, expansion: ToolExpansion): boolean {
+export function autoExpands(
+  tool: ToolState,
+  tools: Record<string, ToolState>,
+  expansion: ToolExpansion,
+): boolean {
   if (expansion === "all") return true;
   if (expansion !== "edits") return false;
   // An edit opens to show its diff; a tool whose calls made edits opens so those diffs are visible too.
-  return tool.name === "edit" || descendants(tool, tools).some((child) => child.name === "edit");
+  return (
+    tool.name === "edit" ||
+    descendants(tool, tools).some((child) => child.name === "edit")
+  );
 }
 
 /** The "⎿" summary of a tool that made calls: its own result, the call count and failures. */
-export function summarizeCalls(tool: ToolState, tools: Record<string, ToolState>): string | undefined {
-  const calls = (tool.children ?? []).map((id) => tools[id]).filter((child): child is ToolState => Boolean(child));
+export function summarizeCalls(
+  tool: ToolState,
+  tools: Record<string, ToolState>,
+): string | undefined {
+  const calls = (tool.children ?? [])
+    .map((id) => tools[id])
+    .filter((child): child is ToolState => Boolean(child));
   if (!calls.length) return summarizeTool(tool);
   if (tool.status === "running") {
-    const current = [...calls].reverse().find((child) => child.status === "running");
-    return current ? `${describeTool(current).verb}…` : `${plural(calls.length, "tool call")}…`;
+    const current = [...calls]
+      .reverse()
+      .find((child) => child.status === "running");
+    return current
+      ? `${describeTool(current).verb}…`
+      : `${plural(calls.length, "tool call")}…`;
   }
   const failed = calls.filter((child) => child.status === "error").length;
-  const own = tool.name === "codemode" ? (tool.status === "error" ? "Script failed" : tool.status === "interrupted" ? "Interrupted" : undefined) : summarizeTool(tool);
-  return [own, plural(calls.length, "tool call"), failed ? `${failed} failed` : undefined].filter(Boolean).join(" · ");
+  const own =
+    tool.name === "codemode"
+      ? tool.status === "error"
+        ? "Script failed"
+        : tool.status === "interrupted"
+          ? "Interrupted"
+          : undefined
+      : summarizeTool(tool);
+  return [
+    own,
+    plural(calls.length, "tool call"),
+    failed ? `${failed} failed` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
