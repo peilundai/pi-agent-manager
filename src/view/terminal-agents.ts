@@ -175,12 +175,14 @@ export class TerminalAgents implements vscode.Disposable {
   private readonly sessions = new Map<vscode.Terminal, TerminalSession>();
   private readonly listeners: vscode.Disposable[] = [];
   private sequence = 0;
+  /** Set once the window starts shutting down or reloading: the saved list must then stay as it is for `restore()`. */
+  private shuttingDown = false;
 
   constructor(private readonly options: TerminalAgentsOptions) {
     this.listeners.push(
       vscode.window.onDidCloseTerminal((terminal) => {
         // A window reload or shutdown also closes the terminals: keep them saved so they come back.
-        if (terminal.exitStatus?.reason === vscode.TerminalExitReason.Shutdown) return;
+        if (this.closedByShutdown(terminal)) return;
         if (this.sessions.delete(terminal)) this.persist();
       }),
       vscode.window.onDidChangeActiveTerminal((terminal) => {
@@ -310,6 +312,7 @@ export class TerminalAgents implements vscode.Disposable {
   dispose(): void {
     for (const listener of this.listeners.splice(0)) listener.dispose();
     // Not persisted: on shutdown the saved list must survive for `restore()`.
+    this.shuttingDown = true;
     this.sessions.clear();
   }
 
@@ -325,7 +328,7 @@ export class TerminalAgents implements vscode.Disposable {
   /** Saves the open terminals, oldest-used first. */
   private persist(): void {
     const memento = this.options.memento;
-    if (!memento) return;
+    if (!memento || this.shuttingDown) return;
     const entries: StoredTerminalAgent[] = this.orderedSessions().map(({ sessionId, folder, viewColumn, number }) => ({
       sessionId,
       folder: folder.path,
@@ -451,9 +454,26 @@ export class TerminalAgents implements vscode.Disposable {
     return vscode.window.terminals.includes(terminal) && !terminal.exitStatus;
   }
 
+  /** A terminal closed by a window reload or shutdown; from then on the saved list is left alone. */
+  private closedByShutdown(terminal: vscode.Terminal): boolean {
+    if (terminal.exitStatus?.reason !== vscode.TerminalExitReason.Shutdown) return false;
+    this.shuttingDown = true;
+    return true;
+  }
+
+  /**
+   * Drops terminals VS Code closed without a close event we handled, and saves
+   * the shorter list so `restore()` does not reopen them. Terminals closed by a
+   * shutdown stop all saving instead (see `closedByShutdown`).
+   */
   private pruneSessions(): void {
+    let pruned = false;
     for (const terminal of this.sessions.keys()) {
-      if (!vscode.window.terminals.includes(terminal)) this.sessions.delete(terminal);
+      if (vscode.window.terminals.includes(terminal)) continue;
+      this.closedByShutdown(terminal);
+      this.sessions.delete(terminal);
+      pruned = true;
     }
+    if (pruned) this.persist();
   }
 }

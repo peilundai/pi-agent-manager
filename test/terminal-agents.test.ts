@@ -475,6 +475,35 @@ describe("TerminalAgents restore after a reload", () => {
     expect(memento.values.get(TERMINAL_AGENTS_KEY)).toEqual([{ sessionId: "session-1", folder: "/w", viewColumn: 1, number: 1 }]);
   });
 
+  it("saves the shorter list when it prunes a terminal VS Code closed without a handled event", async () => {
+    const memento = memoryMemento();
+    const manager = agents(memento);
+    const first = await manager.newAgent();
+    await manager.newAgent();
+    // Gone from window.terminals, but no onDidCloseTerminal call reached the manager.
+    (first as unknown as MockTerminal).dispose();
+    expect(manager.count).toBe(1);
+    expect((memento.values.get(TERMINAL_AGENTS_KEY) as Array<{ sessionId: string }>).map((entry) => entry.sessionId)).toEqual([
+      "session-2",
+    ]);
+    manager.dispose();
+  });
+
+  it("does not prune the saved list once the window is shutting down", async () => {
+    const memento = memoryMemento();
+    const manager = agents(memento);
+    const first = await manager.newAgent();
+    const second = await manager.newAgent();
+    for (const terminal of [first, second]) {
+      const mockTerminal = terminal as unknown as MockTerminal;
+      mockTerminal.exitStatus = { code: 0, reason: TerminalExitReason.Shutdown };
+      mockTerminal.dispose();
+    }
+    expect(manager.count).toBe(0);
+    expect((memento.values.get(TERMINAL_AGENTS_KEY) as unknown[]).length).toBe(2);
+    manager.dispose();
+  });
+
   it("restartAll reopens each terminal with the same session and title", async () => {
     const memento = memoryMemento();
     const manager = agents(memento);
