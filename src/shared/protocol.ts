@@ -1,13 +1,5 @@
 import type { SessionSummary, SetupErrorState } from "./model";
-import type {
-  PiCommand,
-  PiEvent,
-  PiMessage,
-  PiModel,
-  PiSessionStats,
-  PiState,
-  ThinkingLevel,
-} from "../pi/rpc-types";
+import type { PiCommand, PiEvent, PiMessage, PiModel, PiSessionStats, PiState, ThinkingLevel } from "../pi/rpc-types";
 import { THINKING_LEVELS } from "../pi/rpc-types";
 
 const MAX_ID_LENGTH = 200;
@@ -48,13 +40,7 @@ export type DialogResponse =
 
 export type WebviewToHostMessage =
   | { version: 1; type: "ready" }
-  | {
-      version: 1;
-      type: "prompt";
-      text: string;
-      images: ImageAttachment[];
-      mode: PromptMode;
-    }
+  | { version: 1; type: "prompt"; text: string; images: ImageAttachment[]; mode: PromptMode }
   | { version: 1; type: "abort" }
   | { version: 1; type: "chat.new" }
   | { version: 1; type: "chat.open"; path: string }
@@ -72,11 +58,7 @@ export type WebviewToHostMessage =
   | { version: 1; type: "compact" }
   | { version: 1; type: "restart" }
   | { version: 1; type: "focus.changed"; focused: boolean }
-  | {
-      version: 1;
-      type: "setup.action";
-      action: "openFolder" | "chooseExecutable" | "openSettings" | "retry";
-    };
+  | { version: 1; type: "setup.action"; action: "openFolder" | "chooseExecutable" | "openSettings" | "retry" };
 
 export interface ChatSnapshot {
   state: PiState;
@@ -89,11 +71,7 @@ export interface ChatSnapshot {
 /** Which tool cards start expanded: edits only, every tool, or none. */
 export type ToolExpansion = "edits" | "all" | "none";
 
-export const TOOL_EXPANSIONS: readonly ToolExpansion[] = [
-  "edits",
-  "all",
-  "none",
-];
+export const TOOL_EXPANSIONS: readonly ToolExpansion[] = ["edits", "all", "none"];
 
 export type HostToWebviewMessage =
   | {
@@ -109,51 +87,26 @@ export type HostToWebviewMessage =
       /** From the `piAgentManager.expandToolCards` setting. */
       toolExpansion?: ToolExpansion;
     }
-  | {
-      version: 1;
-      type: "process";
-      status: ProcessStatus;
-      error?: string;
-      stderr?: string;
-    }
+  | { version: 1; type: "process"; status: ProcessStatus; error?: string; stderr?: string }
   | { version: 1; type: "snapshot"; snapshot: ChatSnapshot }
   | { version: 1; type: "pi.events"; events: PiEvent[] }
   | { version: 1; type: "state"; state: PiState }
   | { version: 1; type: "stats"; stats: PiSessionStats }
   | { version: 1; type: "sessions"; sessions: SessionSummary[] }
   | { version: 1; type: "prompt.result"; disposition?: string; error?: string }
-  | {
-      version: 1;
-      type: "composer.insert";
-      text: string;
-      images?: ImageAttachment[];
-      references?: ContextReference[];
-    }
+  | { version: 1; type: "composer.insert"; text: string; images?: ImageAttachment[]; references?: ContextReference[] }
   | { version: 1; type: "composer.focus" }
   | { version: 1; type: "history.toggle" }
   | { version: 1; type: "files.result"; requestId: number; files: string[] }
   | { version: 1; type: "editor.selection"; selection?: EditorSelection }
-  | {
-      version: 1;
-      type: "notice";
-      level: "info" | "warning" | "error";
-      message: string;
-    };
+  | { version: 1; type: "notice"; level: "info" | "warning" | "error"; message: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isBoundedString(
-  value: unknown,
-  maximum: number,
-  allowEmpty = false,
-): value is string {
-  return (
-    typeof value === "string" &&
-    value.length <= maximum &&
-    (allowEmpty || value.length > 0)
-  );
+function isBoundedString(value: unknown, maximum: number, allowEmpty = false): value is string {
+  return typeof value === "string" && value.length <= maximum && (allowEmpty || value.length > 0);
 }
 
 function isId(value: unknown): value is string {
@@ -172,17 +125,13 @@ function isImage(value: unknown): value is ImageAttachment {
 
 function isDialogResponse(value: unknown): value is DialogResponse {
   if (!isRecord(value) || !isId(value.id)) return false;
-  if ("value" in value)
-    return isBoundedString(value.value, MAX_PROMPT_LENGTH, true);
+  if ("value" in value) return isBoundedString(value.value, MAX_PROMPT_LENGTH, true);
   if ("confirmed" in value) return typeof value.confirmed === "boolean";
   return value.cancelled === true;
 }
 
-export function isWebviewMessage(
-  value: unknown,
-): value is WebviewToHostMessage {
-  if (!isRecord(value) || value.version !== 1 || typeof value.type !== "string")
-    return false;
+export function isWebviewMessage(value: unknown): value is WebviewToHostMessage {
+  if (!isRecord(value) || value.version !== 1 || typeof value.type !== "string") return false;
   switch (value.type) {
     case "ready":
     case "abort":
@@ -201,16 +150,11 @@ export function isWebviewMessage(
         value.images.length <= MAX_IMAGES &&
         value.images.every(isImage) &&
         (value.text.trim().length > 0 || value.images.length > 0) &&
-        (value.mode === "send" ||
-          value.mode === "steer" ||
-          value.mode === "followUp")
+        (value.mode === "send" || value.mode === "steer" || value.mode === "followUp")
       );
     case "chat.open":
     case "chat.delete":
-      return (
-        isBoundedString(value.path, MAX_PATH_LENGTH) &&
-        value.path.endsWith(".jsonl")
-      );
+      return isBoundedString(value.path, MAX_PATH_LENGTH) && value.path.endsWith(".jsonl");
     case "model.set":
       return isId(value.provider) && isId(value.modelId);
     case "thinking.set":
@@ -218,21 +162,14 @@ export function isWebviewMessage(
     case "dialog.respond":
       return isDialogResponse(value.response);
     case "files.search":
-      return (
-        Number.isInteger(value.requestId) &&
-        isBoundedString(value.query, MAX_QUERY_LENGTH, true)
-      );
+      return Number.isInteger(value.requestId) && isBoundedString(value.query, MAX_QUERY_LENGTH, true);
     case "file.open":
       return (
         isBoundedString(value.path, MAX_PATH_LENGTH) &&
-        (value.line === undefined ||
-          (Number.isInteger(value.line) && Number(value.line) >= 0))
+        (value.line === undefined || (Number.isInteger(value.line) && Number(value.line) >= 0))
       );
     case "url.open":
-      return (
-        isBoundedString(value.url, MAX_PATH_LENGTH) &&
-        /^https?:\/\//i.test(value.url)
-      );
+      return isBoundedString(value.url, MAX_PATH_LENGTH) && /^https?:\/\//i.test(value.url);
     case "focus.changed":
       return typeof value.focused === "boolean";
     case "setup.action":

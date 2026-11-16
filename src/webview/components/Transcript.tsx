@@ -1,16 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  findReferenceTokens,
-  parseReferencedPrompt,
-  type ParsedReference,
-} from "../../shared/context-references";
+import { findReferenceTokens, parseReferencedPrompt, type ParsedReference } from "../../shared/context-references";
 import type { DialogResponse } from "../../shared/protocol";
-import type {
-  AssistantBlock,
-  ChatItem,
-  DialogRequest,
-  ToolState,
-} from "../chat-state";
+import type { AssistantBlock, ChatItem, DialogRequest, ToolState } from "../chat-state";
 import { useChat } from "./context";
 import { isUrl, LinkText } from "./LinkText";
 import { Markdown } from "./Markdown";
@@ -23,26 +14,14 @@ const PREVIEW_LINES = 12;
 function ReferenceChip({ reference }: { reference: ParsedReference }) {
   const { post } = useChat();
   const lines = reference.code.split("\n");
-  const range =
-    reference.startLine === reference.endLine
-      ? `line ${reference.startLine}`
-      : `lines ${reference.startLine}-${reference.endLine}`;
-  const preview =
-    lines.slice(0, PREVIEW_LINES).join("\n") +
-    (lines.length > PREVIEW_LINES ? "\n…" : "");
+  const range = reference.startLine === reference.endLine ? `line ${reference.startLine}` : `lines ${reference.startLine}-${reference.endLine}`;
+  const preview = lines.slice(0, PREVIEW_LINES).join("\n") + (lines.length > PREVIEW_LINES ? "\n…" : "");
   return (
     <button
       type="button"
       className="reference-chip"
       title={`${reference.path} ${range}\n\n${preview}`}
-      onClick={() =>
-        post({
-          version: 1,
-          type: "file.open",
-          path: reference.path,
-          line: reference.startLine - 1,
-        })
-      }
+      onClick={() => post({ version: 1, type: "file.open", path: reference.path, line: reference.startLine - 1 })}
     >
       {reference.label}
     </button>
@@ -50,71 +29,40 @@ function ReferenceChip({ reference }: { reference: ParsedReference }) {
 }
 
 /** The typed message with its attached selections drawn as chips. */
-function MessageWithReferences({
-  message,
-  references,
-}: {
-  message: string;
-  references: ParsedReference[];
-}) {
-  const byLabel = new Map(
-    references.map((reference) => [reference.label, reference]),
-  );
+function MessageWithReferences({ message, references }: { message: string; references: ParsedReference[] }) {
+  const byLabel = new Map(references.map((reference) => [reference.label, reference]));
   const parts: ReactNode[] = [];
   let cursor = 0;
   for (const token of findReferenceTokens(message, [...byLabel.keys()])) {
     const reference = byLabel.get(token.label);
     if (!reference) continue;
-    parts.push(
-      message.slice(cursor, token.start),
-      <ReferenceChip key={token.start} reference={reference} />,
-    );
+    parts.push(message.slice(cursor, token.start), <ReferenceChip key={token.start} reference={reference} />);
     cursor = token.end;
   }
   parts.push(message.slice(cursor));
   return <>{parts}</>;
 }
 
-export const UserMessage = memo(function UserMessage({
-  item,
-}: {
-  item: Extract<ChatItem, { kind: "user" }>;
-}) {
-  const { message, references } = useMemo(
-    () => parseReferencedPrompt(item.text),
-    [item.text],
-  );
-  const long =
-    message.length > COLLAPSE_USER_CHARS || message.split("\n").length > 14;
+export const UserMessage = memo(function UserMessage({ item }: { item: Extract<ChatItem, { kind: "user" }> }) {
+  const { message, references } = useMemo(() => parseReferencedPrompt(item.text), [item.text]);
+  const long = message.length > COLLAPSE_USER_CHARS || message.split("\n").length > 14;
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`user-message${item.pending ? " pending" : ""}`}>
       {item.images.length > 0 && (
         <div className="image-strip">
           {item.images.map((image, index) => (
-            <img
-              key={index}
-              src={`data:${image.mimeType};base64,${image.data}`}
-              alt={image.name ?? `Image ${index + 1}`}
-            />
+            <img key={index} src={`data:${image.mimeType};base64,${image.data}`} alt={image.name ?? `Image ${index + 1}`} />
           ))}
         </div>
       )}
       {message && (
         <div className={`user-text${long && !expanded ? " clamped" : ""}`}>
-          {references.length ? (
-            <MessageWithReferences message={message} references={references} />
-          ) : (
-            message
-          )}
+          {references.length ? <MessageWithReferences message={message} references={references} /> : message}
         </div>
       )}
       {long && (
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => setExpanded(!expanded)}
-        >
+        <button type="button" className="link-button" onClick={() => setExpanded(!expanded)}>
           {expanded ? "Show less" : "Show more"}
         </button>
       )}
@@ -122,33 +70,15 @@ export const UserMessage = memo(function UserMessage({
   );
 });
 
-function ThinkingBlock({
-  text,
-  redacted,
-  live,
-}: {
-  text: string;
-  redacted?: boolean;
-  live: boolean;
-}) {
+function ThinkingBlock({ text, redacted, live }: { text: string; redacted?: boolean; live: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="timeline-row thinking">
       <span className="dot dot-thinking" aria-hidden="true" />
       <div className="timeline-content">
-        <button
-          type="button"
-          className="thinking-toggle"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          <span className={live ? "shimmer" : ""}>
-            {redacted ? "Thinking (redacted)" : live ? "Thinking…" : "Thought"}
-          </span>
-          <span
-            className={`codicon codicon-chevron-${open ? "down" : "right"}`}
-            aria-hidden="true"
-          />
+        <button type="button" className="thinking-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className={live ? "shimmer" : ""}>{redacted ? "Thinking (redacted)" : live ? "Thinking…" : "Thought"}</span>
+          <span className={`codicon codicon-chevron-${open ? "down" : "right"}`} aria-hidden="true" />
         </button>
         {open && text && <div className="thinking-text">{text}</div>}
       </div>
@@ -165,14 +95,7 @@ function Block({
   tools: Record<string, ToolState>;
   live: boolean;
 }) {
-  if (block.type === "thinking")
-    return (
-      <ThinkingBlock
-        text={block.text}
-        live={live}
-        {...(block.redacted ? { redacted: true } : {})}
-      />
-    );
+  if (block.type === "thinking") return <ThinkingBlock text={block.text} live={live} {...(block.redacted ? { redacted: true } : {})} />;
   if (block.type === "tool") {
     const tool = tools[block.id];
     if (!tool) return null;
@@ -207,21 +130,11 @@ export function AssistantMessage({
   return (
     <div className="assistant-message">
       {item.blocks.map((block, index) => (
-        <Block
-          key={index}
-          block={block}
-          tools={tools}
-          live={item.streaming && index === lastIndex}
-        />
+        <Block key={index} block={block} tools={tools} live={item.streaming && index === lastIndex} />
       ))}
       {item.error && (
-        <div
-          className={`timeline-row ${item.stopReason === "aborted" ? "interrupted" : "error"}`}
-        >
-          <span
-            className={`dot ${item.stopReason === "aborted" ? "dot-interrupted" : "dot-error"}`}
-            aria-hidden="true"
-          />
+        <div className={`timeline-row ${item.stopReason === "aborted" ? "interrupted" : "error"}`}>
+          <span className={`dot ${item.stopReason === "aborted" ? "dot-interrupted" : "dot-error"}`} aria-hidden="true" />
           <div className="timeline-content message-error">{item.error}</div>
         </div>
       )}
@@ -252,10 +165,7 @@ export function DialogCard({
   const [text, setText] = useState(request.prefill ?? "");
   const remaining = useDeadline(answer ? undefined : request.deadline);
   const expired = remaining === 0;
-  const respond = (
-    label: string,
-    response: { value: string } | { confirmed: boolean } | { cancelled: true },
-  ) => {
+  const respond = (label: string, response: { value: string } | { confirmed: boolean } | { cancelled: true }) => {
     const message: DialogResponse = { id: request.id, ...response };
     post({ version: 1, type: "dialog.respond", response: message });
     onAnswer(request.id, label);
@@ -263,16 +173,10 @@ export function DialogCard({
   if (answer || expired) {
     return (
       <div className={`dialog-receipt${answer ? "" : " timed-out"}`}>
-        <span
-          className={`codicon codicon-${answer ? "pass" : "clock"}`}
-          aria-hidden="true"
-        />
+        <span className={`codicon codicon-${answer ? "pass" : "clock"}`} aria-hidden="true" />
         <div className="dialog-receipt-body">
           <span className="dialog-receipt-title">{request.title}</span>
-          <span
-            className={`dialog-receipt-answer${answer && isUrl(answer) ? " mono" : ""}`}
-            title={answer ?? "Timed out"}
-          >
+          <span className={`dialog-receipt-answer${answer && isUrl(answer) ? " mono" : ""}`} title={answer ?? "Timed out"}>
             {answer ?? "Timed out"}
           </span>
         </div>
@@ -286,9 +190,7 @@ export function DialogCard({
         <span className="dialog-title-text">
           <LinkText text={request.title} />
         </span>
-        {remaining !== undefined && (
-          <span className="dialog-timer">{remaining}s</span>
-        )}
+        {remaining !== undefined && <span className="dialog-timer">{remaining}s</span>}
       </div>
       {request.message && (
         <div className="dialog-message">
@@ -297,19 +199,10 @@ export function DialogCard({
       )}
       {request.method === "confirm" && (
         <div className="dialog-actions">
-          <button
-            type="button"
-            className="button primary"
-            onClick={() => respond("Yes", { confirmed: true })}
-            autoFocus
-          >
+          <button type="button" className="button primary" onClick={() => respond("Yes", { confirmed: true })} autoFocus>
             Yes
           </button>
-          <button
-            type="button"
-            className="button"
-            onClick={() => respond("No", { confirmed: false })}
-          >
+          <button type="button" className="button" onClick={() => respond("No", { confirmed: false })}>
             No
           </button>
         </div>
@@ -317,22 +210,12 @@ export function DialogCard({
       {request.method === "select" && (
         <div className="dialog-options">
           {(request.options ?? []).map((option, index) => (
-            <button
-              key={option}
-              type="button"
-              className="dialog-option"
-              onClick={() => respond(option, { value: option })}
-              autoFocus={index === 0}
-            >
+            <button key={option} type="button" className="dialog-option" onClick={() => respond(option, { value: option })} autoFocus={index === 0}>
               <span className="dialog-option-index">{index + 1}</span>
               {option}
             </button>
           ))}
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => respond("Cancelled", { cancelled: true })}
-          >
+          <button type="button" className="link-button" onClick={() => respond("Cancelled", { cancelled: true })}>
             Cancel
           </button>
         </div>
@@ -346,31 +229,15 @@ export function DialogCard({
           }}
         >
           {request.method === "input" ? (
-            <input
-              className="text-input"
-              value={text}
-              placeholder={request.placeholder ?? ""}
-              onChange={(event) => setText(event.target.value)}
-              autoFocus
-            />
+            <input className="text-input" value={text} placeholder={request.placeholder ?? ""} onChange={(event) => setText(event.target.value)} autoFocus />
           ) : (
-            <textarea
-              className="text-input"
-              rows={6}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              autoFocus
-            />
+            <textarea className="text-input" rows={6} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
           )}
           <div className="dialog-actions">
             <button type="submit" className="button primary">
               Submit
             </button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => respond("Cancelled", { cancelled: true })}
-            >
+            <button type="button" className="button" onClick={() => respond("Cancelled", { cancelled: true })}>
               Cancel
             </button>
           </div>
@@ -397,21 +264,13 @@ export function TranscriptItem({
     case "assistant":
       return <AssistantMessage item={item} tools={tools} />;
     case "dialog":
-      return (
-        <DialogCard
-          request={item.request}
-          answer={item.answer}
-          onAnswer={onDialogAnswer}
-        />
-      );
+      return <DialogCard request={item.request} answer={item.answer} onAnswer={onDialogAnswer} />;
     case "bash":
       return (
         <div className="bash-item">
           <pre className="tool-command">! {item.command}</pre>
           {item.output && <pre className="tool-output">{item.output}</pre>}
-          {item.exitCode !== undefined && item.exitCode !== 0 && (
-            <div className="tool-summary error">Exit code {item.exitCode}</div>
-          )}
+          {item.exitCode !== undefined && item.exitCode !== 0 && <div className="tool-summary error">Exit code {item.exitCode}</div>}
         </div>
       );
     case "compaction":
@@ -419,18 +278,13 @@ export function TranscriptItem({
         <div className="divider-notice">
           <span>
             Conversation compacted
-            {item.tokensBefore
-              ? ` · ${Math.round(item.tokensBefore / 1000)}k tokens summarized`
-              : ""}
+            {item.tokensBefore ? ` · ${Math.round(item.tokensBefore / 1000)}k tokens summarized` : ""}
           </span>
         </div>
       );
     case "notice":
       return (
-        <div
-          className={`notice notice-${item.level}`}
-          role={item.level === "error" ? "alert" : "status"}
-        >
+        <div className={`notice notice-${item.level}`} role={item.level === "error" ? "alert" : "status"}>
           <span
             className={`codicon codicon-${item.level === "error" ? "error" : item.level === "warning" ? "warning" : "info"}`}
             aria-hidden="true"
@@ -438,12 +292,7 @@ export function TranscriptItem({
           <span className="notice-text">
             <LinkText text={item.text} />
           </span>
-          <button
-            type="button"
-            className="icon-button small"
-            aria-label="Dismiss"
-            onClick={() => onDismiss(item.id)}
-          >
+          <button type="button" className="icon-button small" aria-label="Dismiss" onClick={() => onDismiss(item.id)}>
             <span className="codicon codicon-close" />
           </button>
         </div>

@@ -1,9 +1,4 @@
-export type SessionStatus =
-  | "starting"
-  | "working"
-  | "waiting"
-  | "stopped"
-  | "failed";
+export type SessionStatus = "starting" | "working" | "waiting" | "stopped" | "failed";
 
 export type SetupErrorState =
   | { kind: "workspace" }

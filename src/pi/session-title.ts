@@ -1,7 +1,4 @@
-import {
-  findReferenceTokens,
-  parseReferencedPrompt,
-} from "../shared/context-references";
+import { findReferenceTokens, parseReferencedPrompt } from "../shared/context-references";
 
 const DEFAULT_MAX_LENGTH = 52;
 
@@ -9,27 +6,19 @@ const DEFAULT_MAX_LENGTH = 52;
 function removeSelectionChips(prompt: string): string {
   const { message, references } = parseReferencedPrompt(prompt);
   if (!references.length) return prompt;
-  const names = new Map(
-    references.map((reference) => [
-      reference.label,
-      reference.path.slice(reference.path.lastIndexOf("/") + 1),
-    ]),
-  );
+  const names = new Map(references.map((reference) => [reference.label, reference.path.slice(reference.path.lastIndexOf("/") + 1)]));
   let output = "";
   let cursor = 0;
   for (const token of findReferenceTokens(message, [...names.keys()])) {
-    output +=
-      message.slice(cursor, token.start) + (names.get(token.label) ?? "");
+    output += message.slice(cursor, token.start) + (names.get(token.label) ?? "");
     cursor = token.end;
   }
   return output + message.slice(cursor);
 }
 
 function removeEditorContext(prompt: string): string {
-  return stripFencedBlocks(removeSelectionChips(prompt)).replace(
-    /^\s*From\s+`?[^`\n]+`?\s+lines?\s+\d+(?:-\d+)?:\s*/i,
-    " ",
-  );
+  return stripFencedBlocks(removeSelectionChips(prompt))
+    .replace(/^\s*From\s+`?[^`\n]+`?\s+lines?\s+\d+(?:-\d+)?:\s*/i, " ");
 }
 
 function stripFencedBlocks(prompt: string): string {
@@ -67,8 +56,7 @@ function truncateAtWord(value: string, maximum: number): string {
   const available = maximum - 1;
   const prefix = value.slice(0, available + 1);
   const boundary = prefix.lastIndexOf(" ");
-  const truncated =
-    boundary > 0 ? prefix.slice(0, boundary) : value.slice(0, available);
+  const truncated = boundary > 0 ? prefix.slice(0, boundary) : value.slice(0, available);
   return `${truncated.trimEnd()}…`;
 }
 
@@ -78,13 +66,8 @@ export function generateSessionTitle(
 ): string | undefined {
   if (!Number.isInteger(maximumLength) || maximumLength < 1) return undefined;
 
-  const normalized = removeRequestFiller(
-    removeEditorContext(prompt).replace(/\s+/g, " ").trim(),
-  );
-  const sentence = firstSentence(normalized).replace(
-    /^[\s:;,\-–—]+|[\s:;,\-–—]+$/g,
-    "",
-  );
+  const normalized = removeRequestFiller(removeEditorContext(prompt).replace(/\s+/g, " ").trim());
+  const sentence = firstSentence(normalized).replace(/^[\s:;,\-–—]+|[\s:;,\-–—]+$/g, "");
   if (!sentence) return undefined;
 
   const title = `${sentence[0]?.toLocaleUpperCase() ?? ""}${sentence.slice(1)}`;

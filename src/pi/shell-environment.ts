@@ -33,38 +33,23 @@ const PROBE_VARIABLES = new Set([
 const PROBE_SCRIPT = `const m=process.env.${MARKER_VARIABLE};delete process.env.${MARKER_VARIABLE};process.stdout.write(m+JSON.stringify(process.env)+m)`;
 
 export type ShellEnvironmentResult =
-  | {
-      status: "loaded";
-      shell: string;
-      env: Record<string, string>;
-      durationMs: number;
-    }
+  | { status: "loaded"; shell: string; env: Record<string, string>; durationMs: number }
   | { status: "skipped"; reason: string }
   | { status: "failed"; shell: string; error: string; durationMs: number };
 
 /** The subset of a spawned child process this module uses (a test seam). */
 export interface ProbeProcess {
   readonly pid?: number | undefined;
-  readonly stdout: {
-    on(event: "data", listener: (chunk: Buffer | string) => void): unknown;
-  } | null;
+  readonly stdout: { on(event: "data", listener: (chunk: Buffer | string) => void): unknown } | null;
   on(event: "error", listener: (error: Error) => void): unknown;
-  on(
-    event: "close",
-    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
-  ): unknown;
+  on(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
   kill(signal?: NodeJS.Signals): boolean;
 }
 
 export type ProbeSpawn = (
   file: string,
   args: string[],
-  options: {
-    env: NodeJS.ProcessEnv;
-    detached: boolean;
-    stdio: ["ignore", "pipe", "ignore"];
-    windowsHide: boolean;
-  },
+  options: { env: NodeJS.ProcessEnv; detached: boolean; stdio: ["ignore", "pipe", "ignore"]; windowsHide: boolean },
 ) => ProbeProcess;
 
 export interface ShellEnvironmentOptions {
@@ -84,10 +69,7 @@ export function quoteForShell(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function defaultShell(
-  platform: NodeJS.Platform,
-  env: NodeJS.ProcessEnv,
-): string {
+export function defaultShell(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string {
   if (env.SHELL?.trim()) return env.SHELL.trim();
   try {
     const shell = userInfo().shell;
@@ -99,24 +81,15 @@ export function defaultShell(
 }
 
 /** Arguments that start `shell` as an interactive login shell running `command`. */
-export function shellArguments(
-  shell: string,
-  command: string,
-): string[] | undefined {
-  const name = basename(shell)
-    .toLowerCase()
-    .replace(/\.exe$/, "");
-  if (name === "pwsh" || name === "powershell" || name === "cmd")
-    return undefined;
+export function shellArguments(shell: string, command: string): string[] | undefined {
+  const name = basename(shell).toLowerCase().replace(/\.exe$/, "");
+  if (name === "pwsh" || name === "powershell" || name === "cmd") return undefined;
   if (name === "csh" || name === "tcsh") return ["-ic", command];
   return ["-i", "-l", "-c", command];
 }
 
 /** Extracts the JSON environment printed between `marker`s, ignoring anything around it. */
-export function parseShellEnvironment(
-  output: string,
-  marker: string,
-): Record<string, string> | undefined {
+export function parseShellEnvironment(output: string, marker: string): Record<string, string> | undefined {
   const start = output.indexOf(marker);
   if (start === -1) return undefined;
   const end = output.lastIndexOf(marker);
@@ -127,18 +100,15 @@ export function parseShellEnvironment(
   } catch {
     return undefined;
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
-    return undefined;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(parsed)) {
-    if (typeof value === "string" && !PROBE_VARIABLES.has(name))
-      env[name] = value;
+    if (typeof value === "string" && !PROBE_VARIABLES.has(name)) env[name] = value;
   }
   return env;
 }
 
-const defaultSpawn: ProbeSpawn = (file, args, options) =>
-  nodeSpawn(file, args, options);
+const defaultSpawn: ProbeSpawn = (file, args, options) => nodeSpawn(file, args, options);
 
 function stop(child: ProbeProcess): void {
   try {
@@ -151,44 +121,22 @@ function stop(child: ProbeProcess): void {
 }
 
 /** Runs the user's interactive login shell once and returns the environment it sets up. */
-export async function resolveShellEnvironment(
-  options: ShellEnvironmentOptions = {},
-): Promise<ShellEnvironmentResult> {
+export async function resolveShellEnvironment(options: ShellEnvironmentOptions = {}): Promise<ShellEnvironmentResult> {
   const platform = options.platform ?? process.platform;
   const baseEnv = options.env ?? process.env;
-  if (platform === "win32")
-    return {
-      status: "skipped",
-      reason: "Windows editors already inherit the user environment.",
-    };
-  if (baseEnv[RESOLVING_VARIABLE])
-    return {
-      status: "skipped",
-      reason: "Already resolving the shell environment.",
-    };
+  if (platform === "win32") return { status: "skipped", reason: "Windows editors already inherit the user environment." };
+  if (baseEnv[RESOLVING_VARIABLE]) return { status: "skipped", reason: "Already resolving the shell environment." };
 
   const shell = defaultShell(platform, baseEnv);
   const execPath = options.execPath ?? process.execPath;
   const marker = `__PI_AGENT_MANAGER_${randomBytes(12).toString("hex")}__`;
-  const args = shellArguments(
-    shell,
-    `${quoteForShell(execPath)} -e ${quoteForShell(PROBE_SCRIPT)}`,
-  );
-  if (!args)
-    return {
-      status: "skipped",
-      reason: `${basename(shell)} is not supported as a login shell.`,
-    };
+  const args = shellArguments(shell, `${quoteForShell(execPath)} -e ${quoteForShell(PROBE_SCRIPT)}`);
+  if (!args) return { status: "skipped", reason: `${basename(shell)} is not supported as a login shell.` };
 
   const timeoutMs = options.timeoutMs ?? SHELL_ENVIRONMENT_TIMEOUT_MS;
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
-  const failed = (error: string): ShellEnvironmentResult => ({
-    status: "failed",
-    shell,
-    error,
-    durationMs: elapsed(),
-  });
+  const failed = (error: string): ShellEnvironmentResult => ({ status: "failed", shell, error, durationMs: elapsed() });
 
   return new Promise((resolve) => {
     let child: ProbeProcess;
@@ -223,11 +171,7 @@ export async function resolveShellEnvironment(
     };
     const timer = setTimeout(() => {
       stop(child);
-      finish(
-        failed(
-          `${shell} did not finish within ${Math.round(timeoutMs / 1000)} s.`,
-        ),
-      );
+      finish(failed(`${shell} did not finish within ${Math.round(timeoutMs / 1000)} s.`));
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk) => {
@@ -244,9 +188,7 @@ export async function resolveShellEnvironment(
         finish({ status: "loaded", shell, env, durationMs: elapsed() });
         return;
       }
-      const reason = signal
-        ? `was stopped by ${signal}`
-        : `exited with code ${String(code)}`;
+      const reason = signal ? `was stopped by ${signal}` : `exited with code ${String(code)}`;
       // Shell output is not quoted: it may contain secret values.
       finish(failed(`${shell} ${reason} without printing its environment.`));
     });
@@ -273,24 +215,18 @@ export interface MergeEnvironmentOptions {
  * editor (for example with a virtualenv active) behaves as before; the shell only adds
  * missing or empty variables and PATH entries. Explicit overrides always win.
  */
-export function mergeEnvironment(
-  options: MergeEnvironmentOptions,
-): NodeJS.ProcessEnv {
-  const delimiter =
-    options.delimiter ?? (process.platform === "win32" ? ";" : ":");
+export function mergeEnvironment(options: MergeEnvironmentOptions): NodeJS.ProcessEnv {
+  const delimiter = options.delimiter ?? (process.platform === "win32" ? ";" : ":");
   const env: NodeJS.ProcessEnv = { ...options.base };
   for (const [name, value] of Object.entries(options.shell ?? {})) {
     if (name === "PATH") {
       const current = pathEntries(env.PATH, delimiter);
-      const missing = pathEntries(value, delimiter).filter(
-        (entry) => !current.includes(entry),
-      );
+      const missing = pathEntries(value, delimiter).filter((entry) => !current.includes(entry));
       env.PATH = [...current, ...missing].join(delimiter);
     } else if (env[name] === undefined || env[name] === "") {
       env[name] = value;
     }
   }
-  for (const [name, value] of Object.entries(options.overrides ?? {}))
-    env[name] = value;
+  for (const [name, value] of Object.entries(options.overrides ?? {})) env[name] = value;
   return env;
 }

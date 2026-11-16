@@ -22,8 +22,7 @@ export function splitMarkdownBlocks(markdown: string): string[] {
     }
     if (blankRun) {
       // Indented lines continue the previous block (list item paragraphs, nested code).
-      if (/^[ \t]/.test(line))
-        current.push(...Array<string>(blankRun).fill(""));
+      if (/^[ \t]/.test(line)) current.push(...Array<string>(blankRun).fill(""));
       else {
         blocks.push(current.join("\n"));
         current = [];
@@ -33,8 +32,7 @@ export function splitMarkdownBlocks(markdown: string): string[] {
     const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
     if (marker) {
       if (!fence) fence = marker;
-      else if (marker[0] === fence[0] && marker.length >= fence.length)
-        fence = undefined;
+      else if (marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
     }
     current.push(line);
   }
@@ -51,33 +49,19 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
-function CodeBlock({
-  language,
-  children,
-}: {
-  language: string | undefined;
-  children: ReactNode;
-}) {
+function CodeBlock({ language, children }: { language: string | undefined; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard
-      ?.writeText(textOf(children).replace(/\n$/, ""))
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1_200);
-      });
+    void navigator.clipboard?.writeText(textOf(children).replace(/\n$/, "")).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1_200);
+    });
   };
   return (
     <div className="code-block">
       <div className="code-block-header">
         <span>{language ?? "text"}</span>
-        <button
-          type="button"
-          className="icon-button small"
-          onClick={copy}
-          aria-label="Copy code"
-          title="Copy"
-        >
+        <button type="button" className="icon-button small" onClick={copy} aria-label="Copy code" title="Copy">
           <span className={`codicon codicon-${copied ? "check" : "copy"}`} />
         </button>
       </div>
@@ -97,17 +81,10 @@ function useComponents(): Components {
             onClick={(event) => {
               event.preventDefault();
               if (!href) return;
-              if (/^https?:\/\//i.test(href))
-                post({ version: 1, type: "url.open", url: href });
+              if (/^https?:\/\//i.test(href)) post({ version: 1, type: "url.open", url: href });
               else {
                 const ref = parseFileReference(href.replace(/^file:\/\//, ""));
-                if (ref)
-                  post({
-                    version: 1,
-                    type: "file.open",
-                    path: ref.path,
-                    ...(ref.line !== undefined ? { line: ref.line } : {}),
-                  });
+                if (ref) post({ version: 1, type: "file.open", path: ref.path, ...(ref.line !== undefined ? { line: ref.line } : {}) });
               }
             }}
           >
@@ -119,10 +96,7 @@ function useComponents(): Components {
         const child = Array.isArray(children) ? children[0] : children;
         const className =
           child && typeof child === "object" && "props" in child
-            ? String(
-                (child as { props: { className?: string } }).props.className ??
-                  "",
-              )
+            ? String((child as { props: { className?: string } }).props.className ?? "")
             : "";
         const language = /language-([\w+-]+)/.exec(className)?.[1];
         return <CodeBlock language={language}>{children}</CodeBlock>;
@@ -138,22 +112,9 @@ function useComponents(): Components {
             role="link"
             tabIndex={0}
             title={`Open ${ref.path}`}
-            onClick={() =>
-              post({
-                version: 1,
-                type: "file.open",
-                path: ref.path,
-                ...(ref.line !== undefined ? { line: ref.line } : {}),
-              })
-            }
+            onClick={() => post({ version: 1, type: "file.open", path: ref.path, ...(ref.line !== undefined ? { line: ref.line } : {}) })}
             onKeyDown={(event) => {
-              if (event.key === "Enter")
-                post({
-                  version: 1,
-                  type: "file.open",
-                  path: ref.path,
-                  ...(ref.line !== undefined ? { line: ref.line } : {}),
-                });
+              if (event.key === "Enter") post({ version: 1, type: "file.open", path: ref.path, ...(ref.line !== undefined ? { line: ref.line } : {}) });
             }}
           >
             {children}
@@ -173,23 +134,11 @@ function useComponents(): Components {
 }
 
 const remarkPlugins = [remarkGfm];
-const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
-  [rehypeHighlight, { detect: false, ignoreMissing: true }],
-];
+const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [[rehypeHighlight, { detect: false, ignoreMissing: true }]];
 
-const MarkdownBlock = memo(function MarkdownBlock({
-  source,
-  components,
-}: {
-  source: string;
-  components: Components;
-}) {
+const MarkdownBlock = memo(function MarkdownBlock({ source, components }: { source: string; components: Components }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={remarkPlugins}
-      rehypePlugins={rehypePlugins}
-      components={components}
-    >
+    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
       {source}
     </ReactMarkdown>
   );

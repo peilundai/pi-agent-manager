@@ -15,12 +15,7 @@ export interface RpcSpawnOptions {
 
 export interface RpcClientListener {
   onEvent(event: PiEvent): void;
-  onExit(info: {
-    code: number | null;
-    signal: NodeJS.Signals | null;
-    stderr: string;
-    expected: boolean;
-  }): void;
+  onExit(info: { code: number | null; signal: NodeJS.Signals | null; stderr: string; expected: boolean }): void;
   /**
    * Called synchronously when a response is read, before its promise settles. Responses and
    * events share one ordered stream, so this marks the exact boundary between them.
@@ -29,17 +24,10 @@ export interface RpcClientListener {
 }
 
 /** Spawn function seam for tests. */
-export type SpawnFn = (
-  options: RpcSpawnOptions,
-) => ChildProcessWithoutNullStreams;
+export type SpawnFn = (options: RpcSpawnOptions) => ChildProcessWithoutNullStreams;
 
 const defaultSpawn: SpawnFn = ({ file, args, cwd, env }) =>
-  spawn(file, args, {
-    cwd,
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
+  spawn(file, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 
 interface Pending {
   resolve(value: unknown): void;
@@ -75,10 +63,7 @@ export abstract class RpcPeer {
   protected abstract write(record: Record<string, unknown>): void;
 
   /** Sends a command and resolves with its `data` (or rejects with its `error`). */
-  request<T = unknown>(
-    command: Record<string, unknown> & { type: string },
-    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
-  ): Promise<T> {
+  request<T = unknown>(command: Record<string, unknown> & { type: string }, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<T> {
     if (!this.running) {
       return Promise.reject(new RpcError("Pi is not running.", command.type));
     }
@@ -86,18 +71,9 @@ export abstract class RpcPeer {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(
-          new RpcError(
-            `Pi did not answer “${command.type}” in time.`,
-            command.type,
-          ),
-        );
+        reject(new RpcError(`Pi did not answer “${command.type}” in time.`, command.type));
       }, timeoutMs);
-      this.pending.set(id, {
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        timer,
-      });
+      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
       this.write({ ...command, id });
     });
   }
@@ -111,25 +87,13 @@ export abstract class RpcPeer {
     if (!isRecord(record) || typeof record.type !== "string") return;
     if (record.type === "response") {
       const response = record as unknown as PiResponse;
-      const pending =
-        typeof response.id === "string"
-          ? this.pending.get(response.id)
-          : undefined;
+      const pending = typeof response.id === "string" ? this.pending.get(response.id) : undefined;
       if (!pending || typeof response.id !== "string") return;
       this.pending.delete(response.id);
       clearTimeout(pending.timer);
-      this.listener.onResponse?.({
-        command: response.command,
-        success: response.success,
-      });
+      this.listener.onResponse?.({ command: response.command, success: response.success });
       if (response.success) pending.resolve(response.data);
-      else
-        pending.reject(
-          new RpcError(
-            response.error || `Pi rejected “${response.command}”.`,
-            response.command,
-          ),
-        );
+      else pending.reject(new RpcError(response.error || `Pi rejected “${response.command}”.`, response.command));
       return;
     }
     this.listener.onEvent(record as PiEvent);
@@ -144,13 +108,8 @@ export abstract class RpcPeer {
   }
 }
 
-export function exitMessage(
-  code: number | null,
-  signal: NodeJS.Signals | null,
-): string {
-  return signal
-    ? `Pi exited (signal ${signal}).`
-    : `Pi exited with code ${code ?? "unknown"}.`;
+export function exitMessage(code: number | null, signal: NodeJS.Signals | null): string {
+  return signal ? `Pi exited (signal ${signal}).` : `Pi exited with code ${code ?? "unknown"}.`;
 }
 
 /** A single `pi --mode rpc` child process speaking JSONL over stdio. */
@@ -186,9 +145,7 @@ export class PiRpcClient extends RpcPeer {
       child.stdout.on("data", (chunk: Buffer) => decoder.push(chunk));
       child.stdout.on("end", () => decoder.end());
       child.stderr.on("data", (chunk: Buffer) => {
-        this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(
-          -STDERR_TAIL_BYTES,
-        );
+        this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-STDERR_TAIL_BYTES);
       });
       child.stdin.on("error", () => undefined);
       let settled = false;
@@ -207,12 +164,7 @@ export class PiRpcClient extends RpcPeer {
         this.exited = true;
         this.rejectAll(new Error(exitMessage(code, signal)));
         if (settled) {
-          this.listener.onExit({
-            code,
-            signal,
-            stderr: this.stderrTail,
-            expected: this.stopping,
-          });
+          this.listener.onExit({ code, signal, stderr: this.stderrTail, expected: this.stopping });
         }
       });
     });

@@ -1,18 +1,7 @@
 import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
-import {
-  AGENT_PANEL_TYPE,
-  agentViewColumn,
-  isAgentPanelTab,
-  type AgentTabTest,
-} from "./agent-placement";
-import {
-  ACTIVE_CHAT_KEY,
-  agentStateKey,
-  DEFAULT_AGENT_TITLE,
-  RELAY_KEY,
-  type ChatViewProvider,
-} from "./chat-view-provider";
+import { AGENT_PANEL_TYPE, agentViewColumn, isAgentPanelTab, type AgentTabTest } from "./agent-placement";
+import { ACTIVE_CHAT_KEY, agentStateKey, DEFAULT_AGENT_TITLE, RELAY_KEY, type ChatViewProvider } from "./chat-view-provider";
 
 export { AGENT_PANEL_TYPE } from "./agent-placement";
 /** The ids of the editor-tab agents open in this workspace, so a reload can restore them. */
@@ -22,9 +11,7 @@ export type ChatLocation = "editor" | "sidebar";
 
 /** Where new agents open, from `piAgentManager.defaultLocation`. Unknown values mean editor tabs. */
 export function defaultLocation(): ChatLocation {
-  const value = vscode.workspace
-    .getConfiguration("piAgentManager")
-    .get<unknown>("defaultLocation", "editor");
+  const value = vscode.workspace.getConfiguration("piAgentManager").get<unknown>("defaultLocation", "editor");
   return value === "sidebar" ? "sidebar" : "editor";
 }
 
@@ -38,8 +25,7 @@ function agentIdFrom(state: unknown): string | undefined {
 
 /** How many agent tabs the window has, restored or not. */
 function openAgentTabs(): number {
-  const tabs =
-    vscode.window.tabGroups?.all.flatMap((group) => group.tabs) ?? [];
+  const tabs = vscode.window.tabGroups?.all.flatMap((group) => group.tabs) ?? [];
   return tabs.filter(isAgentPanelTab).length;
 }
 
@@ -64,9 +50,7 @@ export interface EditorAgentsOptions {
  * with its own `ChatViewProvider`, Pi process and session. Tabs are restored after a window reload
  * by the panel serializer, and a Pi that kept running behind its relay is reattached right away.
  */
-export class EditorAgents
-  implements vscode.WebviewPanelSerializer, vscode.Disposable
-{
+export class EditorAgents implements vscode.WebviewPanelSerializer, vscode.Disposable {
   private readonly agents = new Map<string, Agent>();
   /** The agent the user worked in last; commands such as Add Selection to Chat go there. */
   private active: Agent | undefined;
@@ -97,10 +81,7 @@ export class EditorAgents
     return this.activeAgent()?.chat ?? this.open();
   }
 
-  async deserializeWebviewPanel(
-    panel: vscode.WebviewPanel,
-    state: unknown,
-  ): Promise<void> {
+  async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown): Promise<void> {
     const agent = this.agent(agentIdFrom(state) ?? randomUUID());
     if (agent.panel && agent.panel !== panel) {
       // The agent is already on screen (for example, revealed before this tab was restored).
@@ -123,8 +104,7 @@ export class EditorAgents
       return;
     }
     for (const id of ids) {
-      if (this.options.memento.get(agentStateKey(RELAY_KEY, id)) === undefined)
-        continue;
+      if (this.options.memento.get(agentStateKey(RELAY_KEY, id)) === undefined) continue;
       this.agent(id).chat.resumeRunningPi();
     }
   }
@@ -157,10 +137,7 @@ export class EditorAgents
     const agent: Agent = { id, chat, listeners: [] };
     this.agents.set(id, agent);
     const ids = this.registered();
-    if (!ids.includes(id))
-      void Promise.resolve(
-        this.options.memento.update(AGENTS_KEY, [...ids, id]),
-      ).catch(() => undefined);
+    if (!ids.includes(id)) void Promise.resolve(this.options.memento.update(AGENTS_KEY, [...ids, id])).catch(() => undefined);
     return agent;
   }
 
@@ -168,16 +145,11 @@ export class EditorAgents
     return vscode.window.createWebviewPanel(
       AGENT_PANEL_TYPE,
       DEFAULT_AGENT_TITLE,
-      {
-        viewColumn: agentViewColumn(this.options.isAgentTab ?? isAgentPanelTab),
-        preserveFocus: false,
-      },
+      { viewColumn: agentViewColumn(this.options.isAgentTab ?? isAgentPanelTab), preserveFocus: false },
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(this.options.extensionUri, "dist"),
-        ],
+        localResourceRoots: [vscode.Uri.joinPath(this.options.extensionUri, "dist")],
       },
     );
   }
@@ -185,16 +157,8 @@ export class EditorAgents
   private show(agent: Agent, panel: vscode.WebviewPanel): void {
     agent.panel = panel;
     panel.iconPath = {
-      light: vscode.Uri.joinPath(
-        this.options.extensionUri,
-        "media",
-        "pi-light.svg",
-      ),
-      dark: vscode.Uri.joinPath(
-        this.options.extensionUri,
-        "media",
-        "pi-dark.svg",
-      ),
+      light: vscode.Uri.joinPath(this.options.extensionUri, "media", "pi-light.svg"),
+      dark: vscode.Uri.joinPath(this.options.extensionUri, "media", "pi-dark.svg"),
     };
     agent.chat.attachPanel(panel);
     this.active = agent;
@@ -207,10 +171,7 @@ export class EditorAgents
   }
 
   /** The user closed the tab: stop its Pi and forget it, so it is not restored. */
-  private async closed(
-    agent: Agent,
-    panel: vscode.WebviewPanel,
-  ): Promise<void> {
+  private async closed(agent: Agent, panel: vscode.WebviewPanel): Promise<void> {
     if (this.shuttingDown || agent.panel !== panel) return;
     for (const listener of agent.listeners.splice(0)) listener.dispose();
     agent.panel = undefined;
@@ -221,11 +182,7 @@ export class EditorAgents
 
   private registered(): string[] {
     const value = this.options.memento.get<unknown>(AGENTS_KEY);
-    return Array.isArray(value)
-      ? value.filter(
-          (id): id is string => typeof id === "string" && AGENT_ID.test(id),
-        )
-      : [];
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string" && AGENT_ID.test(id)) : [];
   }
 
   private async forget(ids: readonly string[]): Promise<void> {
@@ -234,13 +191,8 @@ export class EditorAgents
     const updates = [memento.update(AGENTS_KEY, remaining)];
     for (const id of ids) {
       if (this.agents.has(id)) continue;
-      updates.push(
-        memento.update(agentStateKey(ACTIVE_CHAT_KEY, id), undefined),
-        memento.update(agentStateKey(RELAY_KEY, id), undefined),
-      );
+      updates.push(memento.update(agentStateKey(ACTIVE_CHAT_KEY, id), undefined), memento.update(agentStateKey(RELAY_KEY, id), undefined));
     }
-    await Promise.all(
-      updates.map((update) => Promise.resolve(update).catch(() => undefined)),
-    );
+    await Promise.all(updates.map((update) => Promise.resolve(update).catch(() => undefined)));
   }
 }

@@ -35,32 +35,15 @@ export function SessionPicker({
   const ref = useRef<HTMLDivElement>(null);
   const [now] = useState(() => Date.now());
   const groups = useMemo(
-    () =>
-      groupSessions(
-        filterSessions(
-          sessions.filter((session) => !session.archived),
-          query,
-        ),
-        now,
-      ).filter((group) => group.sessions.length),
+    () => groupSessions(filterSessions(sessions.filter((session) => !session.archived), query), now).filter((group) => group.sessions.length),
     [sessions, query, now],
   );
-  const flat = useMemo(
-    () => groups.flatMap((group) => group.sessions),
-    [groups],
-  );
-  const indexByPath = useMemo(
-    () => new Map(flat.map((session, index) => [session.path, index])),
-    [flat],
-  );
+  const flat = useMemo(() => groups.flatMap((group) => group.sessions), [groups]);
+  const indexByPath = useMemo(() => new Map(flat.map((session, index) => [session.path, index])), [flat]);
 
   useEffect(() => {
     const onPointer = (event: PointerEvent) => {
-      if (
-        ref.current &&
-        !ref.current.contains(event.target as Node) &&
-        !(event.target as Element).closest?.("[data-history-toggle]")
-      ) {
+      if (ref.current && !ref.current.contains(event.target as Node) && !(event.target as Element).closest?.("[data-history-toggle]")) {
         onClose();
       }
     };
@@ -74,12 +57,7 @@ export function SessionPicker({
   };
 
   return (
-    <div
-      className="popover session-picker"
-      ref={ref}
-      role="dialog"
-      aria-label="Past chats"
-    >
+    <div className="popover session-picker" ref={ref} role="dialog" aria-label="Past chats">
       <div className="picker-search">
         <span className="codicon codicon-search" aria-hidden="true" />
         <input
@@ -110,13 +88,7 @@ export function SessionPicker({
         />
       </div>
       <div className="picker-list" role="listbox" aria-label="Sessions">
-        {flat.length === 0 && (
-          <div className="picker-empty">
-            {query
-              ? "No matching sessions."
-              : `No past chats in ${folderName ? `“${folderName}”` : "this workspace"} yet.`}
-          </div>
-        )}
+        {flat.length === 0 && <div className="picker-empty">{query ? "No matching sessions." : `No past chats in ${folderName ? `“${folderName}”` : "this workspace"} yet.`}</div>}
         {groups.map((group) => (
           <div key={group.id} role="group" aria-label={group.label}>
             <div className="picker-group">{group.label}</div>
@@ -133,9 +105,7 @@ export function SessionPicker({
                   onClick={() => open(session)}
                 >
                   <span className="picker-item-title">{session.title}</span>
-                  <span className="session-time">
-                    {relativeTime(session.updatedAt, now)}
-                  </span>
+                  <span className="session-time">{relativeTime(session.updatedAt, now)}</span>
                   <button
                     type="button"
                     className="icon-button small session-delete"
@@ -143,11 +113,7 @@ export function SessionPicker({
                     title="Delete"
                     onClick={(event) => {
                       event.stopPropagation();
-                      post({
-                        version: 1,
-                        type: "chat.delete",
-                        path: session.path,
-                      });
+                      post({ version: 1, type: "chat.delete", path: session.path });
                     }}
                   >
                     <span className="codicon codicon-trash" />
@@ -214,13 +180,7 @@ export function Header({
         >
           <span className="codicon codicon-history" />
         </button>
-        <button
-          type="button"
-          className="icon-button"
-          title="New chat"
-          aria-label="New chat"
-          onClick={onNewChat}
-        >
+        <button type="button" className="icon-button" title="New chat" aria-label="New chat" onClick={onNewChat}>
           <span className="codicon codicon-add" />
         </button>
       </div>

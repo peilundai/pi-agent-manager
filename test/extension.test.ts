@@ -1,23 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { activate, deactivate } from "../src/extension";
-import {
-  configuration,
-  resetVscodeMock,
-  setTabGroups,
-  tabGroup,
-  TabInputTerminal,
-} from "./vscode-mock";
+import { configuration, resetVscodeMock, setTabGroups, tabGroup, TabInputTerminal } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 
 const mock = vscode as unknown as typeof VscodeMock;
 
-const secrets = {
-  keys: async () => [],
-  get: async () => undefined,
-  store: async () => undefined,
-  delete: async () => undefined,
-};
+const secrets = { keys: async () => [], get: async () => undefined, store: async () => undefined, delete: async () => undefined };
 
 beforeEach(() => {
   resetVscodeMock();
@@ -27,9 +16,7 @@ beforeEach(() => {
 
 describe("extension activation", () => {
   it("registers the chat view and commands", async () => {
-    mock.workspace.workspaceFolders = [
-      { name: "w", index: 0, uri: mock.Uri.file("/w") },
-    ];
+    mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
     const subscriptions: Array<{ dispose(): void }> = [];
     await activate({
       extensionUri: mock.Uri.file("/ext"),
@@ -37,16 +24,10 @@ describe("extension activation", () => {
       workspaceState: { get: () => undefined, update: async () => undefined },
       secrets,
     } as never);
-    expect(mock.window.registerWebviewViewProvider).toHaveBeenCalledWith(
-      "piAgentManager.view",
-      expect.anything(),
-      {
-        webviewOptions: { retainContextWhenHidden: true },
-      },
-    );
-    expect(
-      mock.commands.registerCommand.mock.calls.map((call) => call[0]),
-    ).toEqual([
+    expect(mock.window.registerWebviewViewProvider).toHaveBeenCalledWith("piAgentManager.view", expect.anything(), {
+      webviewOptions: { retainContextWhenHidden: true },
+    });
+    expect(mock.commands.registerCommand.mock.calls.map((call) => call[0])).toEqual([
       "piAgentManager.open",
       "piAgentManager.newAgent",
       "piAgentManager.newChat",
@@ -59,10 +40,7 @@ describe("extension activation", () => {
       "piAgentManager.reloadEnvironment",
       "piAgentManager.showEnvironmentDiagnostics",
     ]);
-    expect(mock.window.registerWebviewPanelSerializer).toHaveBeenCalledWith(
-      "piAgentManager.agent",
-      expect.anything(),
-    );
+    expect(mock.window.registerWebviewPanelSerializer).toHaveBeenCalledWith("piAgentManager.agent", expect.anything());
     expect(subscriptions).toHaveLength(22);
     expect(mock.window.onDidChangeActiveTextEditor).toHaveBeenCalledOnce();
     expect(mock.window.onDidChangeTextEditorSelection).toHaveBeenCalledOnce();
@@ -73,26 +51,12 @@ describe("extension activation", () => {
 
   it("matches the commands contributed in package.json", async () => {
     const manifest = (await import("../package.json")).default as {
-      contributes: {
-        commands: Array<{ command: string }>;
-        views: Record<string, Array<{ id: string }>>;
-      };
+      contributes: { commands: Array<{ command: string }>; views: Record<string, Array<{ id: string }>> };
     };
-    await activate({
-      extensionUri: mock.Uri.file("/ext"),
-      subscriptions: [],
-      workspaceState: { get: () => undefined, update: async () => undefined },
-      secrets,
-    } as never);
-    const registered = mock.commands.registerCommand.mock.calls
-      .map((call) => call[0])
-      .sort();
-    expect(
-      manifest.contributes.commands.map((command) => command.command).sort(),
-    ).toEqual(registered);
-    expect(manifest.contributes.views.piAgentManager?.[0]?.id).toBe(
-      "piAgentManager.view",
-    );
+    await activate({ extensionUri: mock.Uri.file("/ext"), subscriptions: [], workspaceState: { get: () => undefined, update: async () => undefined }, secrets } as never);
+    const registered = mock.commands.registerCommand.mock.calls.map((call) => call[0]).sort();
+    expect(manifest.contributes.commands.map((command) => command.command).sort()).toEqual(registered);
+    expect(manifest.contributes.views.piAgentManager?.[0]?.id).toBe("piAgentManager.view");
     await deactivate();
   });
 });
@@ -113,9 +77,9 @@ function hostContext() {
 }
 
 async function runOpen(): Promise<void> {
-  const open = mock.commands.registerCommand.mock.calls.find(
-    (call) => call[0] === "piAgentManager.open",
-  )?.[1] as (() => Promise<void>) | undefined;
+  const open = mock.commands.registerCommand.mock.calls.find((call) => call[0] === "piAgentManager.open")?.[1] as
+    | (() => Promise<void>)
+    | undefined;
   if (!open) throw new Error("piAgentManager.open was not registered");
   await open();
 }
@@ -129,24 +93,12 @@ describe("chat placement", () => {
   beforeEach(() => configuration.set("defaultLocation", "sidebar"));
 
   it("uses the secondary view when its container command exists", async () => {
-    mock.commands.getCommands.mockResolvedValue([
-      SECONDARY_CONTAINER,
-      SECONDARY_FOCUS,
-      SIDEBAR_CONTAINER,
-      SIDEBAR_FOCUS,
-    ]);
+    mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER, SECONDARY_FOCUS, SIDEBAR_CONTAINER, SIDEBAR_FOCUS]);
     await activate(hostContext() as never);
     expect(mock.commands.getCommands).toHaveBeenCalledWith(true);
-    expect(mock.commands.executeCommand).not.toHaveBeenCalledWith(
-      "setContext",
-      FALLBACK_CONTEXT,
-      true,
-    );
+    expect(mock.commands.executeCommand).not.toHaveBeenCalledWith("setContext", FALLBACK_CONTEXT, true);
     const registered = mock.window.registerWebviewViewProvider.mock.calls;
-    expect(registered.map((call) => call[0])).toEqual([
-      "piAgentManager.view",
-      "piAgentManager.sidebarView",
-    ]);
+    expect(registered.map((call) => call[0])).toEqual(["piAgentManager.view", "piAgentManager.sidebarView"]);
     expect(registered[0]?.[1]).toBe(registered[1]?.[1]);
     await runOpen();
     expect(mock.commands.executeCommand).toHaveBeenCalledWith(SECONDARY_FOCUS);
@@ -157,17 +109,10 @@ describe("chat placement", () => {
   });
 
   it("opens the activity bar view when the secondary container command is missing", async () => {
-    mock.commands.getCommands.mockResolvedValue([
-      SIDEBAR_CONTAINER,
-      SIDEBAR_FOCUS,
-    ]);
+    mock.commands.getCommands.mockResolvedValue([SIDEBAR_CONTAINER, SIDEBAR_FOCUS]);
     await activate(hostContext() as never);
     expect(mock.commands.getCommands).toHaveBeenCalledWith(true);
-    expect(mock.commands.executeCommand).toHaveBeenCalledWith(
-      "setContext",
-      FALLBACK_CONTEXT,
-      true,
-    );
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", FALLBACK_CONTEXT, true);
     expect(executed()).not.toContain(SECONDARY_CONTAINER);
     await runOpen();
     expect(mock.commands.executeCommand).toHaveBeenCalledWith(SIDEBAR_FOCUS);
@@ -179,14 +124,8 @@ describe("chat placement", () => {
     mock.commands.getCommands.mockResolvedValue([]);
     await activate(hostContext() as never);
     await runOpen();
-    expect(executed().filter((command) => command !== "setContext")).toEqual(
-      [],
-    );
-    expect(mock.commands.executeCommand).toHaveBeenCalledWith(
-      "setContext",
-      FALLBACK_CONTEXT,
-      true,
-    );
+    expect(executed().filter((command) => command !== "setContext")).toEqual([]);
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith("setContext", FALLBACK_CONTEXT, true);
     expect(executed()).not.toContain(SECONDARY_CONTAINER);
     await deactivate();
   });
@@ -194,33 +133,23 @@ describe("chat placement", () => {
   it("uses the container command when the view focus command is absent", async () => {
     mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER]);
     await activate(hostContext() as never);
-    expect(mock.commands.executeCommand).not.toHaveBeenCalledWith(
-      "setContext",
-      FALLBACK_CONTEXT,
-      true,
-    );
+    expect(mock.commands.executeCommand).not.toHaveBeenCalledWith("setContext", FALLBACK_CONTEXT, true);
     await runOpen();
-    expect(mock.commands.executeCommand).toHaveBeenCalledWith(
-      SECONDARY_CONTAINER,
-    );
+    expect(mock.commands.executeCommand).toHaveBeenCalledWith(SECONDARY_CONTAINER);
     expect(executed()).not.toContain(SECONDARY_FOCUS);
     await deactivate();
   });
 });
 
 async function runCommand(id: string): Promise<void> {
-  const handler = mock.commands.registerCommand.mock.calls.find(
-    (call) => call[0] === id,
-  )?.[1] as (() => Promise<unknown>) | undefined;
+  const handler = mock.commands.registerCommand.mock.calls.find((call) => call[0] === id)?.[1] as (() => Promise<unknown>) | undefined;
   if (!handler) throw new Error(`${id} was not registered`);
   await handler();
 }
 
 describe("terminal mode", () => {
   beforeEach(() => {
-    mock.workspace.workspaceFolders = [
-      { name: "w", index: 0, uri: mock.Uri.file("/w") },
-    ];
+    mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
     // Any executable absolute path resolves without searching the developer's PATH for pi.
     configuration.set("command", process.execPath);
     configuration.set("tabMode", "terminal");
@@ -230,30 +159,18 @@ describe("terminal mode", () => {
     await activate(hostContext() as never);
     await runCommand("piAgentManager.newAgent");
     expect(mock.window.createTerminal).toHaveBeenCalledOnce();
-    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({
-      cwd: "/w",
-      isTransient: true,
-    });
+    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/w", isTransient: true });
     expect(mock.window.createWebviewPanel).not.toHaveBeenCalled();
     await deactivate();
   });
 
   it("reopens the Pi terminals of the last window after a reload", async () => {
-    const saved = [
-      { sessionId: "abc", folder: "/w", viewColumn: 1, number: 2 },
-    ];
+    const saved = [{ sessionId: "abc", folder: "/w", viewColumn: 1, number: 2 }];
     const context = hostContext();
-    context.workspaceState.get = ((key: string) =>
-      key === "piAgentManager.terminalAgents" ? saved : undefined) as never;
+    context.workspaceState.get = ((key: string) => (key === "piAgentManager.terminalAgents" ? saved : undefined)) as never;
     await activate(context as never);
-    await vi.waitFor(() =>
-      expect(mock.window.createTerminal).toHaveBeenCalledOnce(),
-    );
-    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({
-      cwd: "/w",
-      name: "Pi Agent 2",
-      isTransient: true,
-    });
+    await vi.waitFor(() => expect(mock.window.createTerminal).toHaveBeenCalledOnce());
+    expect(mock.window.createTerminal.mock.calls[0]?.[0]).toMatchObject({ cwd: "/w", name: "Pi Agent 2", isTransient: true });
     await deactivate();
   });
 
@@ -261,9 +178,7 @@ describe("terminal mode", () => {
     configuration.set("tabMode", "chat");
     const context = hostContext();
     context.workspaceState.get = ((key: string) =>
-      key === "piAgentManager.terminalAgents"
-        ? [{ sessionId: "abc", folder: "/w", viewColumn: 1 }]
-        : undefined) as never;
+      key === "piAgentManager.terminalAgents" ? [{ sessionId: "abc", folder: "/w", viewColumn: 1 }] : undefined) as never;
     await activate(context as never);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mock.window.createTerminal).not.toHaveBeenCalled();
@@ -272,10 +187,7 @@ describe("terminal mode", () => {
 
   it("keeps the chat UI in the side bar", async () => {
     configuration.set("defaultLocation", "sidebar");
-    mock.commands.getCommands.mockResolvedValue([
-      SECONDARY_CONTAINER,
-      SECONDARY_FOCUS,
-    ]);
+    mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER, SECONDARY_FOCUS]);
     await activate(hostContext() as never);
     await runOpen();
     expect(mock.window.createTerminal).not.toHaveBeenCalled();
@@ -292,80 +204,49 @@ describe("view contributions", () => {
           secondarySidebar?: Array<{ id: string }>;
           activitybar?: Array<{ id: string }>;
         };
-        views: Record<
-          string,
-          Array<{ id: string; type?: string; when?: string }>
-        >;
+        views: Record<string, Array<{ id: string; type?: string; when?: string }>>;
       };
     };
-    expect(
-      manifest.contributes.viewsContainers.secondarySidebar?.map(
-        (container) => container.id,
-      ),
-    ).toEqual(["piAgentManager"]);
-    expect(
-      manifest.contributes.viewsContainers.activitybar?.map(
-        (container) => container.id,
-      ),
-    ).toEqual(["piAgentManagerSidebar"]);
+    expect(manifest.contributes.viewsContainers.secondarySidebar?.map((container) => container.id)).toEqual(["piAgentManager"]);
+    expect(manifest.contributes.viewsContainers.activitybar?.map((container) => container.id)).toEqual(["piAgentManagerSidebar"]);
     expect(manifest.contributes.views.piAgentManager?.[0]).toMatchObject({
       id: "piAgentManager.view",
       type: "webview",
       when: `!${FALLBACK_CONTEXT} && config.piAgentManager.defaultLocation == sidebar`,
     });
-    expect(manifest.contributes.views.piAgentManagerSidebar?.[0]).toMatchObject(
-      {
-        id: "piAgentManager.sidebarView",
-        type: "webview",
-        when: `${FALLBACK_CONTEXT} && config.piAgentManager.defaultLocation == sidebar`,
-      },
-    );
+    expect(manifest.contributes.views.piAgentManagerSidebar?.[0]).toMatchObject({
+      id: "piAgentManager.sidebarView",
+      type: "webview",
+      when: `${FALLBACK_CONTEXT} && config.piAgentManager.defaultLocation == sidebar`,
+    });
   });
 
   it("defaults new agents to editor tabs and restores them after a reload", async () => {
     const manifest = (await import("../package.json")).default as {
       activationEvents: string[];
       contributes: {
-        configuration: {
-          properties: Record<string, { default?: unknown; enum?: unknown[] }>;
-        };
+        configuration: { properties: Record<string, { default?: unknown; enum?: unknown[] }> };
         menus: Record<string, Array<{ command: string; when?: string }>>;
       };
     };
-    expect(
-      manifest.contributes.configuration.properties[
-        "piAgentManager.defaultLocation"
-      ],
-    ).toMatchObject({
+    expect(manifest.contributes.configuration.properties["piAgentManager.defaultLocation"]).toMatchObject({
       default: "editor",
       enum: ["editor", "sidebar"],
     });
-    expect(
-      manifest.contributes.configuration.properties["piAgentManager.tabMode"],
-    ).toMatchObject({
+    expect(manifest.contributes.configuration.properties["piAgentManager.tabMode"]).toMatchObject({
       default: "chat",
       enum: ["chat", "terminal"],
     });
-    expect(manifest.activationEvents).toContain(
-      "onWebviewPanel:piAgentManager.agent",
-    );
+    expect(manifest.activationEvents).toContain("onWebviewPanel:piAgentManager.agent");
     expect(manifest.contributes.menus["editor/title"]).toEqual([
-      expect.objectContaining({
-        command: "piAgentManager.newAgent",
-        when: "config.piAgentManager.defaultLocation != sidebar",
-      }),
-      expect.objectContaining({
-        command: "piAgentManager.open",
-        when: "config.piAgentManager.defaultLocation == sidebar",
-      }),
+      expect.objectContaining({ command: "piAgentManager.newAgent", when: "config.piAgentManager.defaultLocation != sidebar" }),
+      expect.objectContaining({ command: "piAgentManager.open", when: "config.piAgentManager.defaultLocation == sidebar" }),
     ]);
   });
 });
 
 function command(name: string): () => Promise<void> {
-  const handler = mock.commands.registerCommand.mock.calls.find(
-    (call) => call[0] === name,
-  )?.[1] as (() => Promise<void>) | undefined;
+  const handler = mock.commands.registerCommand.mock.calls.find((call) => call[0] === name)?.[1] as (() => Promise<void>) | undefined;
   if (!handler) throw new Error(`${name} was not registered`);
   return handler;
 }
@@ -384,13 +265,8 @@ function memento(initial: Record<string, unknown> = {}) {
 
 describe("editor-tab agents", () => {
   beforeEach(() => {
-    mock.workspace.workspaceFolders = [
-      { name: "w", index: 0, uri: mock.Uri.file("/w") },
-    ];
-    mock.commands.getCommands.mockResolvedValue([
-      SECONDARY_CONTAINER,
-      SECONDARY_FOCUS,
-    ]);
+    mock.workspace.workspaceFolders = [{ name: "w", index: 0, uri: mock.Uri.file("/w") }];
+    mock.commands.getCommands.mockResolvedValue([SECONDARY_CONTAINER, SECONDARY_FOCUS]);
   });
 
   it("opens each new agent in its own editor tab", async () => {
@@ -399,16 +275,11 @@ describe("editor-tab agents", () => {
     await command("piAgentManager.newAgent")();
     await command("piAgentManager.newAgent")();
     expect(mock.window.createWebviewPanel).toHaveBeenCalledTimes(2);
-    expect(mock.window.createWebviewPanel).toHaveBeenCalledWith(
-      "piAgentManager.agent",
-      "Pi Agent",
-      expect.anything(),
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [expect.objectContaining({ fsPath: "/ext/dist" })],
-      },
-    );
+    expect(mock.window.createWebviewPanel).toHaveBeenCalledWith("piAgentManager.agent", "Pi Agent", expect.anything(), {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [expect.objectContaining({ fsPath: "/ext/dist" })],
+    });
     const [first, second] = mock.window.panels;
     expect(first?.webview.html).toContain("webview.js");
     expect(second?.webview.html).toContain("webview.js");
@@ -424,22 +295,13 @@ describe("editor-tab agents", () => {
     await activate({ ...hostContext(), workspaceState: memento() } as never);
     setTabGroups([tabGroup(1, [{ input: {}, label: "index.ts" }])]);
     await command("piAgentManager.newAgent")();
-    expect(mock.window.createWebviewPanel.mock.calls[0]?.[2]).toEqual({
-      viewColumn: 2,
-      preserveFocus: false,
-    });
+    expect(mock.window.createWebviewPanel.mock.calls[0]?.[2]).toEqual({ viewColumn: 2, preserveFocus: false });
     configuration.set("tabMode", "terminal");
     await command("piAgentManager.newAgent")();
     configuration.set("tabMode", "chat");
-    setTabGroups([
-      tabGroup(1, [{ input: {}, label: "index.ts" }]),
-      tabGroup(3, [{ input: new TabInputTerminal(), label: "Pi Agent" }]),
-    ]);
+    setTabGroups([tabGroup(1, [{ input: {}, label: "index.ts" }]), tabGroup(3, [{ input: new TabInputTerminal(), label: "Pi Agent" }])]);
     await command("piAgentManager.newAgent")();
-    expect(mock.window.createWebviewPanel.mock.calls[1]?.[2]).toEqual({
-      viewColumn: 3,
-      preserveFocus: false,
-    });
+    expect(mock.window.createWebviewPanel.mock.calls[1]?.[2]).toEqual({ viewColumn: 3, preserveFocus: false });
     await deactivate();
   });
 
@@ -476,43 +338,25 @@ describe("editor-tab agents", () => {
   it("restores a tab with the agent id its webview kept", async () => {
     const state = memento({ "piAgentManager.editorAgents": ["agent-1"] });
     await activate({ ...hostContext(), workspaceState: state } as never);
-    const serializer = mock.window.registerWebviewPanelSerializer.mock
-      .calls[0]?.[1] as {
+    const serializer = mock.window.registerWebviewPanelSerializer.mock.calls[0]?.[1] as {
       deserializeWebviewPanel(panel: unknown, state: unknown): Promise<void>;
     };
-    const panel = new mock.MockWebviewPanel(
-      "piAgentManager.agent",
-      "Fix login",
-    );
-    await serializer.deserializeWebviewPanel(panel, {
-      agentId: "agent-1",
-      draft: "hi",
-    });
-    expect(panel.webview.html).toContain(
-      '<meta name="pi-agent-id" content="agent-1" />',
-    );
+    const panel = new mock.MockWebviewPanel("piAgentManager.agent", "Fix login");
+    await serializer.deserializeWebviewPanel(panel, { agentId: "agent-1", draft: "hi" });
+    expect(panel.webview.html).toContain('<meta name="pi-agent-id" content="agent-1" />');
     expect(panel.title).toBe("Pi Agent");
     // A second copy of an agent that is already on screen is closed.
-    const duplicate = new mock.MockWebviewPanel(
-      "piAgentManager.agent",
-      "Pi Agent",
-    );
+    const duplicate = new mock.MockWebviewPanel("piAgentManager.agent", "Pi Agent");
     await serializer.deserializeWebviewPanel(duplicate, { agentId: "agent-1" });
     expect(duplicate.disposed).toBe(true);
-    expect(state.values.get("piAgentManager.editorAgents")).toEqual([
-      "agent-1",
-    ]);
+    expect(state.values.get("piAgentManager.editorAgents")).toEqual(["agent-1"]);
     await deactivate();
   });
 
   it("forgets the agents when none of their tabs came back", async () => {
     const state = memento({
       "piAgentManager.editorAgents": ["agent-1"],
-      "piAgentManager.relay.agent-1": {
-        socketPath: "/tmp/x",
-        token: "t",
-        cwd: "/w",
-      },
+      "piAgentManager.relay.agent-1": { socketPath: "/tmp/x", token: "t", cwd: "/w" },
     });
     await activate({ ...hostContext(), workspaceState: state } as never);
     await new Promise((resolve) => setTimeout(resolve, 10));

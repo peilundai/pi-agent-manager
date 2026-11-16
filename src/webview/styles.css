@@ -13,13 +13,7 @@ body,
 body {
   background: var(--pi-surface);
   color: var(--pi-text);
-  font-family: var(
-    --vscode-font-family,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif
-  );
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: var(--vscode-font-size, 13px);
   line-height: 1.5;
   overflow: hidden;
@@ -38,13 +32,7 @@ button {
 code,
 pre,
 .mono {
-  font-family: var(
-    --vscode-editor-font-family,
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace
-  );
+  font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: calc(var(--vscode-editor-font-size, 12px) * 0.95);
 }
 
@@ -553,14 +541,7 @@ pre,
 }
 
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--pi-muted) 0%,
-    var(--pi-muted) 40%,
-    var(--pi-text) 50%,
-    var(--pi-muted) 60%,
-    var(--pi-muted) 100%
-  );
+  background: linear-gradient(90deg, var(--pi-muted) 0%, var(--pi-muted) 40%, var(--pi-text) 50%, var(--pi-muted) 60%, var(--pi-muted) 100%);
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -752,10 +733,7 @@ pre,
 }
 
 .hljs-addition {
-  color: var(
-    --vscode-gitDecoration-addedResourceForeground,
-    var(--pi-diff-added)
-  );
+  color: var(--vscode-gitDecoration-addedResourceForeground, var(--pi-diff-added));
 }
 
 .hljs-number,
@@ -786,10 +764,7 @@ pre,
 }
 
 .hljs-deletion {
-  color: var(
-    --vscode-gitDecoration-deletedResourceForeground,
-    var(--pi-diff-removed)
-  );
+  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--pi-diff-removed));
 }
 
 .hljs-emphasis {
@@ -845,17 +820,11 @@ pre,
 }
 
 .tool-stat-add {
-  color: var(
-    --vscode-gitDecoration-addedResourceForeground,
-    var(--pi-diff-added)
-  );
+  color: var(--vscode-gitDecoration-addedResourceForeground, var(--pi-diff-added));
 }
 
 .tool-stat-del {
-  color: var(
-    --vscode-gitDecoration-deletedResourceForeground,
-    var(--pi-diff-removed)
-  );
+  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--pi-diff-removed));
 }
 
 .tool-duration {
@@ -1038,14 +1007,8 @@ pre,
     --vscode-diffEditor-removedLineBackground,
     color-mix(in srgb, var(--pi-diff-removed) 18%, transparent)
   );
-  --pi-diff-add-fg: var(
-    --vscode-gitDecoration-addedResourceForeground,
-    var(--pi-diff-added)
-  );
-  --pi-diff-del-fg: var(
-    --vscode-gitDecoration-deletedResourceForeground,
-    var(--pi-diff-removed)
-  );
+  --pi-diff-add-fg: var(--vscode-gitDecoration-addedResourceForeground, var(--pi-diff-added));
+  --pi-diff-del-fg: var(--vscode-gitDecoration-deletedResourceForeground, var(--pi-diff-removed));
 }
 
 .diff-add {
@@ -1079,15 +1042,13 @@ pre,
 /* High contrast themes outline changed lines instead of relying on tint alone. */
 body.vscode-high-contrast .diff-add,
 body.vscode-high-contrast-light .diff-add {
-  outline: 1px dashed
-    var(--vscode-diffEditor-insertedTextBorder, var(--pi-diff-add-fg));
+  outline: 1px dashed var(--vscode-diffEditor-insertedTextBorder, var(--pi-diff-add-fg));
   outline-offset: -1px;
 }
 
 body.vscode-high-contrast .diff-del,
 body.vscode-high-contrast-light .diff-del {
-  outline: 1px dashed
-    var(--vscode-diffEditor-removedTextBorder, var(--pi-diff-del-fg));
+  outline: 1px dashed var(--vscode-diffEditor-removedTextBorder, var(--pi-diff-del-fg));
   outline-offset: -1px;
 }
 
@@ -1149,11 +1110,7 @@ body.vscode-high-contrast-light .diff-del {
 
 .notice-error {
   border-color: color-mix(in srgb, var(--pi-error) 32%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--pi-tool-error-bg) 70%,
-    var(--pi-surface)
-  );
+  background: color-mix(in srgb, var(--pi-tool-error-bg) 70%, var(--pi-surface));
 }
 
 .notice-error .codicon-error {
@@ -1574,11 +1531,7 @@ body.vscode-high-contrast-light .diff-del {
 }
 
 .composer:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--pi-accent) 70%,
-    var(--pi-hairline-strong)
-  );
+  border-color: color-mix(in srgb, var(--pi-accent) 70%, var(--pi-hairline-strong));
 }
 
 .composer.dragging {
@@ -1803,28 +1756,14 @@ body.vscode-high-contrast-light .diff-del {
   color: var(--pi-muted);
 }
 
-.level-minimal {
-  color: var(--pi-thinking-minimal);
-}
-.level-low {
-  color: var(--pi-thinking-low);
-}
-.level-medium {
-  color: var(--pi-thinking-medium);
-}
-.level-high {
-  color: var(--pi-thinking-high);
-}
-.level-xhigh {
-  color: var(--pi-thinking-xhigh);
-}
-.level-max {
-  color: var(--pi-thinking-max);
-}
+.level-minimal { color: var(--pi-thinking-minimal); }
+.level-low { color: var(--pi-thinking-low); }
+.level-medium { color: var(--pi-thinking-medium); }
+.level-high { color: var(--pi-thinking-high); }
+.level-xhigh { color: var(--pi-thinking-xhigh); }
+.level-max { color: var(--pi-thinking-max); }
 .model-level.level-off,
-.segment.level-off {
-  color: var(--pi-muted);
-}
+.segment.level-off { color: var(--pi-muted); }
 
 .toolbar-spacer {
   flex: 1;

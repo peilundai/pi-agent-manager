@@ -25,27 +25,15 @@ function formatChord(chord: string, mac: boolean): string {
   const key = pieces.at(-1) ?? "";
   const modifiers = pieces.slice(0, -1);
   const labels = mac ? MAC_MODIFIER : OTHER_MODIFIER;
-  const keyLabel =
-    key.length === 1
-      ? key.toUpperCase()
-      : `${key.slice(0, 1).toUpperCase()}${key.slice(1)}`;
-  const modifierLabels = modifiers.map(
-    (modifier) => labels[modifier] ?? modifier,
-  );
-  return mac
-    ? `${modifierLabels.join("")}${keyLabel}`
-    : [...modifierLabels, keyLabel].join("+");
+  const keyLabel = key.length === 1 ? key.toUpperCase() : `${key.slice(0, 1).toUpperCase()}${key.slice(1)}`;
+  const modifierLabels = modifiers.map((modifier) => labels[modifier] ?? modifier);
+  return mac ? `${modifierLabels.join("")}${keyLabel}` : [...modifierLabels, keyLabel].join("+");
 }
 
 export function shortcutLabel(command: string, platform: string): string {
-  const binding = manifest.contributes.keybindings.find(
-    (item) => item.command === command,
-  );
+  const binding = manifest.contributes.keybindings.find((item) => item.command === command);
   if (!binding) throw new Error(`No keybinding contributed for ${command}`);
-  const chord =
-    platform === "darwin" && binding.mac !== undefined
-      ? binding.mac
-      : binding.key;
+  const chord = platform === "darwin" && binding.mac !== undefined ? binding.mac : binding.key;
   return chord
     .split(" ")
     .map((part) => formatChord(part, platform === "darwin"))

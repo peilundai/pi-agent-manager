@@ -72,20 +72,14 @@ class SessionAccumulator {
     if (!entry || this.invalidHeader) return;
 
     if (!this.header) {
-      if (
-        entry.type !== "session" ||
-        typeof entry.id !== "string" ||
-        typeof entry.cwd !== "string"
-      ) {
+      if (entry.type !== "session" || typeof entry.id !== "string" || typeof entry.cwd !== "string") {
         this.invalidHeader = true;
         return;
       }
       this.header = {
         id: entry.id,
         cwd: entry.cwd,
-        ...(typeof entry.timestamp === "string"
-          ? { timestamp: entry.timestamp }
-          : {}),
+        ...(typeof entry.timestamp === "string" ? { timestamp: entry.timestamp } : {}),
       };
       return;
     }
@@ -103,9 +97,7 @@ class SessionAccumulator {
 
   result(path: string, stat: SessionFileStat): ParsedSession | undefined {
     if (!this.header || this.invalidHeader) return undefined;
-    const timestamp = this.header.timestamp
-      ? Date.parse(this.header.timestamp)
-      : Number.NaN;
+    const timestamp = this.header.timestamp ? Date.parse(this.header.timestamp) : Number.NaN;
     const createdAt = Number.isFinite(timestamp)
       ? timestamp
       : stat.birthtimeMs > 0
@@ -141,10 +133,7 @@ export async function parseSessionFile(
 ): Promise<ParsedSession | undefined> {
   const stat = knownStat ?? (await fileStat(path));
   const accumulator = new SessionAccumulator();
-  const lines = createInterface({
-    input: createReadStream(path, { encoding: "utf8" }),
-    crlfDelay: Infinity,
-  });
+  const lines = createInterface({ input: createReadStream(path, { encoding: "utf8" }), crlfDelay: Infinity });
   for await (const line of lines) accumulator.accept(line);
   return accumulator.result(path, stat);
 }

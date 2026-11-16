@@ -1,8 +1,6 @@
 import type { EditorSelectionContext } from "./selection";
 
-interface EditorSelectionSource<
-  TUri extends { scheme: string } = { scheme: string },
-> {
+interface EditorSelectionSource<TUri extends { scheme: string } = { scheme: string }> {
   document: {
     uri: TUri;
     fileName: string;
@@ -19,10 +17,7 @@ interface EditorSelectionSource<
 }
 
 /** Captures the selection, or the current line when nothing is selected. */
-export function selectionFromEditor(
-  editor: EditorSelectionSource,
-  relativePath: string,
-): EditorSelectionContext {
+export function selectionFromEditor(editor: EditorSelectionSource, relativePath: string): EditorSelectionContext {
   const { document, selection } = editor;
   if (selection.isEmpty) {
     const line = selection.active.line;
@@ -59,9 +54,7 @@ export function resolveWorkspaceFolder<TFolder, TUri>(
   workspace: WorkspaceBoundary<TFolder, TUri>,
   activeEditor?: { document: { uri: TUri } },
 ): TFolder | undefined {
-  const activeFolder = activeEditor
-    ? workspace.getWorkspaceFolder(activeEditor.document.uri)
-    : undefined;
+  const activeFolder = activeEditor ? workspace.getWorkspaceFolder(activeEditor.document.uri) : undefined;
   if (activeFolder) return activeFolder;
   return workspace.workspaceFolders?.[0];
 }
@@ -71,14 +64,8 @@ export function boundFilePosition(
   target: { line?: number; column?: number },
   document: { lineCount: number; lineAt(line: number): { text: string } },
 ): { line: number; column: number } {
-  const line = Math.min(
-    Math.max(target.line ?? 0, 0),
-    Math.max(document.lineCount - 1, 0),
-  );
-  const column = Math.min(
-    Math.max(target.column ?? 0, 0),
-    document.lineAt(line).text.length,
-  );
+  const line = Math.min(Math.max(target.line ?? 0, 0), Math.max(document.lineCount - 1, 0));
+  const column = Math.min(Math.max(target.column ?? 0, 0), document.lineAt(line).text.length);
   return { line, column };
 }
 
@@ -102,20 +89,13 @@ export function fuzzyScore(path: string, query: string): number | undefined {
   return 1_000 + gaps;
 }
 
-export function searchFiles(
-  files: readonly string[],
-  query: string,
-  limit = 20,
-): string[] {
+export function searchFiles(files: readonly string[], query: string, limit = 20): string[] {
   const scored: Array<{ path: string; score: number }> = [];
   for (const path of files) {
     const score = fuzzyScore(path, query.trim());
     if (score !== undefined) scored.push({ path, score });
   }
-  scored.sort(
-    (left, right) =>
-      left.score - right.score || left.path.localeCompare(right.path),
-  );
+  scored.sort((left, right) => left.score - right.score || left.path.localeCompare(right.path));
   return scored.slice(0, limit).map((entry) => entry.path);
 }
 

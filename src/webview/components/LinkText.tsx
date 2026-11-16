@@ -5,11 +5,7 @@ import { useChat } from "./context";
 const CHIP_MIN_LENGTH = 48;
 const URL_PATTERN = /https?:\/\/[^\s<>"'`]+/gi;
 const TRAILING_PUNCTUATION = ".,;:!?'\"";
-const CLOSING_BRACKETS: Record<string, string> = {
-  ")": "(",
-  "]": "[",
-  "}": "{",
-};
+const CLOSING_BRACKETS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 
 function count(text: string, char: string): number {
   return text.split(char).length - 1;
@@ -26,19 +22,13 @@ export function trimUrl(url: string): string {
     const char = url[end - 1] ?? "";
     const opener = CLOSING_BRACKETS[char];
     const body = url.slice(0, end);
-    if (
-      TRAILING_PUNCTUATION.includes(char) ||
-      (opener && count(body, char) > count(body, opener))
-    )
-      end -= 1;
+    if (TRAILING_PUNCTUATION.includes(char) || (opener && count(body, char) > count(body, opener))) end -= 1;
     else break;
   }
   return url.slice(0, end);
 }
 
-export type TextSegment =
-  | { type: "text"; text: string }
-  | { type: "url"; url: string; block: boolean };
+export type TextSegment = { type: "text"; text: string } | { type: "url"; url: string; block: boolean };
 
 /**
  * Splits plain text into text and URL segments. Long URLs are marked as blocks; the
@@ -50,23 +40,19 @@ export function splitLinks(text: string): TextSegment[] {
   for (const match of text.matchAll(URL_PATTERN)) {
     const start = match.index;
     const url = trimUrl(match[0]);
-    if (start > last)
-      segments.push({ type: "text", text: text.slice(last, start) });
+    if (start > last) segments.push({ type: "text", text: text.slice(last, start) });
     segments.push({ type: "url", url, block: url.length >= CHIP_MIN_LENGTH });
     last = start + url.length;
   }
-  if (last < text.length)
-    segments.push({ type: "text", text: text.slice(last) });
+  if (last < text.length) segments.push({ type: "text", text: text.slice(last) });
   return segments
     .map((segment, index) => {
       if (segment.type !== "text") return segment;
       const before = segments[index - 1];
       const after = segments[index + 1];
       let value = segment.text;
-      if (before?.type === "url" && before.block)
-        value = value.replace(/^\s+/, "");
-      if (after?.type === "url" && after.block)
-        value = value.replace(/\s+$/, "");
+      if (before?.type === "url" && before.block) value = value.replace(/^\s+/, "");
+      if (after?.type === "url" && after.block) value = value.replace(/\s+$/, "");
       return { ...segment, text: value };
     })
     .filter((segment) => segment.type !== "text" || segment.text !== "");
@@ -93,12 +79,7 @@ export function UrlChip({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="url-chip">
-      <button
-        type="button"
-        className="url-chip-open"
-        title={url}
-        onClick={() => post({ version: 1, type: "url.open", url })}
-      >
+      <button type="button" className="url-chip-open" title={url} onClick={() => post({ version: 1, type: "url.open", url })}>
         <span className="codicon codicon-link-external" aria-hidden="true" />
         <span className="url-chip-text">
           <UrlParts url={url} />
@@ -116,10 +97,7 @@ export function UrlChip({ url }: { url: string }) {
           });
         }}
       >
-        <span
-          className={`codicon codicon-${copied ? "check" : "copy"}`}
-          aria-hidden="true"
-        />
+        <span className={`codicon codicon-${copied ? "check" : "copy"}`} aria-hidden="true" />
       </button>
     </span>
   );
@@ -131,8 +109,7 @@ export function LinkText({ text }: { text: string }) {
   return (
     <>
       {splitLinks(text).map((segment, index) => {
-        if (segment.type === "text")
-          return <Fragment key={index}>{segment.text}</Fragment>;
+        if (segment.type === "text") return <Fragment key={index}>{segment.text}</Fragment>;
         if (segment.block) return <UrlChip key={index} url={segment.url} />;
         return (
           <a

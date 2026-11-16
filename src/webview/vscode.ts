@@ -1,7 +1,4 @@
-import type {
-  ContextReference,
-  WebviewToHostMessage,
-} from "../shared/protocol";
+import type { ContextReference, WebviewToHostMessage } from "../shared/protocol";
 
 export interface PersistedWebviewState {
   draft?: string;
@@ -31,10 +28,7 @@ type VsCodeGlobal = typeof globalThis & {
 /** The agent id the host put in the page for an editor tab; the sidebar has none. */
 function pageAgentId(): string | undefined {
   if (typeof document === "undefined") return undefined;
-  return (
-    document.querySelector<HTMLMetaElement>('meta[name="pi-agent-id"]')
-      ?.content || undefined
-  );
+  return document.querySelector<HTMLMetaElement>('meta[name="pi-agent-id"]')?.content || undefined;
 }
 
 export function createVsCodeTransport(): WebviewTransport {
@@ -42,13 +36,10 @@ export function createVsCodeTransport(): WebviewTransport {
   const agentId = pageAgentId();
   const getState = (): PersistedWebviewState => {
     const value = api?.getState();
-    return typeof value === "object" && value !== null
-      ? (value as PersistedWebviewState)
-      : {};
+    return typeof value === "object" && value !== null ? (value as PersistedWebviewState) : {};
   };
   // VS Code hands the saved state to the panel serializer after a reload; it must name the agent.
-  const setState = (state: PersistedWebviewState) =>
-    api?.setState(agentId ? { ...state, agentId } : state);
+  const setState = (state: PersistedWebviewState) => api?.setState(agentId ? { ...state, agentId } : state);
   if (agentId && getState().agentId !== agentId) setState(getState());
   return { post: (message) => api?.postMessage(message), getState, setState };
 }

@@ -8,19 +8,18 @@ export type AgentTabTest = (tab: vscode.Tab) => boolean;
 
 /** A Pi chat tab, restored or not; VS Code prefixes the panel type. */
 export function isAgentPanelTab(tab: vscode.Tab): boolean {
-  return (
-    tab.input instanceof vscode.TabInputWebview &&
-    tab.input.viewType.endsWith(AGENT_PANEL_TYPE)
-  );
+  return tab.input instanceof vscode.TabInputWebview && tab.input.viewType.endsWith(AGENT_PANEL_TYPE);
 }
 
 /** VS Code has at most nine editor columns. */
 const MAX_VIEW_COLUMN = 9;
 
+type PlacementGroup = Pick<vscode.TabGroup, "viewColumn" | "tabs">;
+
 /** The editor groups, as far as placement needs them. */
 export interface PlacementGroups {
-  all: readonly Pick<vscode.TabGroup, "viewColumn" | "tabs">[];
-  activeTabGroup: Pick<vscode.TabGroup, "viewColumn" | "tabs"> | undefined;
+  all: readonly PlacementGroup[];
+  activeTabGroup: PlacementGroup | undefined;
 }
 
 /**
@@ -33,30 +32,17 @@ export interface PlacementGroups {
  *    them, so the chat does not cover the user's files.
  * 4. Otherwise (nothing open, or the user is in an empty group) where the user is.
  */
-export function agentViewColumn(
-  isAgentTab: AgentTabTest,
-  preferred?: number,
-  groups: PlacementGroups = vscode.window.tabGroups,
-): vscode.ViewColumn {
+export function agentViewColumn(isAgentTab: AgentTabTest, preferred?: number, groups: PlacementGroups = vscode.window.tabGroups): vscode.ViewColumn {
   const all = groups.all ?? [];
   const active = groups.activeTabGroup;
   if (active?.tabs.some(isAgentTab)) return active.viewColumn;
   const agentGroups = all.filter((group) => group.tabs.some(isAgentTab));
-  const preferredGroup = agentGroups.find(
-    (group) => group.viewColumn === preferred,
-  );
   const agentGroup =
-    preferredGroup ??
-    agentGroups.reduce<(typeof agentGroups)[number] | undefined>(
-      (right, group) =>
-        !right || group.viewColumn > right.viewColumn ? group : right,
-      undefined,
-    );
+    agentGroups.find((group) => group.viewColumn === preferred) ??
+    agentGroups.reduce<PlacementGroup | undefined>((right, group) => (!right || group.viewColumn > right.viewColumn ? group : right), undefined);
   if (agentGroup) return agentGroup.viewColumn;
   if (!active?.tabs.length) return vscode.ViewColumn.Active;
-  const rightMost = Math.max(...all.map((group) => group.viewColumn));
+  const rightMost = Math.max(active.viewColumn, ...all.map((group) => group.viewColumn));
   // A column one past the last group makes VS Code open a new group on the right.
-  return rightMost < MAX_VIEW_COLUMN
-    ? ((rightMost + 1) as vscode.ViewColumn)
-    : vscode.ViewColumn.Beside;
+  return rightMost < MAX_VIEW_COLUMN ? ((rightMost + 1) as vscode.ViewColumn) : vscode.ViewColumn.Beside;
 }

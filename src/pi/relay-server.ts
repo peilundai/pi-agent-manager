@@ -35,17 +35,10 @@ export interface RelayConfig {
   graceMs?: number;
 }
 
-export type RelaySpawnFn = (
-  options: RpcSpawnOptions,
-) => ChildProcessWithoutNullStreams;
+export type RelaySpawnFn = (options: RpcSpawnOptions) => ChildProcessWithoutNullStreams;
 
 const defaultSpawn: RelaySpawnFn = ({ file, args, cwd, env }) =>
-  spawn(file, args, {
-    cwd,
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
+  spawn(file, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,10 +60,7 @@ export interface RelayServer {
 }
 
 /** Spawns Pi, listens on the socket and resolves once both are up. */
-export async function startRelay(
-  config: RelayConfig,
-  spawnFn: RelaySpawnFn = defaultSpawn,
-): Promise<RelayServer> {
+export async function startRelay(config: RelayConfig, spawnFn: RelaySpawnFn = defaultSpawn): Promise<RelayServer> {
   const graceMs = config.graceMs ?? RELAY_GRACE_MS;
   const replay = new RunReplay();
   let client: { socket: Socket; connection: number } | undefined;
@@ -90,8 +80,7 @@ export async function startRelay(
   child.stdin.on("error", () => undefined);
 
   const toClient = (record: unknown) => {
-    if (client && !client.socket.destroyed)
-      client.socket.write(encodeJsonl(record));
+    if (client && !client.socket.destroyed) client.socket.write(encodeJsonl(record));
   };
 
   const stop = () => {
@@ -112,11 +101,9 @@ export async function startRelay(
     if (!isRecord(record) || typeof record.type !== "string") return;
     if (record.type === "response") {
       // Only the connection that asked gets the answer; a reloaded window starts its ids over.
-      const id =
-        typeof record.id === "string" ? /^(\d+):(.*)$/s.exec(record.id) : null;
+      const id = typeof record.id === "string" ? /^(\d+):(.*)$/s.exec(record.id) : null;
       if (!id) return toClient(record);
-      if (client && Number(id[1]) === client.connection)
-        toClient({ ...record, id: id[2] });
+      if (client && Number(id[1]) === client.connection) toClient({ ...record, id: id[2] });
       return;
     }
     replay.track(record as PiEvent);
@@ -131,12 +118,7 @@ export async function startRelay(
   });
 
   const fromClient = (connection: number, record: unknown) => {
-    if (
-      !isRecord(record) ||
-      typeof record.type !== "string" ||
-      client?.connection !== connection
-    )
-      return;
+    if (!isRecord(record) || typeof record.type !== "string" || client?.connection !== connection) return;
     if (record.type === "relay.stop") return stop();
     if (record.type === "extension_ui_response") {
       if (typeof record.id === "string") replay.respond(record.id);
@@ -153,23 +135,12 @@ export async function startRelay(
     const decoder = new JsonlDecoder((record) => {
       if (accepted) return fromClient(connection, record);
       clearTimeout(helloTimer);
-      if (
-        !isRecord(record) ||
-        record.type !== "relay.hello" ||
-        !sameSecret(config.token, record.token)
-      ) {
-        socket.end(
-          encodeJsonl({ type: "relay.refused", reason: "unauthorized" }),
-        );
+      if (!isRecord(record) || record.type !== "relay.hello" || !sameSecret(config.token, record.token)) {
+        socket.end(encodeJsonl({ type: "relay.refused", reason: "unauthorized" }));
         return;
       }
       if (record.protocol !== RELAY_PROTOCOL || exited || stopping) {
-        socket.end(
-          encodeJsonl({
-            type: "relay.refused",
-            reason: exited || stopping ? "stopping" : "protocol",
-          }),
-        );
+        socket.end(encodeJsonl({ type: "relay.refused", reason: exited || stopping ? "stopping" : "protocol" }));
         return;
       }
       accepted = true;
@@ -178,12 +149,7 @@ export async function startRelay(
       const previous = client;
       client = { socket, connection };
       previous?.socket.destroy();
-      toClient({
-        type: "relay.welcome",
-        pid: child.pid,
-        cwd: config.pi.cwd,
-        stderr: stderrTail,
-      });
+      toClient({ type: "relay.welcome", pid: child.pid, cwd: config.pi.cwd, stderr: stderrTail });
       for (const event of replay.replay()) toClient(event);
       toClient({ type: "relay.replayed" });
     });
@@ -200,13 +166,7 @@ export async function startRelay(
   child.once("exit", (code, signal) => {
     exited = true;
     if (graceTimer) clearTimeout(graceTimer);
-    toClient({
-      type: "relay.exit",
-      code,
-      signal,
-      stderr: stderrTail,
-      expected: stopping,
-    });
+    toClient({ type: "relay.exit", code, signal, stderr: stderrTail, expected: stopping });
     client?.socket.end();
     server.close(() => {
       removeSocketDirectory(config.socketPath);

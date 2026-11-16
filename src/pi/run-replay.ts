@@ -18,11 +18,7 @@ const COVERED = new Set([
 ]);
 
 export function isDialogRequest(event: PiEvent): boolean {
-  return (
-    event.type === "extension_ui_request" &&
-    typeof event.id === "string" &&
-    DIALOG_METHODS.has(String(event.method))
-  );
+  return event.type === "extension_ui_request" && typeof event.id === "string" && DIALOG_METHODS.has(String(event.method));
 }
 
 /**
@@ -53,10 +49,7 @@ export class RunReplay {
   private queue: PiEvent | undefined;
   private compaction: PiEvent | undefined;
   private retry: PiEvent | undefined;
-  private readonly dialogs = new Map<
-    string,
-    { event: PiEvent; expiresAt: number | undefined }
-  >();
+  private readonly dialogs = new Map<string, { event: PiEvent; expiresAt: number | undefined }>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -70,8 +63,7 @@ export class RunReplay {
   }
 
   track(event: PiEvent): void {
-    const toolId =
-      typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+    const toolId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
     switch (event.type) {
       case "agent_start":
         this.clearRun();
@@ -84,8 +76,7 @@ export class RunReplay {
         this.message = [event];
         return;
       case "message_update":
-        if (this.message && this.message.length < MAX_MESSAGE_EVENTS)
-          this.message.push(compactUpdate(event));
+        if (this.message && this.message.length < MAX_MESSAGE_EVENTS) this.message.push(compactUpdate(event));
         return;
       case "message_end":
         this.message = undefined;
@@ -102,13 +93,9 @@ export class RunReplay {
       case "tool_execution_end": {
         if (!toolId) return;
         const start = this.tools.get(toolId)?.[0];
-        const parent =
-          typeof start?.parentToolCallId === "string"
-            ? start.parentToolCallId
-            : undefined;
+        const parent = typeof start?.parentToolCallId === "string" ? start.parentToolCallId : undefined;
         // A call made by a tool that is still running (a codemode script) stays under its card.
-        if (start && parent && this.tools.has(parent))
-          this.tools.set(toolId, [start, event]);
+        if (start && parent && this.tools.has(parent)) this.tools.set(toolId, [start, event]);
         else this.dropTool(toolId);
         return;
       }
@@ -129,14 +116,8 @@ export class RunReplay {
         return;
       case "extension_ui_request":
         if (isDialogRequest(event)) {
-          const timeout =
-            typeof event.timeout === "number" && event.timeout > 0
-              ? event.timeout
-              : undefined;
-          this.dialogs.set(String(event.id), {
-            event,
-            expiresAt: timeout ? this.now() + timeout : undefined,
-          });
+          const timeout = typeof event.timeout === "number" && event.timeout > 0 ? event.timeout : undefined;
+          this.dialogs.set(String(event.id), { event, expiresAt: timeout ? this.now() + timeout : undefined });
         }
         return;
     }

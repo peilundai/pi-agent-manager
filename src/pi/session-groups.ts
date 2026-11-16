@@ -2,13 +2,7 @@ import type { SessionSummary } from "../shared/model";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
-export type SessionGroupId =
-  | "today"
-  | "yesterday"
-  | "last7"
-  | "last30"
-  | "older"
-  | "archived";
+export type SessionGroupId = "today" | "yesterday" | "last7" | "last30" | "older" | "archived";
 
 export interface SessionGroup {
   id: SessionGroupId;
@@ -27,17 +21,10 @@ const GROUPS: ReadonlyArray<{ id: SessionGroupId; label: string }> = [
 
 function startOfLocalDay(timestamp: number): number {
   const date = new Date(timestamp);
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  ).getTime();
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
-function bucketFor(
-  session: SessionSummary,
-  startToday: number,
-): SessionGroupId {
+function bucketFor(session: SessionSummary, startToday: number): SessionGroupId {
   if (session.archived) return "archived";
   if (session.updatedAt >= startToday) return "today";
   if (session.updatedAt >= startToday - DAY_MS) return "yesterday";
@@ -46,10 +33,7 @@ function bucketFor(
   return "older";
 }
 
-export function groupSessions(
-  sessions: readonly SessionSummary[],
-  now = Date.now(),
-): SessionGroup[] {
+export function groupSessions(sessions: readonly SessionSummary[], now = Date.now()): SessionGroup[] {
   const startToday = startOfLocalDay(now);
   const buckets = new Map<SessionGroupId, SessionSummary[]>();
   for (const session of sessions) {
@@ -62,15 +46,7 @@ export function groupSessions(
   return GROUPS.flatMap(({ id, label }) => {
     const items = buckets.get(id);
     if (!items?.length) return [];
-    return [
-      {
-        id,
-        label,
-        sessions: [...items].sort(
-          (left, right) => right.updatedAt - left.updatedAt,
-        ),
-      },
-    ];
+    return [{ id, label, sessions: [...items].sort((left, right) => right.updatedAt - left.updatedAt) }];
   });
 }
 

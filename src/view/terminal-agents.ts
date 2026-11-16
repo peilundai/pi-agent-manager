@@ -1,31 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { isAbsolute, relative, sep } from "node:path";
 import * as vscode from "vscode";
-import {
-  resolveWorkspaceFolder,
-  selectionFromEditor,
-} from "../editor/editor-context";
-import {
-  isSupportedDocumentScheme,
-  selectionLabel,
-  type EditorSelectionContext,
-} from "../editor/selection";
-import {
-  augmentPath,
-  buildPiInvocation,
-  buildTerminalArgs,
-  resolvePiCommand,
-} from "../pi/command-resolver";
-import {
-  defaultShell,
-  quoteForShell,
-  shellArguments,
-} from "../pi/shell-environment";
-import {
-  agentViewColumn,
-  isAgentPanelTab,
-  type AgentTabTest,
-} from "./agent-placement";
+import { resolveWorkspaceFolder, selectionFromEditor } from "../editor/editor-context";
+import { isSupportedDocumentScheme, selectionLabel, type EditorSelectionContext } from "../editor/selection";
+import { augmentPath, buildPiInvocation, buildTerminalArgs, resolvePiCommand } from "../pi/command-resolver";
+import { defaultShell, quoteForShell, shellArguments } from "../pi/shell-environment";
+import { agentViewColumn, isAgentPanelTab, type AgentTabTest } from "./agent-placement";
 import { DEFAULT_AGENT_TITLE } from "./chat-view-provider";
 import type { PiEnvironment } from "./pi-environment";
 
@@ -33,9 +13,7 @@ export type TabMode = "chat" | "terminal";
 
 /** Which editor-tab UI new agents use, from `piAgentManager.tabMode`. Unknown values mean chat. */
 export function tabMode(): TabMode {
-  const value = vscode.workspace
-    .getConfiguration("piAgentManager")
-    .get<unknown>("tabMode", "chat");
+  const value = vscode.workspace.getConfiguration("piAgentManager").get<unknown>("tabMode", "chat");
   return value === "terminal" ? "terminal" : "chat";
 }
 
@@ -47,13 +25,10 @@ export const TERMINAL_TITLE_MAX_LENGTH = 24;
  * so on for the others, plus the folder name in multi-root windows.
  */
 export function terminalTitle(folderName?: string, number = 1): string {
-  const base =
-    number > 1 ? `${DEFAULT_AGENT_TITLE} ${number}` : DEFAULT_AGENT_TITLE;
+  const base = number > 1 ? `${DEFAULT_AGENT_TITLE} ${number}` : DEFAULT_AGENT_TITLE;
   if (!folderName) return base;
   const title = `${base}: ${folderName}`;
-  return title.length <= TERMINAL_TITLE_MAX_LENGTH
-    ? title
-    : `${title.slice(0, TERMINAL_TITLE_MAX_LENGTH - 1)}…`;
+  return title.length <= TERMINAL_TITLE_MAX_LENGTH ? title : `${title.slice(0, TERMINAL_TITLE_MAX_LENGTH - 1)}…`;
 }
 
 export interface TerminalLaunch {
@@ -77,16 +52,10 @@ export function buildTerminalLaunch(
 ): TerminalLaunch {
   if (platform === "win32") {
     const invocation = buildPiInvocation(command, args, platform, env);
-    return {
-      shellPath: invocation.file,
-      shellArgs: invocation.args,
-      ...(invocation.env ? { env: invocation.env } : {}),
-    };
+    return { shellPath: invocation.file, shellArgs: invocation.args, ...(invocation.env ? { env: invocation.env } : {}) };
   }
   const shell = defaultShell(platform, env);
-  const commandLine = [command, ...args]
-    .map((value) => quoteForShell(value))
-    .join(" ");
+  const commandLine = [command, ...args].map((value) => quoteForShell(value)).join(" ");
   const shellArgs = shellArguments(shell, `exec ${commandLine}`);
   if (!shellArgs) return { shellPath: command, shellArgs: [...args] };
   return { shellPath: shell, shellArgs };
@@ -105,15 +74,9 @@ function hasControlCharacter(value: string): boolean {
  * quoted, as in pi-tabs. Paths with control characters are rejected, because
  * the mention is typed into the terminal as keystrokes.
  */
-export function terminalMention(
-  context: Pick<
-    EditorSelectionContext,
-    "relativePath" | "startLine" | "endLine"
-  >,
-): string {
+export function terminalMention(context: Pick<EditorSelectionContext, "relativePath" | "startLine" | "endLine">): string {
   const path = context.relativePath;
-  if (!path || hasControlCharacter(path))
-    throw new Error("This file's path cannot be typed into the Pi terminal.");
+  if (!path || hasControlCharacter(path)) throw new Error("This file's path cannot be typed into the Pi terminal.");
   const label = selectionLabel(context);
   if (!/[\s"]/.test(path)) return label;
   const suffix = label.slice(label.lastIndexOf("#"));
@@ -125,16 +88,12 @@ export function terminalMention(
  * working directory, or absolute when the file is outside it (another root of a
  * multi-root window, for example). Unsaved documents have no path Pi can read.
  */
-export function terminalPath(
-  document: Pick<vscode.TextDocument, "uri">,
-  cwd: string,
-): string | undefined {
+export function terminalPath(document: Pick<vscode.TextDocument, "uri">, cwd: string): string | undefined {
   const { uri } = document;
   if (uri.scheme === "untitled") return undefined;
   if (uri.scheme !== "file") return vscode.workspace.asRelativePath(uri, false);
   const path = relative(cwd, uri.fsPath);
-  const outside =
-    path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
+  const outside = path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
   // Forward slashes on every platform, as in the chat's mentions; Pi accepts them on Windows too.
   return !path || outside ? uri.fsPath : path.split(sep).join("/");
 }
@@ -165,10 +124,7 @@ function isStoredTerminalAgent(value: unknown): value is StoredTerminalAgent {
     typeof entry.folder === "string" &&
     typeof entry.viewColumn === "number" &&
     (entry.name === undefined || typeof entry.name === "string") &&
-    (entry.number === undefined ||
-      (typeof entry.number === "number" &&
-        Number.isInteger(entry.number) &&
-        entry.number >= 1))
+    (entry.number === undefined || (typeof entry.number === "number" && Number.isInteger(entry.number) && entry.number >= 1))
   );
 }
 
@@ -247,9 +203,7 @@ export class TerminalAgents implements vscode.Disposable {
   /** How many Pi terminals are currently open. */
   get count(): number {
     // Read-only: counts the terminals still open without pruning (and saving) the list.
-    return [...this.sessions.keys()].filter((terminal) =>
-      vscode.window.terminals.includes(terminal),
-    ).length;
+    return [...this.sessions.keys()].filter((terminal) => vscode.window.terminals.includes(terminal)).length;
   }
 
   /** Reveals the terminal the user worked in last, or opens a new one. */
@@ -284,21 +238,11 @@ export class TerminalAgents implements vscode.Disposable {
       return;
     }
     const picked = await vscode.window.showQuickPick(
-      folders.map((folder) => ({
-        label: folder.name,
-        detail: folder.uri.fsPath,
-        folder,
-      })),
-      {
-        title: "Pi Coding Agent for VS Code: Workspace Folder",
-        placeHolder: "Choose the folder the new Pi terminal works in",
-      },
+      folders.map((folder) => ({ label: folder.name, detail: folder.uri.fsPath, folder })),
+      { title: "Pi Coding Agent for VS Code: Workspace Folder", placeHolder: "Choose the folder the new Pi terminal works in" },
     );
     if (!picked) return;
-    await this.createSession({
-      path: picked.folder.uri.fsPath,
-      name: picked.folder.name,
-    });
+    await this.createSession({ path: picked.folder.uri.fsPath, name: picked.folder.name });
   }
 
   /**
@@ -309,27 +253,19 @@ export class TerminalAgents implements vscode.Disposable {
   async sendSelection(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-      void vscode.window.showInformationMessage(
-        "Open a file and select code to add it to Pi Coding Agent for VS Code.",
-      );
+      void vscode.window.showInformationMessage("Open a file and select code to add it to Pi Coding Agent for VS Code.");
       return;
     }
     try {
       const { scheme } = editor.document.uri;
-      if (!isSupportedDocumentScheme(scheme))
-        throw new Error(`Unsupported editor document scheme: ${scheme}`);
-      if (scheme === "untitled")
-        throw new Error(
-          "Save the file first: Pi in a terminal reads files from disk.",
-        );
+      if (!isSupportedDocumentScheme(scheme)) throw new Error(`Unsupported editor document scheme: ${scheme}`);
+      if (scheme === "untitled") throw new Error("Save the file first: Pi in a terminal reads files from disk.");
       const session = this.preferredSession();
       if (!session) {
         // Keystrokes sent now would land while the login shell and Pi start up,
         // and Pi's TUI can drop them, so open Pi and let the user send again.
         if (await this.createSession()) {
-          void vscode.window.showInformationMessage(
-            "Pi is starting in a new terminal. Run Add Selection to Chat again once it is ready.",
-          );
+          void vscode.window.showInformationMessage("Pi is starting in a new terminal. Run Add Selection to Chat again once it is ready.");
         }
         return;
       }
@@ -350,19 +286,11 @@ export class TerminalAgents implements vscode.Disposable {
    */
   async restartAll(): Promise<void> {
     this.pruneSessions();
-    const previous = this.orderedSessions().map(
-      ({ sessionId, folder, number, viewColumn }) => ({
-        sessionId,
-        folder,
-        number,
-        viewColumn,
-      }),
-    );
+    const previous = this.orderedSessions().map(({ sessionId, folder, number, viewColumn }) => ({ sessionId, folder, number, viewColumn }));
     for (const { terminal } of this.sessions.values()) terminal.dispose();
     this.sessions.clear();
     // Sequential, so the last one opened (and focused) is the one used last.
-    for (const { sessionId, folder, number, viewColumn } of previous)
-      await this.createSession(folder, { sessionId, number, viewColumn });
+    for (const { sessionId, folder, number, viewColumn } of previous) await this.createSession(folder, { sessionId, number, viewColumn });
     this.persist();
   }
 
@@ -375,36 +303,20 @@ export class TerminalAgents implements vscode.Disposable {
   async restore(): Promise<void> {
     const stored = this.storedAgents();
     if (stored.length === 0) return;
-    const folders = new Map(
-      (vscode.workspace.workspaceFolders ?? []).map((folder) => [
-        folder.uri.fsPath,
-        folder,
-      ]),
-    );
+    const folders = new Map((vscode.workspace.workspaceFolders ?? []).map((folder) => [folder.uri.fsPath, folder]));
     const multiRoot = folders.size > 1;
-    const isOpen = (sessionId: string) =>
-      [...this.sessions.values()].some(
-        (session) => session.sessionId === sessionId,
-      );
-    this.unrestored = stored.filter(
-      (entry) => folders.has(entry.folder) && !isOpen(entry.sessionId),
-    );
+    const isOpen = (sessionId: string) => [...this.sessions.values()].some((session) => session.sessionId === sessionId);
+    this.unrestored = stored.filter((entry) => folders.has(entry.folder) && !isOpen(entry.sessionId));
     for (const entry of [...this.unrestored]) {
       const folder = folders.get(entry.folder);
       if (!folder) continue;
       const session = await this.createSession(
         { path: folder.uri.fsPath, name: multiRoot ? folder.name : undefined },
-        {
-          sessionId: entry.sessionId,
-          viewColumn: entry.viewColumn,
-          ...(entry.number ? { number: entry.number } : {}),
-        },
+        { sessionId: entry.sessionId, viewColumn: entry.viewColumn, ...(entry.number ? { number: entry.number } : {}) },
       );
       // A failure (pi not found, for example) would repeat for every terminal: show one error and stop.
       if (!session) break;
-      this.unrestored = this.unrestored.filter(
-        (pending) => pending.sessionId !== entry.sessionId,
-      );
+      this.unrestored = this.unrestored.filter((pending) => pending.sessionId !== entry.sessionId);
     }
     this.persist();
   }
@@ -422,48 +334,30 @@ export class TerminalAgents implements vscode.Disposable {
   }
 
   private orderedSessions(): TerminalSession[] {
-    return [...this.sessions.values()].sort(
-      (left, right) => left.lastUsed - right.lastUsed,
-    );
+    return [...this.sessions.values()].sort((left, right) => left.lastUsed - right.lastUsed);
   }
 
   /** Saves the open terminals, oldest-used first. */
   private persist(): void {
     const memento = this.options.memento;
     if (!memento || this.shuttingDown) return;
-    const open: StoredTerminalAgent[] = this.orderedSessions().map(
-      ({ sessionId, folder, viewColumn, number }) => ({
-        sessionId,
-        folder: folder.path,
-        ...(folder.name ? { name: folder.name } : {}),
-        viewColumn,
-        number,
-      }),
-    );
+    const open: StoredTerminalAgent[] = this.orderedSessions().map(({ sessionId, folder, viewColumn, number }) => ({
+      sessionId,
+      folder: folder.path,
+      ...(folder.name ? { name: folder.name } : {}),
+      viewColumn,
+      number,
+    }));
     const openIds = new Set(open.map((entry) => entry.sessionId));
     // Not yet reopened ones first: they were used before anything opened in this window.
-    const entries = [
-      ...this.unrestored.filter((entry) => !openIds.has(entry.sessionId)),
-      ...open,
-    ];
-    void Promise.resolve(memento.update(TERMINAL_AGENTS_KEY, entries)).catch(
-      () => undefined,
-    );
+    const entries = [...this.unrestored.filter((entry) => !openIds.has(entry.sessionId)), ...open];
+    void Promise.resolve(memento.update(TERMINAL_AGENTS_KEY, entries)).catch(() => undefined);
   }
 
   private defaultFolder(): TerminalFolder | undefined {
-    const folder = resolveWorkspaceFolder(
-      vscode.workspace,
-      vscode.window.activeTextEditor,
-    );
+    const folder = resolveWorkspaceFolder(vscode.workspace, vscode.window.activeTextEditor);
     if (!folder) return undefined;
-    return {
-      path: folder.uri.fsPath,
-      name:
-        (vscode.workspace.workspaceFolders?.length ?? 0) > 1
-          ? folder.name
-          : undefined,
-    };
+    return { path: folder.uri.fsPath, name: (vscode.workspace.workspaceFolders?.length ?? 0) > 1 ? folder.name : undefined };
   }
 
   private async createSession(
@@ -471,28 +365,19 @@ export class TerminalAgents implements vscode.Disposable {
     reopen: { sessionId?: string; viewColumn?: number; number?: number } = {},
   ): Promise<TerminalSession | undefined> {
     if (!target) {
-      void vscode.window.showErrorMessage(
-        "Open a workspace folder to start Pi in a terminal.",
-      );
+      void vscode.window.showErrorMessage("Open a workspace folder to start Pi in a terminal.");
       return undefined;
     }
-    const environment =
-      (await this.options.environment?.resolve().catch(() => undefined)) ??
-      process.env;
+    const environment = (await this.options.environment?.resolve().catch(() => undefined)) ?? process.env;
     const config = vscode.workspace.getConfiguration("piAgentManager");
     const platform = this.options.platform ?? process.platform;
-    const sessionId =
-      reopen.sessionId ?? (this.options.createSessionId ?? randomUUID)();
+    const sessionId = reopen.sessionId ?? (this.options.createSessionId ?? randomUUID)();
     let commandPath: string;
     let args: string[];
     try {
       const extraArgs = config.get<unknown>("extraArgs", []);
       args = buildTerminalArgs(
-        Array.isArray(extraArgs)
-          ? extraArgs.filter(
-              (value): value is string => typeof value === "string",
-            )
-          : [],
+        Array.isArray(extraArgs) ? extraArgs.filter((value): value is string => typeof value === "string") : [],
         sessionId,
       );
       const resolved = await (this.options.resolveCommand ?? resolvePiCommand)({
@@ -504,21 +389,14 @@ export class TerminalAgents implements vscode.Disposable {
       void vscode.window.showErrorMessage(errorMessage(error));
       return undefined;
     }
-    const launch = buildTerminalLaunch(
-      commandPath,
-      args,
-      platform,
-      environment,
-    );
+    const launch = buildTerminalLaunch(commandPath, args, platform, environment);
     const env: NodeJS.ProcessEnv = {
       ...environment,
       ...launch.env,
       COLORTERM: "truecolor",
       PATH: augmentPath(commandPath, environment, platform),
     };
-    void this.options.environment
-      ?.checkMissing(target.path, env)
-      .catch(() => undefined);
+    void this.options.environment?.checkMissing(target.path, env).catch(() => undefined);
     const viewColumn = reopen.viewColumn ?? this.targetViewColumn();
     const number = reopen.number ?? this.nextNumber();
     const terminal = vscode.window.createTerminal({
@@ -526,32 +404,15 @@ export class TerminalAgents implements vscode.Disposable {
       cwd: target.path,
       env,
       iconPath: {
-        light: vscode.Uri.joinPath(
-          this.options.extensionUri,
-          "media",
-          "pi-light.svg",
-        ),
-        dark: vscode.Uri.joinPath(
-          this.options.extensionUri,
-          "media",
-          "pi-dark.svg",
-        ),
+        light: vscode.Uri.joinPath(this.options.extensionUri, "media", "pi-light.svg"),
+        dark: vscode.Uri.joinPath(this.options.extensionUri, "media", "pi-dark.svg"),
       },
       // VS Code would restore a plain shell, not Pi: `restore()` reopens it with Pi instead.
       isTransient: true,
       location: { viewColumn, preserveFocus: false },
-      ...(launch.shellPath
-        ? { shellPath: launch.shellPath, shellArgs: launch.shellArgs }
-        : {}),
+      ...(launch.shellPath ? { shellPath: launch.shellPath, shellArgs: launch.shellArgs } : {}),
     });
-    const session: TerminalSession = {
-      terminal,
-      sessionId,
-      number,
-      folder: target,
-      viewColumn,
-      lastUsed: ++this.sequence,
-    };
+    const session: TerminalSession = { terminal, sessionId, number, folder: target, viewColumn, lastUsed: ++this.sequence };
     this.sessions.set(terminal, session);
     terminal.show(false);
     // `ViewColumn.Beside` is a placement sentinel, not the concrete column VS Code
@@ -566,9 +427,7 @@ export class TerminalAgents implements vscode.Disposable {
     this.pruneSessions();
     const used = new Set([
       ...[...this.sessions.values()].map((session) => session.number),
-      ...this.unrestored.flatMap((entry) =>
-        entry.number ? [entry.number] : [],
-      ),
+      ...this.unrestored.flatMap((entry) => (entry.number ? [entry.number] : [])),
     ]);
     let number = 1;
     while (used.has(number)) number += 1;
@@ -577,26 +436,22 @@ export class TerminalAgents implements vscode.Disposable {
 
   /**
    * Whether a tab is one of this window's Pi terminals. Terminal tabs carry no
-   * terminal reference, so they are matched by title, or by being a terminal in
-   * a group a Pi terminal was last seen in.
+   * terminal reference, so they are matched by title. A tab whose title no open
+   * terminal has (Pi retitled it, or the user renamed it) counts when it is in
+   * the group of a Pi terminal that no tab title matched.
    */
   ownsTab(tab: vscode.Tab): boolean {
     if (!(tab.input instanceof vscode.TabInputTerminal)) return false;
-    const live = [...this.sessions.values()].filter((session) =>
-      this.isAlive(session.terminal),
-    );
-    return live.some(
-      (session) =>
-        session.terminal.name === tab.label ||
-        session.viewColumn === tab.group?.viewColumn,
-    );
+    const live = [...this.sessions.values()].filter((session) => this.isAlive(session.terminal));
+    if (live.some((session) => session.terminal.name === tab.label)) return true;
+    if (vscode.window.terminals.some((terminal) => terminal.name === tab.label)) return false;
+    const labels = new Set((vscode.window.tabGroups?.all ?? []).flatMap((group) => group.tabs.map((other) => other.label)));
+    return live.some((session) => !labels.has(session.terminal.name) && session.viewColumn === tab.group?.viewColumn);
   }
 
   /** The Pi group (the one used last, if it still has a Pi tab), else beside the user's editors. */
   private targetViewColumn(): vscode.ViewColumn {
-    const isAgentTab =
-      this.options.isAgentTab ??
-      ((tab: vscode.Tab) => this.ownsTab(tab) || isAgentPanelTab(tab));
+    const isAgentTab = this.options.isAgentTab ?? ((tab: vscode.Tab) => this.ownsTab(tab) || isAgentPanelTab(tab));
     return agentViewColumn(isAgentTab, this.preferredSession()?.viewColumn);
   }
 
@@ -604,8 +459,7 @@ export class TerminalAgents implements vscode.Disposable {
     this.pruneSessions();
     const active = vscode.window.activeTerminal;
     const activeSession = active ? this.sessions.get(active) : undefined;
-    if (activeSession && this.isAlive(activeSession.terminal))
-      return activeSession;
+    if (activeSession && this.isAlive(activeSession.terminal)) return activeSession;
     return [...this.sessions.values()]
       .filter((session) => this.isAlive(session.terminal))
       .sort((left, right) => right.lastUsed - left.lastUsed)[0];
@@ -636,8 +490,7 @@ export class TerminalAgents implements vscode.Disposable {
 
   /** A terminal closed by a window reload or shutdown; from then on the saved list is left alone. */
   private closedByShutdown(terminal: vscode.Terminal): boolean {
-    if (terminal.exitStatus?.reason !== vscode.TerminalExitReason.Shutdown)
-      return false;
+    if (terminal.exitStatus?.reason !== vscode.TerminalExitReason.Shutdown) return false;
     this.shuttingDown = true;
     return true;
   }

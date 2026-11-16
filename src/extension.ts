@@ -1,26 +1,10 @@
 import * as vscode from "vscode";
 import { resolveWorkspaceFolder } from "./editor/editor-context";
-import {
-  PiSessionRepository,
-  type ArchiveStore,
-} from "./pi/session-repository";
-import {
-  ChatViewProvider,
-  FALLBACK_CONTEXT,
-  SIDEBAR_VIEW_ID,
-  VIEW_ID,
-  chatSurface,
-} from "./view/chat-view-provider";
+import { PiSessionRepository, type ArchiveStore } from "./pi/session-repository";
+import { ChatViewProvider, FALLBACK_CONTEXT, SIDEBAR_VIEW_ID, VIEW_ID, chatSurface } from "./view/chat-view-provider";
 import { isAgentPanelTab } from "./view/agent-placement";
-import {
-  AGENT_PANEL_TYPE,
-  defaultLocation,
-  EditorAgents,
-} from "./view/editor-agents";
-import {
-  PiEnvironment,
-  registerEnvironmentCommands,
-} from "./view/pi-environment";
+import { AGENT_PANEL_TYPE, defaultLocation, EditorAgents } from "./view/editor-agents";
+import { PiEnvironment, registerEnvironmentCommands } from "./view/pi-environment";
 import { TerminalAgents, tabMode } from "./view/terminal-agents";
 
 const ARCHIVED_SESSIONS_KEY = "piAgentManager.archivedSessions";
@@ -31,9 +15,7 @@ class MementoArchiveStore implements ArchiveStore {
 
   read(): readonly string[] {
     const value = this.memento.get<unknown>(ARCHIVED_SESSIONS_KEY);
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [];
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   }
 
   async write(ids: readonly string[]): Promise<void> {
@@ -41,40 +23,25 @@ class MementoArchiveStore implements ArchiveStore {
   }
 }
 
-const webviewViewOptions = {
-  webviewOptions: { retainContextWhenHidden: true },
-};
+const webviewViewOptions = { webviewOptions: { retainContextWhenHidden: true } };
 
-export async function activate(
-  context: vscode.ExtensionContext,
-): Promise<void> {
-  const workspaceFolder = resolveWorkspaceFolder(
-    vscode.workspace,
-    vscode.window.activeTextEditor,
-  );
-  const log = vscode.window.createOutputChannel("Pi Coding Agent for VS Code", {
-    log: true,
-  });
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceFolder = resolveWorkspaceFolder(vscode.workspace, vscode.window.activeTextEditor);
+  const log = vscode.window.createOutputChannel("Pi Coding Agent for VS Code", { log: true });
   const environment = new PiEnvironment({ secrets: context.secrets, log });
   const knownCommands = await vscode.commands.getCommands(true);
   const surface = chatSurface(knownCommands);
   if (surface === "activitybar") {
     await vscode.commands.executeCommand("setContext", FALLBACK_CONTEXT, true);
   }
-  const repository = new PiSessionRepository({
-    archiveStore: new MementoArchiveStore(context.workspaceState),
-  });
+  const repository = new PiSessionRepository({ archiveStore: new MementoArchiveStore(context.workspaceState) });
   const chatOptions = {
     extensionUri: context.extensionUri,
     workspaceFolder,
     environment,
     repository,
     memento: context.workspaceState,
-    relay: {
-      script: vscode.Uri.joinPath(context.extensionUri, "dist", "relay.js")
-        .fsPath,
-      nodePath: process.execPath,
-    },
+    relay: { script: vscode.Uri.joinPath(context.extensionUri, "dist", "relay.js").fsPath, nodePath: process.execPath },
   };
   const sidebar = new ChatViewProvider({ ...chatOptions, surface });
   const agents = new EditorAgents({
@@ -83,20 +50,14 @@ export async function activate(
     createChat: (agentId) => new ChatViewProvider({ ...chatOptions, agentId }),
     isAgentTab: (tab) => isAgentTab(tab),
   });
-  const terminals = new TerminalAgents({
-    extensionUri: context.extensionUri,
-    environment,
-    memento: context.workspaceState,
-  });
+  const terminals = new TerminalAgents({ extensionUri: context.extensionUri, environment, memento: context.workspaceState });
   /** Pi chat and terminal tabs share one editor group, so new agents of either kind open together. */
-  const isAgentTab = (tab: vscode.Tab): boolean =>
-    isAgentPanelTab(tab) || terminals.ownsTab(tab);
+  const isAgentTab = (tab: vscode.Tab): boolean => isAgentPanelTab(tab) || terminals.ownsTab(tab);
   const inSidebar = () => defaultLocation() === "sidebar";
   /** Terminal mode only applies to editor tabs; the sidebar keeps the chat UI. */
   const inTerminalMode = () => !inSidebar() && tabMode() === "terminal";
   /** The chat a command acts on: the sidebar's, or the editor-tab agent the user worked in last. */
-  const target = (): ChatViewProvider =>
-    inSidebar() ? sidebar : agents.current();
+  const target = (): ChatViewProvider => (inSidebar() ? sidebar : agents.current());
   const everyChat = (): ChatViewProvider[] => [sidebar, ...agents.chats];
   activeHost = {
     shutdown: async () => {
@@ -107,26 +68,14 @@ export async function activate(
     sidebar,
     agents,
     terminals,
-    vscode.window.registerWebviewViewProvider(
-      VIEW_ID,
-      sidebar,
-      webviewViewOptions,
-    ),
-    vscode.window.registerWebviewViewProvider(
-      SIDEBAR_VIEW_ID,
-      sidebar,
-      webviewViewOptions,
-    ),
+    vscode.window.registerWebviewViewProvider(VIEW_ID, sidebar, webviewViewOptions),
+    vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar, webviewViewOptions),
     vscode.window.registerWebviewPanelSerializer(AGENT_PANEL_TYPE, agents),
     vscode.commands.registerCommand("piAgentManager.open", () =>
       inTerminalMode() ? terminals.focus() : target().focusInput(),
     ),
     vscode.commands.registerCommand("piAgentManager.newAgent", () =>
-      inSidebar()
-        ? sidebar.newChat()
-        : inTerminalMode()
-          ? terminals.newAgent()
-          : agents.open().focusInput(),
+      inSidebar() ? sidebar.newChat() : inTerminalMode() ? terminals.newAgent() : agents.open().focusInput(),
     ),
     vscode.commands.registerCommand("piAgentManager.newChat", () =>
       inTerminalMode() ? terminals.newAgent() : target().newChat(),
@@ -150,8 +99,7 @@ export async function activate(
       }
     }),
     vscode.window.onDidChangeTextEditorSelection((event) => {
-      for (const chat of everyChat())
-        chat.editorSelectionChanged(event.textEditor);
+      for (const chat of everyChat()) chat.editorSelectionChanged(event.textEditor);
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       for (const chat of everyChat()) chat.workspaceFoldersChanged();
@@ -162,15 +110,11 @@ export async function activate(
     ...registerEnvironmentCommands({
       environment,
       // The folder can change in multi-root windows, so ask the chat each time.
-      cwd: () =>
-        (inSidebar() ? sidebar : (agents.activeChat ?? sidebar)).workspaceFolder
-          ?.uri.fsPath,
+      cwd: () => (inSidebar() ? sidebar : (agents.activeChat ?? sidebar)).workspaceFolder?.uri.fsPath,
       // Chat tabs opened before switching `tabMode` stay open, so restart them and any Pi terminals.
       restart: async () => {
         await Promise.all([
-          ...[...(inSidebar() ? [sidebar] : []), ...agents.chats].map((chat) =>
-            chat.restartPi(),
-          ),
+          ...[...(inSidebar() ? [sidebar] : []), ...agents.chats].map((chat) => chat.restartPi()),
           terminals.restartAll(),
         ]);
       },
@@ -182,12 +126,7 @@ export async function activate(
   if (inSidebar()) sidebar.resumeRunningPi();
   agents.resumeRunning();
   // A reload closed the Pi terminals (VS Code does not restore them): reopen each one with its session.
-  if (inTerminalMode())
-    void terminals
-      .restore()
-      .catch((error: unknown) =>
-        log.warn(`Could not restore Pi terminals: ${String(error)}`),
-      );
+  if (inTerminalMode()) void terminals.restore().catch((error: unknown) => log.warn(`Could not restore Pi terminals: ${String(error)}`));
 }
 
 export async function deactivate(): Promise<void> {
