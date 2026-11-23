@@ -8,7 +8,7 @@
   <img src="docs/images/hero.png" width="900" alt="Three Pi Coding Agent for VS Code panels: a tool-using turn with an inline diff, a confirmation card from a Pi extension, and the slash-command menu" />
 </p>
 
-> **Unofficial, preview.** A community extension, not affiliated with or endorsed by the Pi project. See [Disclaimer](#disclaimer-and-acknowledgements).
+> **Unofficial.** A community extension, not affiliated with or endorsed by the Pi project. See [Disclaimer](#disclaimer-and-acknowledgements).
 
 ## Why use it
 

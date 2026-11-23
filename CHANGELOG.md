@@ -2,6 +2,12 @@
 
 All notable changes to Pi Coding Agent for VS Code, formerly Pi Agent Manager, are documented here. (During development of 0.2.0 it was briefly called "Pi Chat".)
 
+## Unreleased
+
+### Changed
+
+- The Marketplace and Open VSX listings no longer show a **Preview** badge.
+
 ## 0.4.0 — 2026-11-16
 
 ### Added
