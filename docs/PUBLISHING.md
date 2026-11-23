@@ -84,7 +84,7 @@ A tag that the workflow creates itself doesn't start a second run, because GitHu
 
 ## Preview and pre-releases
 
-- `"preview": true` in `package.json` shows a **Preview** badge on the listing. Remove it once the extension is stable.
+- `"preview": true` in `package.json` shows a **Preview** badge on the listing. It was removed after 0.4.0; add it back only for an extension that is not stable yet.
 - For pre-release builds alongside stable ones, use an odd minor version (for example 0.3.x) and add `--pre-release` to both publish commands. That's not needed for the first release.
 
 ## If something goes wrong
