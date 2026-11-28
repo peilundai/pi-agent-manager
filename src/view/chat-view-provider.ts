@@ -674,7 +674,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const invocation = buildPiInvocation(command.path, args);
     const env: NodeJS.ProcessEnv = { ...environment, ...invocation.env, PATH: augmentPath(command.path, environment) };
     void this.options.environment?.checkMissing(cwd, env).catch(() => undefined);
-    return { file: invocation.file, args: invocation.args, cwd, env };
+    return {
+      file: invocation.file,
+      args: invocation.args,
+      cwd,
+      env,
+      ...(invocation.verbatimArguments ? { verbatimArguments: true } : {}),
+    };
   }
 
   /** New chats start in the active editor's folder, so "+" always means "here". */

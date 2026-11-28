@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PiRpcClient, RpcError } from "../src/pi/rpc-client";
+import { PiRpcClient, piSpawnOptions, RpcError } from "../src/pi/rpc-client";
 import type { PiEvent } from "../src/pi/rpc-types";
 
 const fakePi = join(process.cwd(), "test/fixtures/fake-pi.mjs");
@@ -15,6 +15,21 @@ function createClient() {
   );
   return { client, events, exits };
 }
+
+describe("piSpawnOptions", () => {
+  const base = { file: "cmd.exe", args: ["/c", '""%A%""'], cwd: "/work", env: { A: "a" } };
+
+  it("passes windowsVerbatimArguments only for verbatim invocations", () => {
+    expect(piSpawnOptions({ ...base, verbatimArguments: true })).toEqual({
+      cwd: "/work",
+      env: { A: "a" },
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      windowsVerbatimArguments: true,
+    });
+    expect(piSpawnOptions(base)).not.toHaveProperty("windowsVerbatimArguments");
+  });
+});
 
 describe("PiRpcClient", () => {
   it("correlates responses and streams events", async () => {

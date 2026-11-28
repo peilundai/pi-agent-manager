@@ -146,6 +146,19 @@ describe("buildTerminalLaunch", () => {
     expect(launch.shellPath).toBe("C:\\Windows\\System32\\cmd.exe");
     expect(launch.shellArgs).toContain("/c");
   });
+
+  it("passes the Windows shim command line as one verbatim string", () => {
+    const launch = buildTerminalLaunch("C:\\npm\\pi.cmd", ["--offline"], "win32", { ComSpec: "cmd.exe" });
+    expect(launch.shellArgs).toBe(
+      '/d /s /v:off /c ""%PI_AGENT_MANAGER_SHIM_COMMAND%" "%PI_AGENT_MANAGER_SHIM_ARG_0%""',
+    );
+    expect(launch.env).toEqual({ PI_AGENT_MANAGER_SHIM_COMMAND: "C:\\npm\\pi.cmd", PI_AGENT_MANAGER_SHIM_ARG_0: "--offline" });
+  });
+
+  it("keeps an array of arguments for a Windows executable", () => {
+    const launch = buildTerminalLaunch("C:\\tools\\pi.exe", ["--offline"], "win32", {});
+    expect(launch).toEqual({ shellPath: "C:\\tools\\pi.exe", shellArgs: ["--offline"] });
+  });
 });
 
 describe("terminalMention", () => {

@@ -19,6 +19,12 @@ export interface PiInvocation {
   file: string;
   args: string[];
   env?: Record<string, string>;
+  /**
+   * Set when `args` is already a raw Windows command line (the `cmd.exe` shim path):
+   * pass it with `windowsVerbatimArguments` so Node does not re-quote it and escape
+   * the inner quotes as `\"`, which `cmd /s /c` does not understand.
+   */
+  verbatimArguments?: boolean;
 }
 
 export interface ResolvePiCommandOptions {
@@ -177,6 +183,7 @@ export function buildPiInvocation(
     file: baseEnv.ComSpec ?? "cmd.exe",
     args: ["/d", "/s", "/v:off", "/c", `"${commandLine}"`],
     env,
+    verbatimArguments: true,
   };
 }
 
