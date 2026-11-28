@@ -10,6 +10,7 @@ import { RelayClient, type RelayEndpoint } from "../src/pi/relay-client";
 import { RELAY_DIR_PREFIX, RELAY_PROTOCOL, startRelay } from "../src/pi/relay-server";
 import type { RpcClientListener } from "../src/pi/rpc-client";
 import type { PiEvent } from "../src/pi/rpc-types";
+import { FakeChild } from "./support/fake-child";
 import { buildRelayScript } from "./support/relay-script";
 
 // The fake Pi puts U+2028 in a string, which must survive the relay intact.
@@ -266,6 +267,29 @@ describe("startRelay", () => {
     expect(client.records.filter((record) => String(record.type).startsWith("relay.") && record.type !== "relay.welcome" && record.type !== "relay.replayed")).toEqual([
       { type: "relay.stderr", text: "boom\n" },
       { type: "relay.exit", code: 3, signal: null, stderr: "boom\n", expected: false },
+    ]);
+  });
+
+  it("forwards Pi's last output before its exit when the exit comes first", async () => {
+    const directory = await mkdtemp(join(tmpdir(), RELAY_DIR_PREFIX));
+    const socketPath = process.platform === "win32" ? `\\\\.\\pipe\\${RELAY_DIR_PREFIX}${Date.now()}` : join(directory, "relay.sock");
+    const child = new FakeChild();
+    const server = await startRelay(
+      { protocol: RELAY_PROTOCOL, token: "secret", socketPath, pi: { file: "pi", args: [], cwd: process.cwd(), env: {} } },
+      () => child.asChild(),
+    );
+    const client = rawClient(socketPath);
+    client.send({ type: "relay.hello", protocol: RELAY_PROTOCOL, token: "secret" });
+    await until(() => client.records.some((record) => record.type === "relay.replayed"), "welcome");
+
+    // The final record has no trailing newline, so it only arrives when the decoder is flushed.
+    await child.exitThenDrain(1, { stderr: "fatal: no model\n", stdout: JSON.stringify({ type: "agent_settled" }) });
+    await server.closed;
+    await until(() => client.closed(), "close");
+    expect(client.records.slice(-3)).toEqual([
+      { type: "relay.stderr", text: "fatal: no model\n" },
+      { type: "agent_settled" },
+      { type: "relay.exit", code: 1, signal: null, stderr: "fatal: no model\n", expected: false },
     ]);
   });
 });

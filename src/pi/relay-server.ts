@@ -4,7 +4,7 @@ import { rmSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { basename, dirname } from "node:path";
 import { encodeJsonl, JsonlDecoder } from "./jsonl";
-import type { RpcSpawnOptions } from "./rpc-client";
+import { STDIO_DRAIN_MS, type RpcSpawnOptions } from "./rpc-client";
 import type { PiEvent } from "./rpc-types";
 import { RunReplay } from "./run-replay";
 
@@ -163,16 +163,31 @@ export async function startRelay(config: RelayConfig, spawnFn: RelaySpawnFn = de
     });
   });
 
-  child.once("exit", (code, signal) => {
+  let reported = false;
+  let drainTimer: ReturnType<typeof setTimeout> | undefined;
+  // Report only once stdout and stderr are drained, so the window gets Pi's last records and
+  // its full stderr tail before the socket ends.
+  const report = (code: number | null, signal: NodeJS.Signals | null) => {
+    if (reported) return;
+    reported = true;
+    clearTimeout(drainTimer);
     exited = true;
     if (graceTimer) clearTimeout(graceTimer);
+    fromPi.end();
     toClient({ type: "relay.exit", code, signal, stderr: stderrTail, expected: stopping });
     client?.socket.end();
     server.close(() => {
       removeSocketDirectory(config.socketPath);
       resolveClosed();
     });
+  };
+  child.once("exit", (code, signal) => {
+    // Stop writing to stdin and refuse new windows right away; stdout may still be draining.
+    exited = true;
+    if (graceTimer) clearTimeout(graceTimer);
+    drainTimer = setTimeout(() => report(code, signal), STDIO_DRAIN_MS);
   });
+  child.once("close", (code, signal) => report(code, signal));
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", (error) => {
