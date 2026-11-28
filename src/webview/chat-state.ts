@@ -714,7 +714,9 @@ function handleHost(state: ChatState, message: HostToWebviewMessage, now: number
       const removePending = message.error || message.disposition === "handled" || message.disposition === "queued";
       const items = removePending ? state.items.filter((item) => !(item.kind === "user" && item.pending)) : state.items;
       const next = { ...state, items };
-      return message.error ? pushNotice(next, "error", message.error) : next;
+      // A prompt that failed because Pi did not start is already explained by the exited-process banner.
+      const shownByProcess = state.process.status === "exited" && state.process.error === message.error;
+      return message.error && !shownByProcess ? pushNotice(next, "error", message.error) : next;
     }
     case "notice":
       return pushNotice(state, message.level, message.message);

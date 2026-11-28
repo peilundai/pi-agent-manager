@@ -180,14 +180,20 @@ describe("ChatSession pristine state", () => {
     await prompt;
   });
 
-  it("releases the prompt count when startup fails", async () => {
+  it("resolves the prompt and releases the prompt count when startup fails", async () => {
+    const posted: HostToWebviewMessage[] = [];
     const session = new ChatSession({
       createClient: () => Promise.reject(new Error("no pi")),
-      post: () => undefined,
+      post: (message) => posted.push(message),
       onSessionsChanged: () => undefined,
     });
-    await expect(session.prompt("hi", [], "send")).rejects.toThrow("no pi");
+    await expect(session.prompt("hi", [], "send")).resolves.toBeUndefined();
     expect(session.isPristine).toBe(true);
+    expect(posted).toEqual([
+      { version: 1, type: "process", status: "starting" },
+      { version: 1, type: "process", status: "exited", error: "no pi" },
+      { version: 1, type: "prompt.result", error: "no pi" },
+    ]);
   });
 
   it("stop cancels a startup in flight so the next start uses a new process", async () => {

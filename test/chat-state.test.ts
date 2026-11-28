@@ -142,6 +142,18 @@ describe("chat reducer: host messages", () => {
     expect(state.items).toEqual([{ kind: "notice", id: "n3", level: "error", text: "No API key" }]);
   });
 
+  it("drops the optimistic message without a duplicate notice when Pi fails to start", () => {
+    let state = chatReducer(initialChatState, { type: "user.send", text: "hi", images: [] });
+    state = host(state, { version: 1, type: "process", status: "starting" });
+    state = host(state, { version: 1, type: "process", status: "exited", error: "no pi" });
+    state = host(state, { version: 1, type: "prompt.result", error: "no pi" });
+    expect(state.items).toEqual([]);
+    expect(state.process).toEqual({ status: "exited", error: "no pi" });
+    state = chatReducer(state, { type: "user.send", text: "again", images: [] });
+    state = host(state, { version: 1, type: "prompt.result", error: "startup was cancelled" });
+    expect(state.items).toEqual([{ kind: "notice", id: "n3", level: "error", text: "startup was cancelled" }]);
+  });
+
   it("clears busy state when the process exits", () => {
     let state = applyPiEvents(initialChatState, [{ type: "agent_start" }], 1);
     state = host(state, { version: 1, type: "process", status: "exited", error: "crashed", stderr: "trace" });
