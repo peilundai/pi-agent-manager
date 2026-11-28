@@ -461,6 +461,22 @@ describe("Composer", () => {
     expect(props.onSubmit).toHaveBeenCalledWith("", [expect.objectContaining({ mimeType: "image/png", name: "shot.png" })], "send");
   });
 
+  it("tells the user when a pasted or dropped image is not attached", async () => {
+    const onNotice = vi.fn();
+    const { input, container } = renderComposer({ onNotice });
+    const big = new File([new Uint8Array([1])], "big.png", { type: "image/png" });
+    Object.defineProperty(big, "size", { value: 10 * 1024 * 1024 + 1 });
+    fireEvent.paste(input, { clipboardData: { files: [big] } });
+    await waitFor(() => expect(onNotice).toHaveBeenCalledWith("warning", "big.png is larger than 10 MB and was not attached."));
+    const tiff = new File([new Uint8Array([1])], "scan.tiff", { type: "image/tiff" });
+    fireEvent.drop(container.querySelector(".composer")!, { dataTransfer: { files: [tiff] } });
+    await waitFor(() =>
+      expect(onNotice).toHaveBeenCalledWith("warning", "scan.tiff is not a supported image (PNG, JPEG, GIF or WebP) and was not attached."),
+    );
+    expect(screen.queryByAltText("big.png")).not.toBeInTheDocument();
+    expect(screen.queryByAltText("scan.tiff")).not.toBeInTheDocument();
+  });
+
   it("removes attachments, inserts / and shows the context ring", async () => {
     const { input } = renderComposer();
     const file = new File([new Uint8Array([1])], "a.webp", { type: "image/webp" });

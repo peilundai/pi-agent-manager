@@ -103,6 +103,7 @@ export type ChatAction =
   | { type: "host"; message: HostToWebviewMessage; now: number }
   | { type: "user.send"; text: string; images: ImageAttachment[] }
   | { type: "dialog.answer"; id: string; answer: string }
+  | { type: "notice"; level: "info" | "warning" | "error"; text: string }
   | { type: "notice.dismiss"; id: string };
 
 function contentText(content: PiMessage["content"]): string {
@@ -742,6 +743,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           item.kind === "dialog" && item.request.id === action.id ? { ...item, answer: action.answer } : item,
         ),
       };
+    case "notice":
+      return pushNotice(state, action.level, action.text);
     case "notice.dismiss":
       return { ...state, items: state.items.filter((item) => item.id !== action.id) };
     default:

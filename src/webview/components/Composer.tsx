@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { expandReferences, findReferenceTokens, parseReferencedPrompt } from "../../shared/context-references";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_LABEL } from "../../shared/limits";
 import { shortcutLabel } from "../../shared/shortcut-label";
 import type { ContextReference, EditorSelection, ImageAttachment, PromptMode } from "../../shared/protocol";
 import type { PiCommand, PiModel, PiSessionStats, ThinkingLevel } from "../../pi/rpc-types";
@@ -32,19 +33,25 @@ interface MenuItem {
   apply(): void;
 }
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const SUPPORTED_IMAGES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-function readImage(file: File): Promise<ImageAttachment | undefined> {
-  if (!SUPPORTED_IMAGES.has(file.type) || file.size > MAX_IMAGE_BYTES) return Promise.resolve(undefined);
+type ReadImageResult = { image: ImageAttachment } | { problem: string };
+
+function readImage(file: File): Promise<ReadImageResult> {
+  const name = file.name || "The image";
+  if (!SUPPORTED_IMAGES.has(file.type)) {
+    return Promise.resolve({ problem: `${name} is not a supported image (PNG, JPEG, GIF or WebP) and was not attached.` });
+  }
+  if (file.size > MAX_IMAGE_BYTES) return Promise.resolve({ problem: `${name} is larger than ${MAX_IMAGE_LABEL} and was not attached.` });
   return new Promise((resolve) => {
+    const unreadable = { problem: `${name} could not be read and was not attached.` };
     const reader = new FileReader();
     reader.onload = () => {
       const result = String(reader.result ?? "");
       const data = result.slice(result.indexOf(",") + 1);
-      resolve(data ? { data, mimeType: file.type, name: file.name } : undefined);
+      resolve(data ? { image: { data, mimeType: file.type, name: file.name } } : unreadable);
     };
-    reader.onerror = () => resolve(undefined);
+    reader.onerror = () => resolve(unreadable);
     reader.readAsDataURL(file);
   });
 }
@@ -192,6 +199,8 @@ export interface ComposerProps {
   files: { requestId: number; files: string[] };
   /** The active editor's selection, offered as context for the next message. */
   selection?: EditorSelection | undefined;
+  /** Tells the user why a pasted or dropped file was not attached. */
+  onNotice?(level: "warning", text: string): void;
 }
 
 
@@ -434,7 +443,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   };
 
   const addFiles = async (files: FileList | File[]) => {
-    const loaded = (await Promise.all([...files].map(readImage))).filter((image): image is ImageAttachment => Boolean(image));
+    const results = await Promise.all([...files].map(readImage));
+    const loaded: ImageAttachment[] = [];
+    for (const result of results) {
+      if ("image" in result) loaded.push(result.image);
+      else props.onNotice?.("warning", result.problem);
+    }
     if (loaded.length) setImages((current) => [...current, ...loaded].slice(0, 20));
   };
 

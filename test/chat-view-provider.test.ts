@@ -10,6 +10,12 @@ import { resetVscodeMock } from "./vscode-mock";
 import type * as VscodeMock from "./vscode-mock";
 import { FakeClient } from "./support/fake-client";
 
+import * as fs from "node:fs/promises";
+
+// Pass through to the real fs by default; individual tests override with `mockImplementationOnce`.
+vi.mock("node:fs/promises", { spy: true });
+const fsMock = vi.mocked(fs);
+
 const mock = vscode as unknown as typeof VscodeMock;
 
 const session: SessionSummary = {
@@ -83,6 +89,26 @@ function setup(
 beforeEach(() => resetVscodeMock());
 
 describe("webviewHtml", () => {
+  it("skips oversized picked images without reading them", async () => {
+    const { posted, send, ready } = setup();
+    await ready();
+    mock.window.showOpenDialog.mockResolvedValueOnce([mock.Uri.file("/work/huge.png"), mock.Uri.file("/work/small.png")]);
+    fsMock.stat.mockImplementation(async (path) => ({ size: String(path).endsWith("huge.png") ? 10 * 1024 * 1024 + 1 : 3 }) as never);
+    fsMock.readFile.mockImplementation(async () => Buffer.from("abc") as never);
+    await send({ version: 1, type: "attach.pick" });
+    const readPaths = fsMock.readFile.mock.calls.map((call) => call[0]);
+    fsMock.stat.mockRestore();
+    fsMock.readFile.mockRestore();
+    expect(readPaths).toEqual(["/work/small.png"]);
+    expect(posted).toContainEqual({ version: 1, type: "notice", level: "warning", message: "/work/huge.png is larger than 10 MB and was not attached." });
+    expect(posted.at(-1)).toEqual({
+      version: 1,
+      type: "composer.insert",
+      text: "",
+      images: [{ data: Buffer.from("abc").toString("base64"), mimeType: "image/png", name: "small.png" }],
+    });
+  });
+
   it("locks the page down with a nonce CSP", () => {
     const html = webviewHtml({ cspSource: "vscode-resource:", asWebviewUri: (uri: unknown) => uri } as never, mock.Uri.file("/ext/dist") as never);
     expect(html).toContain("default-src 'none'");

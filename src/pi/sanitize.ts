@@ -1,7 +1,7 @@
+import { MAX_SANITIZED_IMAGE_DATA } from "../shared/limits";
 import type { PiEvent, PiMessage } from "./rpc-types";
 
 const MAX_STRING = 96 * 1024;
-const MAX_IMAGE_DATA = 6 * 1024 * 1024;
 const MAX_DEPTH = 12;
 const MAX_ARRAY = 2_000;
 
@@ -22,7 +22,7 @@ export function boundJson(value: unknown, depth = 0): unknown {
   const isImage = record.type === "image" && typeof record.data === "string";
   for (const [key, item] of Object.entries(record)) {
     if (isImage && key === "data") {
-      output.data = (item as string).length <= MAX_IMAGE_DATA ? item : "";
+      output.data = (item as string).length <= MAX_SANITIZED_IMAGE_DATA ? item : "";
       continue;
     }
     output[key] = boundJson(item, depth + 1);

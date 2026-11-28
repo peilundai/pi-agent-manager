@@ -331,6 +331,7 @@ export function App({ transport }: { transport: WebviewTransport }) {
                 onAbort={() => post({ version: 1, type: "abort" })}
                 files={files}
                 selection={editorSelection}
+                onNotice={(level, text) => dispatch({ type: "notice", level, text })}
               />
             </div>
           </>

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import * as vscode from "vscode";
 import { boundFilePosition, imageMimeType, searchFiles, selectionFromEditor } from "../editor/editor-context";
@@ -10,6 +10,7 @@ import { isRelayEndpoint, RelayClient, type RelayEndpoint } from "../pi/relay-cl
 import { PiRpcClient, type RpcSpawnOptions } from "../pi/rpc-client";
 import type { PiSessionRepository } from "../pi/session-repository";
 import type { PiEnvironment } from "./pi-environment";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_LABEL } from "../shared/limits";
 import type { SessionSummary, SetupErrorState } from "../shared/model";
 import {
   isWebviewMessage,
@@ -24,7 +25,6 @@ import {
 const SESSIONS_DEBOUNCE_MS = 200;
 const FILE_CACHE_MS = 30_000;
 const MAX_INDEXED_FILES = 20_000;
-const MAX_ATTACH_IMAGE_BYTES = 10 * 1024 * 1024;
 const FILE_EXCLUDES = "**/{node_modules,.git,dist,out,build,.next,coverage,.venv,__pycache__}/**";
 
 export const VIEW_ID = "piAgentManager.view";
@@ -811,9 +811,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     for (const uri of selected) {
       const mimeType = imageMimeType(uri.fsPath);
       if (mimeType) {
+        // Check the size first so an oversized file is never loaded into memory.
+        const { size } = await stat(uri.fsPath);
+        if (size > MAX_IMAGE_BYTES) {
+          this.notice("warning", `${uri.fsPath} is larger than ${MAX_IMAGE_LABEL} and was not attached.`);
+          continue;
+        }
         const data = await readFile(uri.fsPath);
-        if (data.byteLength > MAX_ATTACH_IMAGE_BYTES) {
-          this.notice("warning", `${uri.fsPath} is larger than 10 MB and was not attached.`);
+        if (data.byteLength > MAX_IMAGE_BYTES) {
+          this.notice("warning", `${uri.fsPath} is larger than ${MAX_IMAGE_LABEL} and was not attached.`);
           continue;
         }
         images.push({ data: data.toString("base64"), mimeType, name: uri.path.slice(uri.path.lastIndexOf("/") + 1) });

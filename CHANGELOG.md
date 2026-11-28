@@ -8,6 +8,12 @@ All notable changes to Pi Coding Agent for VS Code, formerly Pi Agent Manager, a
 
 - The Marketplace and Open VSX listings no longer show a **Preview** badge.
 
+### Fixed
+
+- Images between about 4.5 MB and the 10 MB attachment limit no longer vanish from the chat when Pi echoes the message or the chat reloads.
+- **Attach** checks a picked image's size before reading it, so an oversized file is never loaded into memory.
+- Pasting or dropping an image that is too large or of an unsupported type now shows a notice instead of doing nothing.
+
 ## 0.4.0 — 2026-11-16
 
 ### Added

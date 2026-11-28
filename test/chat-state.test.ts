@@ -256,4 +256,9 @@ describe("chat reducer: nested tool calls", () => {
     expect(state.tools.c1?.childrenIncomplete).toBeUndefined();
     expect(state.tools["c1/1"]?.output).toBe("live");
   });
+
+  it("adds local notices from the webview", () => {
+    const state = chatReducer(initialChatState, { type: "notice", level: "warning", text: "big.png is too large." });
+    expect(state.items.at(-1)).toMatchObject({ kind: "notice", level: "warning", text: "big.png is too large." });
+  });
 });
