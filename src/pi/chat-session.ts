@@ -123,7 +123,15 @@ export class ChatSession {
     // Count the prompt from the moment it is submitted, including while Pi is still starting.
     this.prompting += 1;
     try {
-      const client = await this.ensureStarted();
+      let client: RpcClientLike;
+      try {
+        client = await this.ensureStarted();
+      } catch (error) {
+        // Resolve the webview's pending message. The failure is reported here, not rethrown, so the
+        // caller does not post the same error again as a notice.
+        this.options.post({ version: 1, type: "prompt.result", error: errorMessage(error) });
+        return;
+      }
       const payloadImages = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
       const command: Record<string, unknown> & { type: string } = { type: "prompt", message: text };
       if (payloadImages.length) command.images = payloadImages;
