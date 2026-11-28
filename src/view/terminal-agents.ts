@@ -33,7 +33,11 @@ export function terminalTitle(folderName?: string, number = 1): string {
 
 export interface TerminalLaunch {
   shellPath?: string;
-  shellArgs: string[];
+  /**
+   * A string is a raw Windows command line that VS Code passes to the shell
+   * verbatim; an array is quoted per element (node-pty on Windows).
+   */
+  shellArgs: string[] | string;
   env?: Record<string, string>;
 }
 
@@ -52,7 +56,9 @@ export function buildTerminalLaunch(
 ): TerminalLaunch {
   if (platform === "win32") {
     const invocation = buildPiInvocation(command, args, platform, env);
-    return { shellPath: invocation.file, shellArgs: invocation.args, ...(invocation.env ? { env: invocation.env } : {}) };
+    // node-pty would re-quote the cmd.exe shim's pre-quoted command line, so hand it over as one string.
+    const shellArgs = invocation.verbatimArguments ? invocation.args.join(" ") : invocation.args;
+    return { shellPath: invocation.file, shellArgs, ...(invocation.env ? { env: invocation.env } : {}) };
   }
   const shell = defaultShell(platform, env);
   const commandLine = [command, ...args].map((value) => quoteForShell(value)).join(" ");

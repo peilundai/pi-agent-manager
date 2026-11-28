@@ -1,10 +1,10 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { basename, dirname } from "node:path";
 import { encodeJsonl, JsonlDecoder } from "./jsonl";
-import type { RpcSpawnOptions } from "./rpc-client";
+import { spawnPi, type RpcSpawnOptions } from "./rpc-client";
 import type { PiEvent } from "./rpc-types";
 import { RunReplay } from "./run-replay";
 
@@ -37,8 +37,7 @@ export interface RelayConfig {
 
 export type RelaySpawnFn = (options: RpcSpawnOptions) => ChildProcessWithoutNullStreams;
 
-const defaultSpawn: RelaySpawnFn = ({ file, args, cwd, env }) =>
-  spawn(file, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+const defaultSpawn: RelaySpawnFn = spawnPi;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

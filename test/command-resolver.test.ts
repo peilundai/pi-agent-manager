@@ -15,6 +15,13 @@ describe("buildPiInvocation", () => {
     });
   });
 
+  it("marks only the cmd.exe shim invocation as verbatim", () => {
+    expect(buildPiInvocation("C:\\npm\\pi.cmd", [], "win32").verbatimArguments).toBe(true);
+    expect(buildPiInvocation("C:\\npm\\pi.bat", [], "win32").verbatimArguments).toBe(true);
+    expect(buildPiInvocation("C:\\npm\\pi.exe", [], "win32").verbatimArguments).toBeUndefined();
+    expect(buildPiInvocation("/usr/bin/pi.cmd", [], "linux").verbatimArguments).toBeUndefined();
+  });
+
   it("wraps a Windows npm cmd shim through quoted environment indirection", () => {
     expect(
       buildPiInvocation(
@@ -36,6 +43,7 @@ describe("buildPiInvocation", () => {
         PI_AGENT_MANAGER_SHIM_ARG_0: "--session",
         PI_AGENT_MANAGER_SHIM_ARG_1: "C:\\work\\a b.jsonl",
       },
+      verbatimArguments: true,
     });
   });
 

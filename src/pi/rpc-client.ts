@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { encodeJsonl, JsonlDecoder } from "./jsonl";
 import type { PiEvent, PiResponse } from "./rpc-types";
 
@@ -11,6 +11,8 @@ export interface RpcSpawnOptions {
   args: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
+  /** Pass `args` to the child unquoted (Windows `cmd.exe` shims); see `PiInvocation`. */
+  verbatimArguments?: boolean;
 }
 
 export interface RpcClientListener {
@@ -26,8 +28,23 @@ export interface RpcClientListener {
 /** Spawn function seam for tests. */
 export type SpawnFn = (options: RpcSpawnOptions) => ChildProcessWithoutNullStreams;
 
-const defaultSpawn: SpawnFn = ({ file, args, cwd, env }) =>
-  spawn(file, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+/** Node spawn options for Pi, shared by the direct client and the relay. */
+export function piSpawnOptions({ cwd, env, verbatimArguments }: RpcSpawnOptions): SpawnOptions {
+  return {
+    cwd,
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+    ...(verbatimArguments ? { windowsVerbatimArguments: true } : {}),
+  };
+}
+
+/** Spawns Pi with piped stdio, honouring `verbatimArguments`. */
+export function spawnPi(options: RpcSpawnOptions): ChildProcessWithoutNullStreams {
+  return spawn(options.file, options.args, piSpawnOptions(options)) as ChildProcessWithoutNullStreams;
+}
+
+const defaultSpawn: SpawnFn = spawnPi;
 
 interface Pending {
   resolve(value: unknown): void;
