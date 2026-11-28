@@ -1,12 +1,43 @@
 import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   encodeWorkspaceDirectory,
   PiSessionRepository,
   type ArchiveStore,
+  type WatchDirectory,
 } from "../src/pi/session-repository";
+
+class FakeWatcher extends EventEmitter {
+  closed = false;
+
+  constructor(
+    readonly directory: string,
+    readonly listener: (event: string, filename: string | null) => void,
+  ) {
+    super();
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+}
+
+function fakeWatch(): { watch: WatchDirectory; watchers: FakeWatcher[]; open: () => FakeWatcher[]; directories: () => string[] } {
+  const watchers: FakeWatcher[] = [];
+  return {
+    watchers,
+    open: () => watchers.filter((watcher) => !watcher.closed),
+    directories: () => watchers.filter((watcher) => !watcher.closed).map((watcher) => watcher.directory).sort(),
+    watch: (directory, listener) => {
+      const watcher = new FakeWatcher(directory, listener);
+      watchers.push(watcher);
+      return watcher;
+    },
+  };
+}
 
 class MemoryArchiveStore implements ArchiveStore {
   ids: string[];
@@ -89,6 +120,86 @@ describe("PiSessionRepository", () => {
     watcher.dispose();
     expect(seen).toBe(true);
     expect((await repository.list(link)).map((session) => session.id)).toEqual(["new"]);
+  });
+
+  it("re-arms a watcher that errors instead of throwing", async () => {
+    const root = await temporaryRoot();
+    const sessionDir = join(root, "sessions");
+    await mkdir(sessionDir);
+    const fake = fakeWatch();
+    const repository = new PiSessionRepository({ sessionDir, watchDirectory: fake.watch });
+    let changes = 0;
+    const watcher = repository.watch(root, () => {
+      changes += 1;
+    });
+
+    const [first] = fake.open();
+    expect(first?.directory).toBe(sessionDir);
+    expect(() => first?.emit("error", Object.assign(new Error("EPERM"), { code: "EPERM" }))).not.toThrow();
+    expect(first?.closed).toBe(true);
+    expect(changes).toBe(1);
+    expect(fake.open().map((open) => open.directory)).toEqual([sessionDir]);
+
+    // A late error from the discarded watcher is still handled and ignored.
+    expect(() => first?.emit("error", new Error("late"))).not.toThrow();
+    expect(changes).toBe(1);
+
+    watcher.dispose();
+    expect(fake.open()).toEqual([]);
+  });
+
+  it("watches a session directory that is created after watch() starts", async () => {
+    const root = await temporaryRoot();
+    const workspace = join(root, "project");
+    await mkdir(workspace);
+    const agentDir = join(root, "agent");
+    await mkdir(agentDir);
+    const physical = await realpath(workspace);
+    const sessionsRoot = join(agentDir, "sessions");
+    const sessionDir = join(sessionsRoot, encodeWorkspaceDirectory(physical));
+    const fake = fakeWatch();
+    const repository = new PiSessionRepository({ agentDir, watchDirectory: fake.watch });
+    let changes = 0;
+    const watcher = repository.watch(workspace, () => {
+      changes += 1;
+    });
+
+    // Neither `sessions/` nor `session/` exists, so both wait on the agent directory.
+    expect(fake.directories()).toEqual([agentDir, agentDir]);
+
+    await mkdir(sessionsRoot);
+    for (const open of fake.open()) open.listener("rename", "sessions");
+    expect(fake.directories()).toEqual([agentDir, sessionsRoot]);
+    expect(changes).toBe(0);
+
+    await mkdir(sessionDir);
+    fake.open().find((open) => open.directory === sessionsRoot)?.listener("rename", encodeWorkspaceDirectory(physical));
+    expect(fake.directories()).toEqual([agentDir, sessionDir]);
+    expect(changes).toBe(1);
+
+    fake.open().find((open) => open.directory === sessionDir)?.listener("change", "new.jsonl");
+    expect(changes).toBe(2);
+
+    // When the directory is removed, the watcher falls back to waiting for it again.
+    await rm(sessionDir, { recursive: true });
+    fake.open().find((open) => open.directory === sessionDir)?.listener("rename", encodeWorkspaceDirectory(physical));
+    expect(fake.directories()).toEqual([agentDir, sessionsRoot]);
+    expect(changes).toBe(3);
+
+    watcher.dispose();
+    expect(fake.open()).toEqual([]);
+  });
+
+  it("stops quietly when no ancestor of the session directory can be watched", async () => {
+    const root = await temporaryRoot();
+    const repository = new PiSessionRepository({
+      sessionDir: join(root, "missing", "sessions"),
+      watchDirectory: () => {
+        throw new Error("EMFILE");
+      },
+    });
+    const watcher = repository.watch(root, () => undefined);
+    expect(() => watcher.dispose()).not.toThrow();
   });
 
   it("follows the session location from the environment Pi runs with", async () => {

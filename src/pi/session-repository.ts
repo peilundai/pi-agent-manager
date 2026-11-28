@@ -1,4 +1,4 @@
-import { realpathSync, watch as watchDirectory, type FSWatcher } from "node:fs";
+import { existsSync, realpathSync, watch as watchDirectory } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { readdir, realpath, rm, stat } from "node:fs/promises";
@@ -18,7 +18,23 @@ export interface SessionRepositoryOptions {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
   archiveStore?: ArchiveStore;
+  /** Starts a directory watcher; replaceable in tests. Defaults to a non-persistent `fs.watch`. */
+  watchDirectory?: WatchDirectory;
 }
+
+/** The part of `fs.FSWatcher` that session watching relies on. */
+export interface DirectoryWatcher {
+  close(): void;
+  on(event: "error", listener: (error: Error) => void): unknown;
+}
+
+export type WatchDirectory = (
+  directory: string,
+  listener: (event: string, filename: string | null) => void,
+) => DirectoryWatcher;
+
+const defaultWatchDirectory: WatchDirectory = (directory, listener) =>
+  watchDirectory(directory, { persistent: false }, (event, filename) => listener(event, filename));
 
 export interface Disposable {
   dispose(): void;
@@ -143,18 +159,20 @@ export class PiSessionRepository {
     this.cache.delete(transcript);
   }
 
+  /**
+   * Watches the workspace's session directories. A directory that does not exist yet (a new
+   * workspace before Pi writes its first transcript) is waited for by watching its nearest
+   * existing ancestor, and a watcher that fails or loses its directory is re-armed, so
+   * transcript changes are picked up without a reload and watcher errors never escape.
+   */
   watch(cwd: string, onChange: () => void): Disposable {
-    const watchers: FSWatcher[] = [];
-    for (const directory of this.directories(workspacePath(cwd))) {
-      try {
-        watchers.push(watchDirectory(directory, { persistent: false }, onChange));
-      } catch {
-        // A session directory is optional until Pi writes its first transcript.
-      }
-    }
+    const watch = this.options.watchDirectory ?? defaultWatchDirectory;
+    const watchers = this.directories(workspacePath(cwd)).map((directory) =>
+      watchSessionDirectory(directory, watch, onChange),
+    );
     return {
       dispose: () => {
-        for (const watcher of watchers) watcher.close();
+        for (const watcher of watchers) watcher.dispose();
       },
     };
   }
@@ -210,6 +228,81 @@ export class PiSessionRepository {
     await Promise.all(Array.from({ length: count }, worker));
     return sessions;
   }
+}
+
+function nearestExistingAncestor(path: string): string | undefined {
+  for (let directory = dirname(path); ; directory = dirname(directory)) {
+    if (existsSync(directory)) return directory;
+    if (dirname(directory) === directory) return undefined;
+  }
+}
+
+function watchSessionDirectory(
+  target: string,
+  watch: WatchDirectory,
+  onChange: () => void,
+): Disposable {
+  let current: DirectoryWatcher | undefined;
+  let disposed = false;
+
+  const close = (): void => {
+    const watcher = current;
+    current = undefined;
+    try {
+      watcher?.close();
+    } catch {
+      // Closing a watcher whose directory has gone can fail; it is discarded either way.
+    }
+  };
+
+  const start = (directory: string, listener: (event: string) => void): DirectoryWatcher | undefined => {
+    try {
+      const watcher = watch(directory, (event) => {
+        if (!disposed && current === watcher) listener(event);
+      });
+      watcher.on("error", () => {
+        // The directory was removed, renamed or became inaccessible (EPERM on Windows).
+        if (disposed || current !== watcher) return;
+        arm();
+        onChange();
+      });
+      return watcher;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const arm = (): void => {
+    close();
+    if (disposed) return;
+    if (existsSync(target)) {
+      current = start(target, (event) => {
+        // A rename can mean the watched directory itself went away; wait for it to return.
+        if (event === "rename" && !existsSync(target)) arm();
+        onChange();
+      });
+      if (current) return;
+    }
+    // Wait for the directory by watching its nearest existing ancestor, then move closer.
+    const ancestor = nearestExistingAncestor(target);
+    if (!ancestor) return;
+    current = start(ancestor, () => {
+      if (existsSync(target)) {
+        arm();
+        onChange();
+      } else if (nearestExistingAncestor(target) !== ancestor) {
+        arm();
+      }
+    });
+  };
+
+  arm();
+  return {
+    dispose: () => {
+      disposed = true;
+      close();
+    },
+  };
 }
 
 export async function listWorkspaceSessions(
